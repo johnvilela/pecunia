@@ -1,0 +1,13 @@
+#!/bin/sh
+# ponytail: whole-repo check, not staged-only — repo is small and this needs no temp worktree.
+set -e
+
+unformatted=$(gofmt -l .)
+if [ -n "$unformatted" ]; then
+  echo "gofmt needed:"
+  echo "$unformatted"
+  echo "run: gofmt -w ."
+  exit 1
+fi
+
+go vet ./...
