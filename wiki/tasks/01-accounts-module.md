@@ -1,5 +1,5 @@
 ---
-tags: [accounts, cli, tui, sqlite]
+tags: [accounts, module, tui, sqlite, tdd]
 ---
 
 # Accounts Module
@@ -42,18 +42,28 @@ Built and verified in the `accounts-module-schema` session. Key implementation d
 - Schema delivered as numbered migration files (`internal/db/migrations/001_accounts.sql`), embedded via `//go:embed` and applied on every `db.Open()` — tracked in a `schema_migrations` table, idempotent, so existing DBs self-heal.
 - Balance encoding: see [[decisions/0001-balance-as-int64-minor-units]] — a single INTEGER column in minor units, exponent per currency, no floats.
 - Delete: hard delete with a confirm prompt, not soft delete.
-- List rendering: a static styled table via `lipgloss/table` — stays pipeable (`kakei ac | cat` works), no alt-screen.
 - Freeze: toggles on repeated calls, no separate freeze/unfreeze subcommands.
 - Create uses a `huh` form; edit/delete/freeze account selection uses a `bubbles/list` picker (bubbletea program, alt screen) — this split was an explicit user choice when asked huh-vs-raw-bubbles.
-- 12-color palette and the 5-char code alphabet exclude visually ambiguous characters (`O`/`0`, `I`/`1`).
+- 12-color palette and the original 5-char code generation alphabet excluded visually ambiguous characters (`O`/`0`, `I`/`1`) — this restriction is now generation-only, see the code-validation update below.
 - Code uniqueness enforced both at the DB (`UNIQUE` constraint) and in the form validator.
 
 Files: `internal/db/db.go`, `internal/db/migrations/001_accounts.sql`, `internal/accounts/account.go`, `internal/accounts/store.go`, `internal/accounts/ui.go`, `cmd/accounts.go`.
 
 Deps added: `github.com/charmbracelet/huh`, `bubbles`, `bubbletea`, `lipgloss`, `modernc.org/sqlite`.
 
-Verified end-to-end against a seeded DB: list table, details by code and by id, freeze toggle (case-insensitive code), per-command `-h`, unknown ref → exit 1, piped output all correct. `go vet`, `go test`, and `gofmt` all clean.
+## Update (session kakei-19): test suite, bugfixes, UI redesign, dev tooling, commit
 
-**Not verified headless**: the create form, the edit/delete/freeze picker, and the delete confirm — they need a real TTY. Under no TTY they fail cleanly (`could not open a new TTY`, exit 1) rather than panicking; still need a terminal run to confirm the actual UX.
+Full session narrative: [[sessions/2d27f8ef-e996-46a1-80f7-d9457f69527b]].
 
-No commit was made for this module by the end of the session.
+- **Test suite** written per [[rules/tdd]]: `store_test.go`, `account_test.go`, `ui_test.go`, `cmd/accounts_test.go`, all subtests with isolated per-case SQLite files. Final count: 158 subtests green. Coverage: accounts 67%, cmd 58% (remainder is TTY-bound code: `Form`, `Confirm`, `Pick`, untestable headless, noted in-file).
+- **Real bug caught by the tests**: `Store.Update` on a missing id silently returned `nil` instead of an error — `kakei ac e` on a deleted account printed "updated". Fixed to return `ErrNotFound`, same as `Delete`.
+- **Code validation bug fixed**: `ValidateCode` used to reuse the reduced generation alphabet and rejected a valid user-typed code ("INTER"). See [[gotchas/account-code-validation-vs-generation-alphabet]].
+- **List table redesign** (screenshot-driven feedback): two columns only — `[CODE] Name` (code colored, `❄` inline if frozen) and balance (green if positive, red if negative, uncolored at zero). Currency column removed (symbol already shown in the balance string).
+- **Frozen accounts** hidden from the default list, shown only with `--all`/`-a`, sorted last (`ORDER BY is_frozen, name` in `Store.List`) and rendered dimmed. Filtering itself lives in `cmd`'s `listAccounts(showAll)`, not the store, since `kakei ac f` must still see frozen accounts to unfreeze them. Footer messages report how many are hidden, or that everything is frozen.
+- **Detail view redesign**: bordered card colored in the account's color, no field labels. Order: code (bold, `❄` if frozen) → name → description (dropped if empty) → balance (green/red) with currency code → `created`/`updated` dates with icons (`✚` created, `#` updated — simplified from an earlier icon per user request). Status line and numeric ID removed from the card. Color-swatch row dropped as redundant with the border.
+- **Dev tooling**: `scripts/dev.sh` + `scripts/seed/main.go`, binary named `dev`, DB isolation via ldflags. Full decision: [[decisions/0004-dev-build-isolated-by-ldflags]].
+- **Committed**: `/git-commit` → `b6da3ff` — "feat: add accounts cli with sqlite storage, tui and dev tooling", 32 files. This is the first commit carrying the accounts module; everything since the bootstrap commit had been sitting uncommitted.
+
+Verified end-to-end against the seeded dev DB throughout: list table, details card, freeze/--all behavior, piped output all correct. `go vet`, `go test`, `gofmt` clean at every step.
+
+Links: [[decisions/0001-balance-as-int64-minor-units]] · [[decisions/0004-dev-build-isolated-by-ldflags]] · [[rules/tdd]] · [[gotchas/account-code-validation-vs-generation-alphabet]]
