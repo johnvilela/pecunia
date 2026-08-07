@@ -69,6 +69,9 @@ func (s *Store) Resolve(ref string) (Account, error) {
 }
 
 func (s *Store) Create(a *Account) error {
+	if err := core.ValidateName(a.Name); err != nil {
+		return err
+	}
 	a.Code = core.NormalizeCode(a.Code)
 	res, err := s.db.Exec(
 		`INSERT INTO accounts (code, name, description, color, balance, currency) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -81,6 +84,9 @@ func (s *Store) Create(a *Account) error {
 }
 
 func (s *Store) Update(a Account) error {
+	if err := core.ValidateName(a.Name); err != nil {
+		return err
+	}
 	a.Code = core.NormalizeCode(a.Code)
 	res, err := s.db.Exec(
 		`UPDATE accounts SET code = ?, name = ?, description = ?, color = ?, balance = ?,

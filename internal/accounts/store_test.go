@@ -3,6 +3,7 @@ package accounts
 import (
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -425,6 +426,30 @@ func TestBalancePrecisionSurvivesStorage(t *testing.T) {
 			if got.Balance != tc.balance || got.Amount() != tc.want {
 				t.Fatalf("stored %d shown as %q; want %d / %q",
 					got.Balance, got.Amount(), tc.balance, tc.want)
+			}
+		})
+	}
+}
+
+func TestNameIsRequired(t *testing.T) {
+	// Same hole as the cards store: huh can return without running its
+	// validators, so the store has to refuse a nameless account itself.
+	for _, name := range []string{"", "   ", "\t"} {
+		t.Run("create rejects "+strconv.Quote(name), func(t *testing.T) {
+			s := newTestStore(t)
+			a := wallet()
+			a.Name = name
+			if err := s.Create(&a); err == nil {
+				t.Fatalf("an account named %q was created", name)
+			}
+		})
+
+		t.Run("update rejects "+strconv.Quote(name), func(t *testing.T) {
+			s := newTestStore(t)
+			a := mustCreate(t, s, wallet())
+			a.Name = name
+			if err := s.Update(a); err == nil {
+				t.Fatalf("an account was renamed to %q", name)
 			}
 		})
 	}

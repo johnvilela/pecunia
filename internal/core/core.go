@@ -104,6 +104,17 @@ func ValidateCode(s string) error {
 	return nil
 }
 
+// ValidateName is the guard on the one field nothing can default. It lives
+// here because the stores and the forms have to agree on it: huh returns
+// without running its validators when stdin ends mid-form, so the form alone
+// is not enough to keep a nameless row out of the database.
+func ValidateName(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("name is required")
+	}
+	return nil
+}
+
 // CodeErr turns the UNIQUE constraint into something readable.
 func CodeErr(err error, code string) error {
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {

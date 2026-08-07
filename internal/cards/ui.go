@@ -89,13 +89,7 @@ func Form(s *Store, c *Card, title string) error {
 	}
 
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Name").Value(&c.Name).
-			Validate(func(v string) error {
-				if strings.TrimSpace(v) == "" {
-					return errors.New("name is required")
-				}
-				return nil
-			}),
+		huh.NewInput().Title("Name").Value(&c.Name).Validate(core.ValidateName),
 		huh.NewInput().Title("Description").Description("optional").Value(&c.Description),
 		huh.NewInput().Title("Code").Description(fmt.Sprintf("%d characters — suggestion pre-filled", core.CodeLen)).
 			Value(&c.Code).

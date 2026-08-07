@@ -3,6 +3,7 @@ package cards
 import (
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -431,6 +432,32 @@ func TestAmountPrecisionSurvivesStorage(t *testing.T) {
 			if got.Balance != tc.balance || got.Limit != tc.limit || got.Fmt(got.Balance) != tc.want {
 				t.Fatalf("stored %d/%d shown as %q; want %d/%d and %q",
 					got.Limit, got.Balance, got.Fmt(got.Balance), tc.limit, tc.balance, tc.want)
+			}
+		})
+	}
+}
+
+func TestNameIsRequired(t *testing.T) {
+	// The form's "name is required" validator does not run when huh returns
+	// without a submit — a pty whose stdin hits EOF does exactly that. The
+	// store is the boundary every caller crosses, so it is the one that has
+	// to hold.
+	for _, name := range []string{"", "   ", "\t"} {
+		t.Run("create rejects "+strconv.Quote(name), func(t *testing.T) {
+			s := newTestStore(t)
+			c := nubank()
+			c.Name = name
+			if err := s.Create(&c); err == nil {
+				t.Fatalf("a card named %q was created", name)
+			}
+		})
+
+		t.Run("update rejects "+strconv.Quote(name), func(t *testing.T) {
+			s := newTestStore(t)
+			c := mustCreate(t, s, nubank())
+			c.Name = name
+			if err := s.Update(c); err == nil {
+				t.Fatalf("a card was renamed to %q", name)
 			}
 		})
 	}

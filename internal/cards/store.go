@@ -68,6 +68,9 @@ func (s *Store) Resolve(ref string) (Card, error) {
 }
 
 func (s *Store) Create(c *Card) error {
+	if err := core.ValidateName(c.Name); err != nil {
+		return err
+	}
 	c.Code = core.NormalizeCode(c.Code)
 	res, err := s.db.Exec(
 		`INSERT INTO credit_cards (code, name, description, color, credit_limit, balance,
@@ -82,6 +85,9 @@ func (s *Store) Create(c *Card) error {
 }
 
 func (s *Store) Update(c Card) error {
+	if err := core.ValidateName(c.Name); err != nil {
+		return err
+	}
 	c.Code = core.NormalizeCode(c.Code)
 	res, err := s.db.Exec(
 		`UPDATE credit_cards SET code = ?, name = ?, description = ?, color = ?,
