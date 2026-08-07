@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"kakei/internal/core"
 	"kakei/internal/db"
 )
 
@@ -384,7 +385,7 @@ func TestSuggestCode(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := ValidateCode(code); err != nil {
+		if err := core.ValidateCode(code); err != nil {
 			t.Fatalf("suggested %q: %v", code, err)
 		}
 		if taken, _ := s.CodeTaken(code); taken {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"kakei/internal/accounts"
+	"kakei/internal/core"
 	"kakei/internal/db"
 )
 
@@ -272,7 +273,7 @@ func TestReportTreatsCancelAsSuccess(t *testing.T) {
 		want int
 	}{
 		{"no error", nil, 0},
-		{"cancelled", accounts.ErrCancelled, 0},
+		{"cancelled", core.ErrCancelled, 0},
 		{"wrapped cancel", errors.New("x"), 1},
 		{"real failure", accounts.ErrNotFound, 1},
 	}

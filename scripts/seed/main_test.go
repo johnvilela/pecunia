@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"kakei/internal/accounts"
+	"kakei/internal/core"
 	"kakei/internal/db"
 )
 
@@ -87,7 +88,7 @@ func TestFixturesAreValid(t *testing.T) {
 	seen := map[string]bool{}
 	for _, f := range fixtures {
 		t.Run(f.Code, func(t *testing.T) {
-			if err := accounts.ValidateCode(f.Code); err != nil {
+			if err := core.ValidateCode(f.Code); err != nil {
 				t.Errorf("code %q: %v", f.Code, err)
 			}
 			if seen[f.Code] {
@@ -98,10 +99,10 @@ func TestFixturesAreValid(t *testing.T) {
 			if f.Name == "" {
 				t.Error("fixture has no name")
 			}
-			if accounts.ColorByName(f.Color).Name != f.Color {
+			if core.ColorByName(f.Color).Name != f.Color {
 				t.Errorf("color %q is not in the palette", f.Color)
 			}
-			if accounts.CurrencyByCode(f.Currency).Code != f.Currency {
+			if core.CurrencyByCode(f.Currency).Code != f.Currency {
 				t.Errorf("currency %q is not supported", f.Currency)
 			}
 		})

@@ -5,31 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+
+	"kakei/internal/core"
 )
 
-// ErrCancelled means the user backed out of a form or picker; callers treat it
-// as "do nothing", not as a failure.
-var ErrCancelled = errors.New("cancelled")
-
-// dimColor is the gray everything out of play is rendered in: table borders,
-// headers, and frozen accounts.
-const dimColor = "245"
-
-var (
-	labelStyle  = lipgloss.NewStyle().Bold(true).Width(12)
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(dimColor))
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor))
-	frozenMark  = lipgloss.NewStyle().Foreground(lipgloss.Color("#05A2C2")).Render("❄")
-)
-
-func styledCode(a Account) string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(a.Col().Hex)).Bold(true).Render(a.Code)
-}
+var frozenMark = lipgloss.NewStyle().Foreground(lipgloss.Color("#05A2C2")).Render("❄")
 
 // Label is how an account is named everywhere it appears in a list: its code in
 // its own color, then the name, then the frozen mark when it is frozen. A
@@ -46,7 +29,7 @@ func Label(a Account) string {
 // labelColor is the account's own color, or the dim gray once it is frozen.
 func labelColor(a Account) string {
 	if a.IsFrozen {
-		return dimColor
+		return core.DimColor
 	}
 	return a.Col().Hex
 }
@@ -56,11 +39,11 @@ func labelColor(a Account) string {
 func balanceColor(a Account) string {
 	switch {
 	case a.IsFrozen:
-		return dimColor
+		return core.DimColor
 	case a.Balance > 0:
-		return ColorByName("green").Hex
+		return core.ColorByName("green").Hex
 	case a.Balance < 0:
-		return ColorByName("red").Hex
+		return core.ColorByName("red").Hex
 	}
 	return ""
 }
@@ -76,18 +59,8 @@ func styledAmount(a Account) string {
 // Form drives create and edit. On create, pass an Account pre-filled with a
 // suggested code and the palette/currency defaults.
 func Form(s *Store, a *Account, title string) error {
-	original := NormalizeCode(a.Code)
-	balance := FormatAmount(a.Balance, a.Cur())
-
-	colorOpts := make([]huh.Option[string], len(Palette))
-	for i, c := range Palette {
-		swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex)).Render("███")
-		colorOpts[i] = huh.NewOption(swatch+" "+c.Name, c.Name)
-	}
-	currencyOpts := make([]huh.Option[string], len(Currencies))
-	for i, c := range Currencies {
-		currencyOpts[i] = huh.NewOption(fmt.Sprintf("%s  %s (%s)", c.Symbol, c.Label, c.Code), c.Code)
-	}
+	original := core.NormalizeCode(a.Code)
+	balance := core.FormatAmount(a.Balance, a.Cur())
 
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Name").Value(&a.Name).
@@ -98,13 +71,13 @@ func Form(s *Store, a *Account, title string) error {
 				return nil
 			}),
 		huh.NewInput().Title("Description").Description("optional").Value(&a.Description),
-		huh.NewInput().Title("Code").Description(fmt.Sprintf("%d characters — suggestion pre-filled", CodeLen)).
+		huh.NewInput().Title("Code").Description(fmt.Sprintf("%d characters — suggestion pre-filled", core.CodeLen)).
 			Value(&a.Code).
 			Validate(func(v string) error {
-				if err := ValidateCode(v); err != nil {
+				if err := core.ValidateCode(v); err != nil {
 					return err
 				}
-				if NormalizeCode(v) == original {
+				if core.NormalizeCode(v) == original {
 					return nil
 				}
 				taken, err := s.CodeTaken(v)
@@ -112,120 +85,61 @@ func Form(s *Store, a *Account, title string) error {
 					return err
 				}
 				if taken {
-					return fmt.Errorf("code %s is already in use", NormalizeCode(v))
+					return fmt.Errorf("code %s is already in use", core.NormalizeCode(v))
 				}
 				return nil
 			}),
-		huh.NewSelect[string]().Title("Color").Options(colorOpts...).Value(&a.Color),
-		huh.NewSelect[string]().Title("Currency").Options(currencyOpts...).Value(&a.Currency),
+		huh.NewSelect[string]().Title("Color").Options(core.ColorOptions()...).Value(&a.Color),
+		huh.NewSelect[string]().Title("Currency").Options(core.CurrencyOptions()...).Value(&a.Currency),
 		// Currency comes first so this validator knows the scale to parse with.
 		huh.NewInput().Title("Balance").Value(&balance).
 			Validate(func(v string) error {
-				_, err := ParseAmount(v, CurrencyByCode(a.Currency))
+				_, err := core.ParseAmount(v, core.CurrencyByCode(a.Currency))
 				return err
 			}),
 	).Title(title)).WithTheme(huh.ThemeCharm())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return ErrCancelled
+			return core.ErrCancelled
 		}
 		return err
 	}
 
-	v, err := ParseAmount(balance, CurrencyByCode(a.Currency))
+	v, err := core.ParseAmount(balance, core.CurrencyByCode(a.Currency))
 	if err != nil {
 		return err
 	}
 	a.Name = strings.TrimSpace(a.Name)
-	a.Code = NormalizeCode(a.Code)
+	a.Code = core.NormalizeCode(a.Code)
 	a.Balance = v
 	return nil
 }
 
-func Confirm(title, description string) (bool, error) {
-	ok := false
-	err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title(title).Description(description).
-			Affirmative("Yes, delete").Negative("Cancel").Value(&ok),
-	)).WithTheme(huh.ThemeCharm()).Run()
-	if errors.Is(err, huh.ErrUserAborted) {
-		return false, nil
+// pickerRow is how one account reads in the picker list.
+func pickerRow(a Account) core.Choice {
+	c := a.Cur()
+	return core.Choice{
+		Label:  Label(a),
+		Desc:   fmt.Sprintf("%s%s %s", c.Symbol, a.Amount(), c.Code),
+		Filter: a.Code + " " + a.Name,
 	}
-	return ok, err
 }
 
-type pickerItem struct{ a Account }
-
-func (i pickerItem) Title() string { return Label(i.a) }
-
-func (i pickerItem) Description() string {
-	c := i.a.Cur()
-	return fmt.Sprintf("%s%s %s", c.Symbol, i.a.Amount(), c.Code)
-}
-
-func (i pickerItem) FilterValue() string { return i.a.Code + " " + i.a.Name }
-
-type picker struct {
-	list   list.Model
-	choice *Account
-}
-
-func (p picker) Init() tea.Cmd { return nil }
-
-func (p picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		p.list.SetSize(msg.Width, msg.Height)
-	case tea.KeyMsg:
-		if p.list.FilterState() != list.Filtering {
-			switch msg.String() {
-			case "ctrl+c", "esc", "q":
-				return p, tea.Quit
-			case "enter":
-				if it, ok := p.list.SelectedItem().(pickerItem); ok {
-					p.choice = &it.a
-				}
-				return p, tea.Quit
-			}
-		}
-	}
-	var cmd tea.Cmd
-	p.list, cmd = p.list.Update(msg)
-	return p, cmd
-}
-
-func (p picker) View() string { return p.list.View() }
-
-// Pick shows the bubbles list used whenever a command is given no {CODE|ID}.
+// Pick shows the list used whenever a command is given no {CODE|ID}.
 func Pick(accs []Account, title string) (Account, error) {
-	items := make([]list.Item, len(accs))
-	for i, a := range accs {
-		items[i] = pickerItem{a}
-	}
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = title
-	l.SetShowStatusBar(false)
-
-	m, err := tea.NewProgram(picker{list: l}, tea.WithAltScreen()).Run()
-	if err != nil {
-		return Account{}, err
-	}
-	if p, ok := m.(picker); ok && p.choice != nil {
-		return *p.choice, nil
-	}
-	return Account{}, ErrCancelled
+	return core.Pick(accs, title, pickerRow)
 }
 
 // Table is the static list output — no alt screen, so `kakei ac | grep` works.
 func Table(accs []Account) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
-		BorderStyle(dimStyle).
+		BorderStyle(core.DimStyle).
 		Headers("ACCOUNT", "BALANCE").
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
-				return headerStyle.Padding(0, 1)
+				return core.HeaderStyle.Padding(0, 1)
 			}
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
@@ -258,19 +172,19 @@ func Details(a Account) string {
 
 	lines := []string{code, lipgloss.NewStyle().Bold(true).Render(a.Name)}
 	if a.Description != "" {
-		lines = append(lines, dimStyle.Render(a.Description))
+		lines = append(lines, core.DimStyle.Render(a.Description))
 	}
 	// The amount carries the sign color; the code beside it is the only place
 	// the currency is spelled out.
 	lines = append(lines, "",
 		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(balanceColor(a))).
-			Render(a.Cur().Symbol+a.Amount())+" "+dimStyle.Render(a.Cur().Code),
+			Render(a.Cur().Symbol+a.Amount())+" "+core.DimStyle.Render(a.Cur().Code),
 		"")
 
 	// The ❄ beside the code already says whether the account is frozen, and the
 	// id is only ever typed by someone who read it off `kakei ac`.
 	if a.CreatedAt != "" {
-		lines = append(lines, dimStyle.Render(
+		lines = append(lines, core.DimStyle.Render(
 			createdIcon+" "+a.CreatedAt+"   "+updatedIcon+" "+a.UpdatedAt))
 	}
 

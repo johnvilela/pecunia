@@ -3,9 +3,10 @@ package accounts
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
+
+	"kakei/internal/core"
 )
 
 type Store struct{ db *sql.DB }
@@ -50,7 +51,7 @@ func (s *Store) Get(id int64) (Account, error) {
 }
 
 func (s *Store) ByCode(code string) (Account, error) {
-	a, err := scan(s.db.QueryRow(`SELECT `+columns+` FROM accounts WHERE code = ?`, NormalizeCode(code)))
+	a, err := scan(s.db.QueryRow(`SELECT `+columns+` FROM accounts WHERE code = ?`, core.NormalizeCode(code)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -68,25 +69,25 @@ func (s *Store) Resolve(ref string) (Account, error) {
 }
 
 func (s *Store) Create(a *Account) error {
-	a.Code = NormalizeCode(a.Code)
+	a.Code = core.NormalizeCode(a.Code)
 	res, err := s.db.Exec(
 		`INSERT INTO accounts (code, name, description, color, balance, currency) VALUES (?, ?, ?, ?, ?, ?)`,
 		a.Code, a.Name, a.Description, a.Color, a.Balance, a.Currency)
 	if err != nil {
-		return codeErr(err, a.Code)
+		return core.CodeErr(err, a.Code)
 	}
 	a.ID, err = res.LastInsertId()
 	return err
 }
 
 func (s *Store) Update(a Account) error {
-	a.Code = NormalizeCode(a.Code)
+	a.Code = core.NormalizeCode(a.Code)
 	res, err := s.db.Exec(
 		`UPDATE accounts SET code = ?, name = ?, description = ?, color = ?, balance = ?,
 		 currency = ?, is_frozen = ?, updated_at = datetime('now') WHERE id = ?`,
 		a.Code, a.Name, a.Description, a.Color, a.Balance, a.Currency, a.IsFrozen, a.ID)
 	if err != nil {
-		return codeErr(err, a.Code)
+		return core.CodeErr(err, a.Code)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
@@ -121,14 +122,14 @@ func (s *Store) ToggleFreeze(id int64) (bool, error) {
 
 func (s *Store) CodeTaken(code string) (bool, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT count(*) FROM accounts WHERE code = ?`, NormalizeCode(code)).Scan(&n)
+	err := s.db.QueryRow(`SELECT count(*) FROM accounts WHERE code = ?`, core.NormalizeCode(code)).Scan(&n)
 	return n > 0, err
 }
 
 // SuggestCode returns a free code to pre-fill the form with.
 func (s *Store) SuggestCode() (string, error) {
 	for range 20 {
-		code := RandomCode()
+		code := core.RandomCode()
 		taken, err := s.CodeTaken(code)
 		if err != nil {
 			return "", err
@@ -138,12 +139,4 @@ func (s *Store) SuggestCode() (string, error) {
 		}
 	}
 	return "", errors.New("could not find a free code")
-}
-
-// codeErr turns the UNIQUE constraint into something readable.
-func codeErr(err error, code string) error {
-	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
-		return fmt.Errorf("code %s is already in use", code)
-	}
-	return err
 }

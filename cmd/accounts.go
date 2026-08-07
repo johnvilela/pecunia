@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"kakei/internal/accounts"
+	"kakei/internal/core"
 	"kakei/internal/db"
 )
 
@@ -196,8 +197,8 @@ func createAccount(s *accounts.Store) error {
 	}
 	a := accounts.Account{
 		Code:     code,
-		Color:    accounts.Palette[0].Name,
-		Currency: accounts.Currencies[0].Code,
+		Color:    core.Palette[0].Name,
+		Currency: core.Currencies[0].Code,
 	}
 	if err := accounts.Form(s, &a, "New account"); err != nil {
 		return err
@@ -229,7 +230,7 @@ func deleteAccount(s *accounts.Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	ok, err := accounts.Confirm(
+	ok, err := core.Confirm(
 		fmt.Sprintf("Delete %s (%s)?", a.Code, a.Name),
 		"This cannot be undone.")
 	if err != nil {

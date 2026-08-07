@@ -3,6 +3,8 @@ package accounts
 import (
 	"strings"
 	"testing"
+
+	"kakei/internal/core"
 )
 
 // The renderers below are the only part of ui.go that runs without a TTY —
@@ -34,11 +36,11 @@ func TestBalanceColor(t *testing.T) {
 		a    Account
 		want string
 	}{
-		{"positive is green", Account{Balance: 1}, ColorByName("green").Hex},
-		{"negative is red", Account{Balance: -1}, ColorByName("red").Hex},
+		{"positive is green", Account{Balance: 1}, core.ColorByName("green").Hex},
+		{"negative is red", Account{Balance: -1}, core.ColorByName("red").Hex},
 		{"zero is left alone", Account{Balance: 0}, ""},
-		{"frozen credit is dimmed", Account{Balance: 1, IsFrozen: true}, dimColor},
-		{"frozen debit is dimmed", Account{Balance: -1, IsFrozen: true}, dimColor},
+		{"frozen credit is dimmed", Account{Balance: 1, IsFrozen: true}, core.DimColor},
+		{"frozen debit is dimmed", Account{Balance: -1, IsFrozen: true}, core.DimColor},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -52,14 +54,14 @@ func TestBalanceColor(t *testing.T) {
 func TestLabelColor(t *testing.T) {
 	t.Run("an active account keeps its own color", func(t *testing.T) {
 		a := Account{Color: "teal"}
-		if got := labelColor(a); got != ColorByName("teal").Hex {
+		if got := labelColor(a); got != core.ColorByName("teal").Hex {
 			t.Fatalf("labelColor = %q; want the teal hex", got)
 		}
 	})
 
 	t.Run("a frozen account is dimmed", func(t *testing.T) {
 		a := Account{Color: "teal", IsFrozen: true}
-		if got := labelColor(a); got != dimColor {
+		if got := labelColor(a); got != core.DimColor {
 			t.Fatalf("labelColor = %q; want the dim color", got)
 		}
 	})
@@ -202,11 +204,11 @@ func TestDetails(t *testing.T) {
 	})
 }
 
-func TestPickerItem(t *testing.T) {
+func TestPickerRow(t *testing.T) {
 	a := Account{Code: "WLLT2", Name: "Wallet", Currency: "BTC", Balance: 150000000}
 
 	t.Run("title carries code and name", func(t *testing.T) {
-		got := pickerItem{a}.Title()
+		got := pickerRow(a).Label
 		if !strings.Contains(got, "WLLT2") || !strings.Contains(got, "Wallet") {
 			t.Fatalf("title = %q", got)
 		}
@@ -218,19 +220,19 @@ func TestPickerItem(t *testing.T) {
 	t.Run("title marks a frozen account", func(t *testing.T) {
 		b := a
 		b.IsFrozen = true
-		if got := (pickerItem{b}).Title(); !strings.Contains(got, "❄") {
+		if got := pickerRow(b).Label; !strings.Contains(got, "❄") {
 			t.Fatalf("frozen title = %q", got)
 		}
 	})
 
 	t.Run("description is the formatted balance", func(t *testing.T) {
-		if got := (pickerItem{a}).Description(); got != "₿1.50000000 BTC" {
+		if got := pickerRow(a).Desc; got != "₿1.50000000 BTC" {
 			t.Fatalf("description = %q", got)
 		}
 	})
 
 	t.Run("filters on code and name", func(t *testing.T) {
-		if got := (pickerItem{a}).FilterValue(); got != "WLLT2 Wallet" {
+		if got := pickerRow(a).Filter; got != "WLLT2 Wallet" {
 			t.Fatalf("filter value = %q", got)
 		}
 	})

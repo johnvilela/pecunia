@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"kakei/internal/accounts"
+	"kakei/internal/core"
 )
 
 const banner = `
@@ -69,7 +69,7 @@ func run() int {
 // picker is a decision, not a failure, so it exits quietly.
 func report(cmd string, err error) int {
 	switch {
-	case err == nil, errors.Is(err, accounts.ErrCancelled):
+	case err == nil, errors.Is(err, core.ErrCancelled):
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "kakei %s: %v\n", cmd, err)
