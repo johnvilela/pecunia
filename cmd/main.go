@@ -27,6 +27,7 @@ const help = `Usage:
 Commands:
   setup             create the SQLite database (--force to back up and recreate)
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
+  credit-card | cc  manage credit cards (new, edit, delete, details)
   help              show this message
 
 Environment:
@@ -57,6 +58,9 @@ func run() int {
 
 	case "accounts", "ac":
 		return report("accounts", runAccounts(os.Args[2:]))
+
+	case "credit-card", "cc":
+		return report("credit-card", runCards(os.Args[2:]))
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])

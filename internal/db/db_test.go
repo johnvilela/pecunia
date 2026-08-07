@@ -1,6 +1,7 @@
 package db
 
 import (
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,11 +74,19 @@ func TestOpenMigratesOnceOnly(t *testing.T) {
 		if err := conn.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
-		if n != 1 {
-			t.Fatalf("open %d: expected 1 applied migration, got %d", i+1, n)
+		// Derived from the embedded files, so adding a migration never means
+		// editing this number.
+		entries, err := fs.ReadDir(migrations, "migrations")
+		if err != nil {
+			t.Fatal(err)
 		}
-		if _, err := conn.Exec("SELECT 1 FROM accounts"); err != nil {
-			t.Fatalf("open %d: accounts table missing: %v", i+1, err)
+		if n != len(entries) {
+			t.Fatalf("open %d: expected %d applied migrations, got %d", i+1, len(entries), n)
+		}
+		for _, table := range []string{"accounts", "credit_cards"} {
+			if _, err := conn.Exec("SELECT 1 FROM " + table); err != nil {
+				t.Fatalf("open %d: %s table missing: %v", i+1, table, err)
+			}
 		}
 		conn.Close()
 	}
