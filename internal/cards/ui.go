@@ -21,24 +21,30 @@ func Label(c Card) string {
 	return "[" + code + "] " + c.Name
 }
 
-// availableColor is green while there is room on the card and red once it is
-// over its limit. Exactly at the limit is neither, so it keeps the default
-// foreground. Note this colors Available, not Balance: on a card a big balance
-// is what you owe, so the green/red of an account would read backwards.
-func availableColor(c Card) string {
-	switch {
-	case c.Available() > 0:
-		return core.ColorByName("green").Hex
-	case c.Available() < 0:
+// usedColor colors nothing until the card is over its limit. An account's
+// balance can be good news and earns a green; a card's never can, so a green
+// on every healthy card would only be noise.
+func usedColor(c Card) string {
+	if c.Available() < 0 {
 		return core.ColorByName("red").Hex
 	}
 	return ""
 }
 
-// styledAvailable is "what is left / the whole limit", the left half colored.
-func styledAvailable(c Card) string {
-	left := lipgloss.NewStyle().Foreground(lipgloss.Color(availableColor(c))).Render(c.Fmt(c.Available()))
-	return left + " " + core.DimStyle.Render("/ "+c.Fmt(c.Limit))
+// styledUsed is the USED / LIMIT cell: what is owed, then what it is owed
+// against. The header names both in the same order, so neither needs a word.
+func styledUsed(c Card) string {
+	used := lipgloss.NewStyle().Foreground(lipgloss.Color(usedColor(c))).Render(c.Fmt(c.Balance))
+	return used + " " + core.DimStyle.Render("/ "+c.Fmt(c.Limit))
+}
+
+// usagePct is the bar as a number. A card with no limit has no percentage —
+// there is nothing to be a fraction of.
+func usagePct(c Card) string {
+	if c.Limit <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(c.Balance*100/c.Limit, 10) + "%"
 }
 
 // days is the closing and due day as one compact cell.
@@ -64,8 +70,8 @@ func usageBar(c Card) string {
 	filled = max(0, min(filled, barWidth))
 
 	color := c.Col().Hex
-	if c.Available() < 0 {
-		color = core.ColorByName("red").Hex
+	if over := usedColor(c); over != "" {
+		color = over
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(strings.Repeat("█", filled)) +
 		core.DimStyle.Render(strings.Repeat("░", barWidth-filled))
@@ -171,7 +177,7 @@ func Table(cards []Card) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(core.DimStyle).
-		Headers("CARD", "AVAILABLE", "CLOSE/DUE").
+		Headers("CARD", "USED / LIMIT", "CLOSE/DUE").
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return core.HeaderStyle.Padding(0, 1)
@@ -181,7 +187,7 @@ func Table(cards []Card) string {
 	for _, c := range cards {
 		// The currency symbol is in the amounts, so a currency column would
 		// only repeat it.
-		t.Row(Label(c), styledAvailable(c), days(c))
+		t.Row(Label(c), styledUsed(c), days(c))
 	}
 	return t.Render()
 }
@@ -193,6 +199,18 @@ const (
 	createdIcon = "✚" // Dingbats — no Nerd Font needed.
 	updatedIcon = "#"
 )
+
+// remaining is what is left to spend — or, once that goes negative, how far
+// past the limit the card is. "R$-1120.00 available" is a riddle; "R$1120.00
+// over the limit" is not.
+func remaining(c Card) string {
+	v, word := c.Available(), "available"
+	if v < 0 {
+		v, word = -v, "over the limit"
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(usedColor(c))).Render(c.Fmt(v)) +
+		" " + core.DimStyle.Render(word)
+}
 
 // Details renders one card bordered in its own color — no field names, since
 // the color, the currency symbol and the bar already say what each value is.
@@ -206,18 +224,21 @@ func Details(c Card) string {
 	if c.Description != "" {
 		lines = append(lines, core.DimStyle.Render(c.Description))
 	}
+	// The card has the room the table does not, so every number says what it
+	// is rather than relying on its position.
 	lines = append(lines, "",
-		// What the open invoice owes, then what is left of the limit.
-		lipgloss.NewStyle().Bold(true).Render(c.Fmt(c.Balance))+" "+core.DimStyle.Render(c.Cur().Code),
-		lipgloss.NewStyle().Foreground(lipgloss.Color(availableColor(c))).Render(c.Fmt(c.Available()))+
-			" "+core.DimStyle.Render("of "+c.Fmt(c.Limit)),
-		usageBar(c),
+		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(usedColor(c))).Render(c.Fmt(c.Balance))+
+			" "+core.DimStyle.Render("used  of "+c.Fmt(c.Limit)),
+		remaining(c),
+		usageBar(c)+"  "+core.DimStyle.Render(usagePct(c)),
 		"")
 
 	now := time.Now()
-	lines = append(lines, core.DimStyle.Render(fmt.Sprintf("closes %d (%s) · due %d (%s)",
-		c.ClosingDay, NextDate(now, c.ClosingDay).Format("2006-01-02"),
-		c.DueDay, NextDate(now, c.DueDay).Format("2006-01-02"))))
+	lines = append(lines,
+		core.DimStyle.Render(fmt.Sprintf("closes %d (%s)",
+			c.ClosingDay, NextDate(now, c.ClosingDay).Format("2006-01-02"))),
+		core.DimStyle.Render(fmt.Sprintf("due %d (%s)",
+			c.DueDay, NextDate(now, c.DueDay).Format("2006-01-02"))))
 
 	if c.CreatedAt != "" {
 		lines = append(lines, "", core.DimStyle.Render(

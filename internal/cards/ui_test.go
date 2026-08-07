@@ -18,22 +18,59 @@ func TestLabel(t *testing.T) {
 	}
 }
 
-func TestAvailableColor(t *testing.T) {
+func TestUsedColor(t *testing.T) {
+	// A credit card balance is never good news, so there is no green here: the
+	// only thing worth coloring is having gone past the limit.
 	cases := []struct {
 		name    string
 		limit   int64
 		balance int64
 		want    string
 	}{
-		{"room left is green", 500000, 1, core.ColorByName("green").Hex},
+		{"room left is uncolored", 500000, 1, ""},
+		{"nothing used is uncolored", 500000, 0, ""},
+		{"exactly at the limit is uncolored", 500000, 500000, ""},
 		{"over the limit is red", 500000, 600000, core.ColorByName("red").Hex},
-		{"exactly at the limit is left alone", 500000, 500000, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := Card{Limit: tc.limit, Balance: tc.balance}
-			if got := availableColor(c); got != tc.want {
-				t.Fatalf("availableColor(%d/%d) = %q; want %q", tc.balance, tc.limit, got, tc.want)
+			if got := usedColor(c); got != tc.want {
+				t.Fatalf("usedColor(%d/%d) = %q; want %q", tc.balance, tc.limit, got, tc.want)
+			}
+		})
+	}
+
+	t.Run("no green anywhere", func(t *testing.T) {
+		green := core.ColorByName("green").Hex
+		for _, b := range []int64{0, 1, 250000, 500000, 900000} {
+			if got := usedColor(Card{Limit: 500000, Balance: b}); got == green {
+				t.Fatalf("balance %d rendered green", b)
+			}
+		}
+	})
+}
+
+func TestUsagePct(t *testing.T) {
+	cases := []struct {
+		name    string
+		limit   int64
+		balance int64
+		want    string
+	}{
+		{"a quarter", 400000, 100000, "25%"},
+		{"nothing used", 400000, 0, "0%"},
+		{"over the limit", 300000, 412000, "137%"},
+		// Truncates rather than rounds, so a card only reads 100% once it is
+		// actually full.
+		{"just short of full", 500000, 499999, "99%"},
+		{"no limit has no percentage", 0, 100, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := usagePct(Card{Limit: tc.limit, Balance: tc.balance})
+			if got != tc.want {
+				t.Fatalf("usagePct(%d/%d) = %q; want %q", tc.balance, tc.limit, got, tc.want)
 			}
 		})
 	}
@@ -79,9 +116,9 @@ func TestTable(t *testing.T) {
 
 		got := Table([]Card{nubank(), other})
 		for _, want := range []string{
-			"CARD", "AVAILABLE", "CLOSE/DUE", // headers
-			"[NUCRD] Nubank", "R$3761.50", "R$5000.00", "15/22",
-			"[ITAU1] Itaú", "$1000.00", "3/9",
+			"CARD", "USED / LIMIT", "CLOSE/DUE", // headers name both numbers in order
+			"[NUCRD] Nubank", "R$1238.50", "R$5000.00", "15/22",
+			"[ITAU1] Itaú", "$0.00", "$1000.00", "3/9",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("table is missing %q:\n%s", want, got)
@@ -96,10 +133,18 @@ func TestTable(t *testing.T) {
 		}
 	})
 
+	t.Run("does not show what is available", func(t *testing.T) {
+		// Two numbers per cell is already the limit of what reads at a glance,
+		// and the header says which two they are.
+		if got := Table([]Card{nubank()}); strings.Contains(got, "R$3761.50") {
+			t.Errorf("table still shows the available amount:\n%s", got)
+		}
+	})
+
 	t.Run("has no currency column", func(t *testing.T) {
 		// The symbol is already in the amount.
 		got := Table([]Card{nubank()})
-		for _, gone := range []string{"CURRENCY", "BRL", "LIMIT"} {
+		for _, gone := range []string{"CURRENCY", "BRL"} {
 			if strings.Contains(got, gone) {
 				t.Errorf("table still carries %q:\n%s", gone, got)
 			}
@@ -123,8 +168,9 @@ func TestDetails(t *testing.T) {
 		got := Details(c)
 		for _, want := range []string{
 			"NUCRD", "Nubank", "cartão principal",
-			"R$1238.50", "BRL", // what the open invoice owes
-			"R$3761.50", "R$5000.00", // available of the limit
+			"R$1238.50 used", "of R$5000.00", // every number says what it is
+			"R$3761.50 available",
+			"24%", // 123850/500000 is 24.77% — truncated, never rounded up
 			"closes 15", "due 22",
 			createdIcon + " 2026-01-02 03:04:05",
 			updatedIcon + " 2026-02-03 04:05:06",
@@ -138,6 +184,19 @@ func TestDetails(t *testing.T) {
 	t.Run("shows the usage bar", func(t *testing.T) {
 		if got := Details(c); !strings.Contains(got, "█") || !strings.Contains(got, "░") {
 			t.Errorf("card has no usage bar:\n%s", got)
+		}
+	})
+
+	t.Run("an over-limit card says so instead of showing a negative", func(t *testing.T) {
+		over := c
+		over.Balance = 412000
+		over.Limit = 300000
+		got := Details(over)
+		if !strings.Contains(got, "R$1120.00 over the limit") {
+			t.Errorf("over-limit card does not spell it out:\n%s", got)
+		}
+		if strings.Contains(got, "R$-1120.00") {
+			t.Errorf("over-limit card shows a negative available:\n%s", got)
 		}
 	})
 
