@@ -14,12 +14,13 @@ type Store struct{ db *sql.DB }
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 const columns = `id, code, name, description, color, credit_limit, balance, currency,
-	closing_day, due_day, created_at, updated_at`
+	closing_day, due_day, over_limit_allowed, created_at, updated_at`
 
 func scan(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
 	err := row.Scan(&c.ID, &c.Code, &c.Name, &c.Description, &c.Color, &c.Limit,
-		&c.Balance, &c.Currency, &c.ClosingDay, &c.DueDay, &c.CreatedAt, &c.UpdatedAt)
+		&c.Balance, &c.Currency, &c.ClosingDay, &c.DueDay, &c.OverLimitAllowed,
+		&c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
@@ -71,12 +72,16 @@ func (s *Store) Create(c *Card) error {
 	if err := core.ValidateName(c.Name); err != nil {
 		return err
 	}
+	if err := c.ValidateBalance(); err != nil {
+		return err
+	}
 	c.Code = core.NormalizeCode(c.Code)
 	res, err := s.db.Exec(
 		`INSERT INTO credit_cards (code, name, description, color, credit_limit, balance,
-		 currency, closing_day, due_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 currency, closing_day, due_day, over_limit_allowed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Code, c.Name, c.Description, c.Color, c.Limit, c.Balance, c.Currency,
-		c.ClosingDay, c.DueDay)
+		c.ClosingDay, c.DueDay, c.OverLimitAllowed)
 	if err != nil {
 		return core.CodeErr(err, c.Code)
 	}
@@ -88,13 +93,16 @@ func (s *Store) Update(c Card) error {
 	if err := core.ValidateName(c.Name); err != nil {
 		return err
 	}
+	if err := c.ValidateBalance(); err != nil {
+		return err
+	}
 	c.Code = core.NormalizeCode(c.Code)
 	res, err := s.db.Exec(
 		`UPDATE credit_cards SET code = ?, name = ?, description = ?, color = ?,
 		 credit_limit = ?, balance = ?, currency = ?, closing_day = ?, due_day = ?,
-		 updated_at = datetime('now') WHERE id = ?`,
+		 over_limit_allowed = ?, updated_at = datetime('now') WHERE id = ?`,
 		c.Code, c.Name, c.Description, c.Color, c.Limit, c.Balance, c.Currency,
-		c.ClosingDay, c.DueDay, c.ID)
+		c.ClosingDay, c.DueDay, c.OverLimitAllowed, c.ID)
 	if err != nil {
 		return core.CodeErr(err, c.Code)
 	}

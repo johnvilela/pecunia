@@ -26,8 +26,12 @@ type Card struct {
 	Currency    string
 	ClosingDay  int // day of the month, every month
 	DueDay      int
-	CreatedAt   string
-	UpdatedAt   string
+	// OverLimitAllowed is whether the issuer lets the card be used past its
+	// limit. Off by default, and while it is off the balance may not exceed
+	// the limit at all.
+	OverLimitAllowed bool
+	CreatedAt        string
+	UpdatedAt        string
 }
 
 func (c Card) Cur() core.Currency { return core.CurrencyByCode(c.Currency) }
@@ -41,6 +45,17 @@ func (c Card) Available() int64 { return c.Limit - c.Balance }
 func (c Card) Fmt(v int64) string { return c.Cur().Symbol + core.FormatAmount(v, c.Cur()) }
 
 var ErrNotFound = errors.New("credit card not found")
+
+// ValidateBalance keeps a card that declines at its limit from carrying a
+// balance past it. A card whose issuer allows over-limit use may go past, and
+// nothing caps how far.
+func (c Card) ValidateBalance() error {
+	if !c.OverLimitAllowed && c.Balance > c.Limit {
+		return fmt.Errorf("balance %s is over the %s limit — raise the limit, or allow this card to be used over it",
+			c.Fmt(c.Balance), c.Fmt(c.Limit))
+	}
+	return nil
+}
 
 // ParseDay reads a day of the month. 29 to 31 are allowed — real cards do bill
 // on the 30th — and NextDate is what clamps them in a short month.

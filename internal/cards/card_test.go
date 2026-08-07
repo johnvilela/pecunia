@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -133,6 +134,49 @@ func TestCardAccessors(t *testing.T) {
 		c := Card{Color: "puce", Currency: "XXX"}
 		if c.Col().Hex == "" || c.Cur().Code == "" {
 			t.Fatalf("unknown color/currency gave %+v / %+v", c.Col(), c.Cur())
+		}
+	})
+}
+
+func TestValidateBalance(t *testing.T) {
+	cases := []struct {
+		name    string
+		limit   int64
+		balance int64
+		allowed bool
+		wantErr bool
+	}{
+		{"under the limit", 500000, 123850, false, false},
+		{"exactly at the limit", 500000, 500000, false, false},
+		{"a penny over, not allowed", 500000, 500001, false, true},
+		{"far over, not allowed", 300000, 412000, false, true},
+		{"far over, allowed", 300000, 412000, true, false},
+		{"a refund is never over", 500000, -5000, false, false},
+		{"no limit and nothing used", 0, 0, false, false},
+		{"no limit but something used", 0, 1, false, true},
+		{"no limit, allowed over", 0, 1, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Card{Currency: "BRL", Limit: tc.limit, Balance: tc.balance, OverLimitAllowed: tc.allowed}
+			err := c.ValidateBalance()
+			if tc.wantErr && err == nil {
+				t.Fatalf("balance %d against limit %d (allowed=%v) was accepted",
+					tc.balance, tc.limit, tc.allowed)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("balance %d against limit %d (allowed=%v) = %v",
+					tc.balance, tc.limit, tc.allowed, err)
+			}
+		})
+	}
+
+	t.Run("the error names both amounts and the way out", func(t *testing.T) {
+		err := Card{Currency: "BRL", Limit: 300000, Balance: 412000}.ValidateBalance()
+		for _, want := range []string{"R$4120.00", "R$3000.00", "allow"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
 		}
 	})
 }

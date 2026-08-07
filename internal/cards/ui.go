@@ -35,7 +35,17 @@ func usedColor(c Card) string {
 // against. The header names both in the same order, so neither needs a word.
 func styledUsed(c Card) string {
 	used := lipgloss.NewStyle().Foreground(lipgloss.Color(usedColor(c))).Render(c.Fmt(c.Balance))
-	return used + " " + core.DimStyle.Render("/ "+c.Fmt(c.Limit))
+	// The mark qualifies the limit, so it sits with the limit.
+	return used + " " + core.DimStyle.Render("/ "+c.Fmt(c.Limit)+overSuffix(c))
+}
+
+// overSuffix is the mark, or nothing at all on a card that declines at its
+// limit — which is most of them.
+func overSuffix(c Card) string {
+	if c.OverLimitAllowed {
+		return " " + overMark
+	}
+	return ""
 }
 
 // usagePct is the bar as a number. A card with no limit has no percentage —
@@ -51,6 +61,10 @@ func usagePct(c Card) string {
 func days(c Card) string {
 	return strconv.Itoa(c.ClosingDay) + "/" + strconv.Itoa(c.DueDay)
 }
+
+// overMark flags a card the issuer lets you push past its limit. Arrows are
+// plain Unicode, same as the ❄ accounts use — no Nerd Font needed.
+const overMark = "↑"
 
 const barWidth = 20
 
@@ -119,8 +133,21 @@ func Form(s *Store, c *Card, title string) error {
 		huh.NewSelect[string]().Title("Currency").Options(core.CurrencyOptions()...).Value(&c.Currency),
 		// Currency comes first so the two validators below know the scale.
 		huh.NewInput().Title("Limit").Value(&limit).Validate(amount),
+		huh.NewConfirm().Title("May it be used over the limit?").
+			Affirmative("Yes").Negative("No").Value(&c.OverLimitAllowed),
+		// Limit and the allowance both come first, so this validator can refuse
+		// a balance the card would have declined.
 		huh.NewInput().Title("Balance").Description("already used on the open invoice").
-			Value(&balance).Validate(amount),
+			Value(&balance).Validate(func(v string) error {
+			if err := amount(v); err != nil {
+				return err
+			}
+			cur := core.CurrencyByCode(c.Currency)
+			b, _ := core.ParseAmount(v, cur)
+			l, _ := core.ParseAmount(limit, cur)
+			return Card{Currency: c.Currency, Balance: b, Limit: l,
+				OverLimitAllowed: c.OverLimitAllowed}.ValidateBalance()
+		}),
 		huh.NewInput().Title("Closing day").Description("day of the month, 1-31").
 			Value(&closing).Validate(day),
 		huh.NewInput().Title("Due day").Description("day of the month, 1-31").
@@ -228,10 +255,14 @@ func Details(c Card) string {
 	// is rather than relying on its position.
 	lines = append(lines, "",
 		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(usedColor(c))).Render(c.Fmt(c.Balance))+
-			" "+core.DimStyle.Render("used  of "+c.Fmt(c.Limit)),
+			" "+core.DimStyle.Render("used  of "+c.Fmt(c.Limit)+overSuffix(c)),
 		remaining(c),
 		usageBar(c)+"  "+core.DimStyle.Render(usagePct(c)),
 		"")
+
+	if c.OverLimitAllowed {
+		lines = append(lines, core.DimStyle.Render(overMark+" may be used over the limit"), "")
+	}
 
 	now := time.Now()
 	lines = append(lines,

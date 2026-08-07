@@ -204,20 +204,25 @@ func TestCardFixturesAreValid(t *testing.T) {
 			if f.ClosingDay < 1 || f.ClosingDay > 31 || f.DueDay < 1 || f.DueDay > 31 {
 				t.Errorf("days %d/%d are outside 1-31", f.ClosingDay, f.DueDay)
 			}
+			if err := f.ValidateBalance(); err != nil {
+				t.Error(err)
+			}
 		})
 	}
 }
 
 // The fixtures exist to exercise every branch of the renderers.
 func TestCardFixturesCoverTheRenderBranches(t *testing.T) {
-	var overLimit, zeroBalance, noDescription bool
+	var overLimit, zeroBalance, noDescription, mayGoOver, mayNot bool
 	for _, f := range cardFixtures {
 		overLimit = overLimit || f.Available() < 0
 		zeroBalance = zeroBalance || f.Balance == 0
 		noDescription = noDescription || f.Description == ""
+		mayGoOver = mayGoOver || f.OverLimitAllowed
+		mayNot = mayNot || !f.OverLimitAllowed
 	}
-	if !overLimit || !zeroBalance || !noDescription {
-		t.Fatalf("fixtures miss a branch: overLimit=%v zeroBalance=%v noDescription=%v",
-			overLimit, zeroBalance, noDescription)
+	if !overLimit || !zeroBalance || !noDescription || !mayGoOver || !mayNot {
+		t.Fatalf("fixtures miss a branch: overLimit=%v zeroBalance=%v noDescription=%v mayGoOver=%v mayNot=%v",
+			overLimit, zeroBalance, noDescription, mayGoOver, mayNot)
 	}
 }

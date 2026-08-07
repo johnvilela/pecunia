@@ -87,6 +87,11 @@ func TestCreate(t *testing.T) {
 		if got.Description != "" || got.Limit != 0 || got.Balance != 0 {
 			t.Errorf("defaults not applied: %+v", got)
 		}
+		// A card declines past its limit unless its issuer says otherwise, so
+		// false is the safe default.
+		if got.OverLimitAllowed {
+			t.Errorf("over-limit defaulted to allowed: %+v", got)
+		}
 		if got.CreatedAt == "" || got.UpdatedAt == "" {
 			t.Errorf("timestamps not filled in: %+v", got)
 		}
@@ -149,7 +154,7 @@ func TestGet(t *testing.T) {
 		c := mustCreate(t, s, Card{
 			Code: "FULL1", Name: "Full", Description: "every column",
 			Color: "amber", Currency: "BTC", Limit: 100000000, Balance: -5000,
-			ClosingDay: 31, DueDay: 1,
+			ClosingDay: 31, DueDay: 1, OverLimitAllowed: true,
 		})
 
 		got, err := s.Get(c.ID)
@@ -158,7 +163,8 @@ func TestGet(t *testing.T) {
 		}
 		if got.Code != "FULL1" || got.Name != "Full" || got.Description != "every column" ||
 			got.Color != "amber" || got.Currency != "BTC" || got.Limit != 100000000 ||
-			got.Balance != -5000 || got.ClosingDay != 31 || got.DueDay != 1 {
+			got.Balance != -5000 || got.ClosingDay != 31 || got.DueDay != 1 ||
+			!got.OverLimitAllowed {
 			t.Fatalf("round trip changed the card: %+v", got)
 		}
 	})
@@ -256,6 +262,7 @@ func TestUpdate(t *testing.T) {
 		c.Balance = 1
 		c.ClosingDay = 3
 		c.DueDay = 28
+		c.OverLimitAllowed = true
 		if err := s.Update(c); err != nil {
 			t.Fatal(err)
 		}
@@ -266,7 +273,8 @@ func TestUpdate(t *testing.T) {
 		}
 		if got.Name != "Nubank Ultravioleta" || got.Description != "principal" ||
 			got.Code != "NUVIO" || got.Color != "teal" || got.Currency != "USD" ||
-			got.Limit != 900000 || got.Balance != 1 || got.ClosingDay != 3 || got.DueDay != 28 {
+			got.Limit != 900000 || got.Balance != 1 || got.ClosingDay != 3 || got.DueDay != 28 ||
+			!got.OverLimitAllowed {
 			t.Fatalf("update did not stick: %+v", got)
 		}
 	})
@@ -461,4 +469,52 @@ func TestNameIsRequired(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBalanceMayNotPassTheLimit(t *testing.T) {
+	// The form validator is not enough on its own: huh can return without
+	// running it, and the seed script never opens a form at all.
+	over := func() Card {
+		c := nubank()
+		c.Limit, c.Balance = 300000, 412000
+		return c
+	}
+
+	t.Run("create refuses it", func(t *testing.T) {
+		s := newTestStore(t)
+		c := over()
+		if err := s.Create(&c); err == nil {
+			t.Fatal("a card over its limit was created")
+		}
+	})
+
+	t.Run("create allows it when the card may go over", func(t *testing.T) {
+		s := newTestStore(t)
+		c := over()
+		c.OverLimitAllowed = true
+		if err := s.Create(&c); err != nil {
+			t.Fatalf("an over-limit-allowed card was refused: %v", err)
+		}
+	})
+
+	t.Run("update refuses it", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, nubank())
+		c.Balance = c.Limit + 1
+		if err := s.Update(c); err == nil {
+			t.Fatal("a card was updated past its limit")
+		}
+	})
+
+	t.Run("update refuses revoking the allowance while over", func(t *testing.T) {
+		s := newTestStore(t)
+		c := over()
+		c.OverLimitAllowed = true
+		c = mustCreate(t, s, c)
+
+		c.OverLimitAllowed = false
+		if err := s.Update(c); err == nil {
+			t.Fatal("the allowance was revoked while the card was still over its limit")
+		}
+	})
 }

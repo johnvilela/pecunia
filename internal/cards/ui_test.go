@@ -126,6 +126,24 @@ func TestTable(t *testing.T) {
 		}
 	})
 
+	t.Run("marks only the cards that may go over their limit", func(t *testing.T) {
+		plain := Table([]Card{nubank()})
+		if strings.Contains(plain, overMark) {
+			t.Errorf("a card that cannot go over its limit was marked:\n%s", plain)
+		}
+
+		allowed := nubank()
+		allowed.OverLimitAllowed = true
+		got := Table([]Card{allowed})
+		if !strings.Contains(got, overMark) {
+			t.Errorf("an over-limit card has no mark:\n%s", got)
+		}
+		// The mark belongs to the limit it qualifies, not to the used amount.
+		if !strings.Contains(got, "R$5000.00 "+overMark) {
+			t.Errorf("mark is not beside the limit:\n%s", got)
+		}
+	})
+
 	t.Run("is exactly three columns wide", func(t *testing.T) {
 		header := strings.Split(Table([]Card{nubank()}), "\n")[0]
 		if n := strings.Count(header, "┬"); n != 2 {
@@ -197,6 +215,32 @@ func TestDetails(t *testing.T) {
 		}
 		if strings.Contains(got, "R$-1120.00") {
 			t.Errorf("over-limit card shows a negative available:\n%s", got)
+		}
+	})
+
+	t.Run("spells out an over-limit card", func(t *testing.T) {
+		if got := Details(c); strings.Contains(got, overMark) || strings.Contains(got, "over the limit") {
+			t.Errorf("a card that cannot go over its limit says it can:\n%s", got)
+		}
+
+		allowed := c
+		allowed.OverLimitAllowed = true
+		got := Details(allowed)
+		if !strings.Contains(got, overMark) || !strings.Contains(got, "may be used over the limit") {
+			t.Errorf("card does not spell out the over-limit allowance:\n%s", got)
+		}
+	})
+
+	t.Run("colors an over-limit card red whether or not it is allowed", func(t *testing.T) {
+		// The allowance says the purchase goes through, not that it is fine.
+		over := c
+		over.Balance, over.Limit = 412000, 300000
+		red := core.ColorByName("red").Hex
+		for _, allowed := range []bool{false, true} {
+			over.OverLimitAllowed = allowed
+			if got := usedColor(over); got != red {
+				t.Errorf("over limit with allowed=%v = %q; want red", allowed, got)
+			}
 		}
 	})
 

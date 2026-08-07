@@ -33,13 +33,15 @@ Usage:
   kakei cc n
 
 Opens a form: name, description (optional), code, color, currency, limit,
-balance, closing day, due day. The code is 5 characters and comes pre-filled
-with a free suggestion. Colors are a preset of 12. Currencies are Dollar, Euro,
-Brazilian Real and Bitcoin.
+over-limit allowance, balance, closing day, due day. The code is 5 characters
+and comes pre-filled with a free suggestion. Colors are a preset of 12.
+Currencies are Dollar, Euro, Brazilian Real and Bitcoin.
 
 Balance is what the open invoice already owes — available credit is the limit
-minus it. Closing and due are days of the month (1-31) and repeat every month;
-a day the month is too short for falls on its last day.
+minus it. A card may only carry a balance past its limit if it is marked as
+usable over the limit (↑ in the list); otherwise the balance is capped there.
+Closing and due are days of the month (1-31) and repeat every month; a day the
+month is too short for falls on its last day.
 `,
 	"edit": `Edit a credit card.
 
