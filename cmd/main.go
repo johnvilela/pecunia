@@ -28,6 +28,7 @@ Commands:
   setup             create the SQLite database (--force to back up and recreate)
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
   credit-card | cc  manage credit cards (new, edit, delete, details)
+  category | ct     manage categories (new, edit, delete, details)
   help              show this message
 
 Environment:
@@ -61,6 +62,9 @@ func run() int {
 
 	case "credit-card", "cc":
 		return report("credit-card", runCards(os.Args[2:]))
+
+	case "category", "ct":
+		return report("category", runCategories(os.Args[2:]))
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])
