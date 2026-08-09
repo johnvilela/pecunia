@@ -1,13 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 
 	"kakei/internal/accounts"
 	"kakei/internal/cards"
+	"kakei/internal/categories"
 	"kakei/internal/core"
 	"kakei/internal/db"
+	"kakei/internal/transactions"
 )
 
 func newTestStore(t *testing.T) *accounts.Store {
@@ -225,4 +228,106 @@ func TestCardFixturesCoverTheRenderBranches(t *testing.T) {
 		t.Fatalf("fixtures miss a branch: overLimit=%v zeroBalance=%v noDescription=%v mayGoOver=%v mayNot=%v",
 			overLimit, zeroBalance, noDescription, mayGoOver, mayNot)
 	}
+}
+
+// newTestConn is newTestStore's twin for the seeders that need more than one
+// store off the same connection.
+func newTestConn(t *testing.T) *sql.DB {
+	t.Helper()
+	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	conn, err := db.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+// seedEverything is the order main runs the seeders in: transactions point at
+// accounts, cards and categories, so those have to be there first.
+func seedEverything(t *testing.T, conn *sql.DB) int {
+	t.Helper()
+	if _, err := seed(accounts.NewStore(conn)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seedCards(cards.NewStore(conn)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+		t.Fatal(err)
+	}
+	n, err := seedTransactions(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestSeedTransactions(t *testing.T) {
+	t.Run("inserts every fixture", func(t *testing.T) {
+		conn := newTestConn(t)
+		if n := seedEverything(t, conn); n != len(txFixtures) {
+			t.Fatalf("seeded %d transactions; want %d", n, len(txFixtures))
+		}
+
+		all, err := transactions.NewStore(conn).List(transactions.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(txFixtures) {
+			t.Fatalf("database holds %d transactions; want %d", len(all), len(txFixtures))
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := newTestConn(t)
+		seedEverything(t, conn)
+
+		n, err := seedTransactions(conn)
+		if err != nil {
+			t.Fatalf("second seed: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second seed inserted %d; want 0", n)
+		}
+	})
+
+	t.Run("every fixture is filed against something that exists", func(t *testing.T) {
+		conn := newTestConn(t)
+		seedEverything(t, conn)
+
+		all, err := transactions.NewStore(conn).List(transactions.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tr := range all {
+			if tr.Target().Code == "" {
+				t.Fatalf("%q has no account or card", tr.Title)
+			}
+			if tr.Currency == "" {
+				t.Fatalf("%q inherited no currency", tr.Title)
+			}
+		}
+	})
+
+	t.Run("the balances moved with the transactions", func(t *testing.T) {
+		conn := newTestConn(t)
+		// Seed the accounts alone first, so what the transactions did to them
+		// is the difference between the two readings.
+		if _, err := seed(accounts.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		before, err := accounts.NewStore(conn).ByCode("INTER")
+		if err != nil {
+			t.Fatal(err)
+		}
+		seedEverything(t, conn)
+		after, err := accounts.NewStore(conn).ByCode("INTER")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if before.Balance == after.Balance {
+			t.Fatal("INTER's balance did not move; want the transactions to have reached it")
+		}
+	})
 }
