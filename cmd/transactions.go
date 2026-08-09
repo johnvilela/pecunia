@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -178,7 +179,10 @@ type listFilter struct {
 // `kakei ct food1` does.
 func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 	fs := flag.NewFlagSet("transactions", flag.ContinueOnError)
-	fs.SetOutput(out)
+	// The flag package's own usage dump would print the flags a second time, in
+	// its own single-dash spelling, right next to the error report() already
+	// prints. kakei t -h is the one that documents them.
+	fs.SetOutput(io.Discard)
 	var (
 		all      = fs.Bool("all", false, "every transaction ever")
 		date     = fs.String("date", "", "one day, YYYY-MM-DD")
@@ -192,7 +196,7 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 		card     = fs.String("card", "", "credit card CODE or ID")
 	)
 	if err := fs.Parse(args); err != nil {
-		return listFilter{}, err
+		return listFilter{}, fmt.Errorf("%w — see: kakei t -h", err)
 	}
 	if n := fs.NArg(); n > 0 {
 		return listFilter{}, fmt.Errorf("unexpected argument %q — filters are flags, and an id takes none", fs.Arg(0))
@@ -301,11 +305,14 @@ func listTransactions(args []string) error {
 			if err != nil {
 				return err
 			}
-			if len(total) == 0 {
+			switch {
+			case len(total) == 0:
 				fmt.Fprintln(out, errNoTransactions)
-				return nil
+			case scope != "":
+				fmt.Fprintf(out, "nothing in %s — widen with: kakei t --all\n", scope)
+			default:
+				fmt.Fprintln(out, "nothing matched that filter — widen with: kakei t --all")
 			}
-			fmt.Fprintf(out, "nothing in %s — widen with: kakei t --all\n", scopeName(scope))
 			return nil
 		}
 
@@ -316,15 +323,6 @@ func listTransactions(args []string) error {
 		}
 		return nil
 	})
-}
-
-// scopeName says what came up empty. A filtered list that found nothing has no
-// month to name, so it names the filter instead.
-func scopeName(scope string) string {
-	if scope == "" {
-		return "that filter"
-	}
-	return scope
 }
 
 // formData gathers everything the form offers to choose from.

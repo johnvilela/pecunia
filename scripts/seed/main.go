@@ -105,76 +105,69 @@ func seedCards(s *cards.Store) (int, error) {
 // txFixture is one sample transaction, written against codes rather than ids
 // because the rows it points at only get their ids when they are seeded.
 //
-// Month is 0 for the current month and -1 for the one before, so the dev
-// database always has something in the default list and something outside it,
-// whenever it is seeded.
+// Days is how long ago it happened, counting back from the day the seeder runs.
+// Days rather than a fixed date so the dev database is never stale, and never
+// dated into the future either.
 type txFixture struct {
 	Title       string
 	Description string
 	Kind        string
 	Value       int64
-	Month, Day  int
+	Days        int
 	Category    string // category code, empty for none
 	Account     string // exactly one of these two
 	Card        string
 	Tags        []string
 }
 
-// date turns the fixture's month-and-day into a real one. A day the month is
-// too short for lands on its last, and a day still ahead in the current month
-// lands on today — dev data dated into the future reads as a bug.
 func (f txFixture) date(now time.Time) string {
-	m := time.Date(now.Year(), now.Month()+time.Month(f.Month), 1, 0, 0, 0, 0, time.UTC)
-	// Day 0 of the next month is the last day of this one.
-	day := min(f.Day, time.Date(m.Year(), m.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day())
-	if f.Month == 0 {
-		day = min(day, now.Day())
-	}
-	return time.Date(m.Year(), m.Month(), day, 0, 0, 0, 0, time.UTC).
-		Format(transactions.DateLayout)
+	return now.AddDate(0, 0, -f.Days).Format(transactions.DateLayout)
 }
 
-// txFixtures spread over two months, four accounts, two cards, both kinds and a
+// txFixtures spread over five weeks, four accounts, two cards, both kinds and a
 // handful of tags, so every filter and every branch of the table has something
-// to work on. The card amounts stay well inside NUCRD's limit — it is the one
-// card that declines at it.
+// to work on. The first several are recent enough to always land in the current
+// month, and the last several far enough back to always fall outside it.
+//
+// The card amounts stay well inside NUCRD's limit — it is the one card here that
+// declines at it.
 var txFixtures = []txFixture{
-	{Title: "Salário", Description: "pagamento mensal", Kind: transactions.KindIncome,
-		Value: 850000, Month: -1, Day: 5, Category: "SLRY1", Account: "INTER", Tags: []string{"fixo"}},
-	{Title: "Aluguel", Kind: transactions.KindOutcome,
-		Value: 220000, Month: -1, Day: 6, Category: "HOME1", Account: "INTER", Tags: []string{"fixo", "casa"}},
-	{Title: "Conta de luz", Kind: transactions.KindOutcome,
-		Value: 18450, Month: -1, Day: 10, Category: "UTILS", Account: "INTER", Tags: []string{"fixo", "casa"}},
-	{Title: "Supermercado", Description: "compra do mês", Kind: transactions.KindOutcome,
-		Value: 63200, Month: -1, Day: 12, Category: "FOOD1", Account: "NUBON", Tags: []string{"mercado"}},
-	{Title: "Cinema", Kind: transactions.KindOutcome,
-		Value: 9000, Month: -1, Day: 18, Category: "ENTER", Card: "NUCRD", Tags: []string{"lazer"}},
-	{Title: "Uber para o aeroporto", Kind: transactions.KindOutcome,
-		Value: 7350, Month: -1, Day: 22, Category: "TRANS", Account: "CASH1"},
-	{Title: "Freelance", Description: "landing page", Kind: transactions.KindIncome,
-		Value: 120000, Month: -1, Day: 28, Category: "WORK1", Account: "PAYPL", Tags: []string{"extra"}},
-
-	{Title: "Salário", Description: "pagamento mensal", Kind: transactions.KindIncome,
-		Value: 850000, Month: 0, Day: 5, Category: "SLRY1", Account: "INTER", Tags: []string{"fixo"}},
-	{Title: "Aluguel", Kind: transactions.KindOutcome,
-		Value: 220000, Month: 0, Day: 6, Category: "HOME1", Account: "INTER", Tags: []string{"fixo", "casa"}},
 	{Title: "Padaria", Kind: transactions.KindOutcome,
-		Value: 2450, Month: 0, Day: 7, Category: "FOOD1", Account: "CASH1", Tags: []string{"mercado"}},
+		Value: 2450, Days: 0, Category: "FOOD1", Account: "CASH1", Tags: []string{"mercado"}},
 	{Title: "Almoço no japonês", Kind: transactions.KindOutcome,
-		Value: 11800, Month: 0, Day: 9, Category: "RESTA", Card: "NUCRD", Tags: []string{"lazer"}},
-	{Title: "Assinatura de streaming", Kind: transactions.KindOutcome,
-		Value: 5590, Month: 0, Day: 10, Category: "ENTER", Card: "NUCRD", Tags: []string{"fixo"}},
+		Value: 11800, Days: 1, Category: "RESTA", Card: "NUCRD", Tags: []string{"lazer"}},
 	// No category, so the table's blank-category branch has something to render.
 	{Title: "Transferência recebida", Kind: transactions.KindIncome,
-		Value: 30000, Month: 0, Day: 11, Account: "NUBON"},
-	{Title: "Ração do gato", Kind: transactions.KindOutcome,
-		Value: 15900, Month: 0, Day: 14, Category: "PETS1", Account: "NUBON", Tags: []string{"casa"}},
+		Value: 30000, Days: 2, Account: "NUBON"},
 	// On the USD card, so a listed amount is not always in reais.
 	{Title: "Domain renewal", Description: "annual", Kind: transactions.KindOutcome,
-		Value: 4800, Month: 0, Day: 15, Category: "WORK1", Card: "AMEX2", Tags: []string{"extra"}},
+		Value: 4800, Days: 3, Category: "WORK1", Card: "AMEX2", Tags: []string{"extra"}},
+	{Title: "Ração do gato", Kind: transactions.KindOutcome,
+		Value: 15900, Days: 5, Category: "PETS1", Account: "NUBON", Tags: []string{"casa"}},
+	{Title: "Assinatura de streaming", Kind: transactions.KindOutcome,
+		Value: 5590, Days: 8, Category: "ENTER", Card: "NUCRD", Tags: []string{"fixo"}},
 	// An income on a card is a payment against the invoice, which lowers it.
 	{Title: "Pagamento da fatura", Kind: transactions.KindIncome,
-		Value: 100000, Month: 0, Day: 20, Category: "DEBT1", Card: "NUCRD", Tags: []string{"fixo"}},
+		Value: 100000, Days: 11, Category: "DEBT1", Card: "NUCRD", Tags: []string{"fixo"}},
+	{Title: "Supermercado", Description: "compra da semana", Kind: transactions.KindOutcome,
+		Value: 63200, Days: 14, Category: "FOOD1", Account: "NUBON", Tags: []string{"mercado"}},
+	{Title: "Uber para o aeroporto", Kind: transactions.KindOutcome,
+		Value: 7350, Days: 19, Category: "TRANS", Account: "CASH1"},
+	{Title: "Conta de luz", Kind: transactions.KindOutcome,
+		Value: 18450, Days: 24, Category: "UTILS", Account: "INTER", Tags: []string{"fixo", "casa"}},
+
+	{Title: "Salário", Description: "pagamento mensal", Kind: transactions.KindIncome,
+		Value: 850000, Days: 32, Category: "SLRY1", Account: "INTER", Tags: []string{"fixo"}},
+	{Title: "Aluguel", Kind: transactions.KindOutcome,
+		Value: 220000, Days: 33, Category: "HOME1", Account: "INTER", Tags: []string{"fixo", "casa"}},
+	{Title: "Cinema", Kind: transactions.KindOutcome,
+		Value: 9000, Days: 36, Category: "ENTER", Card: "NUCRD", Tags: []string{"lazer"}},
+	{Title: "Freelance", Description: "landing page", Kind: transactions.KindIncome,
+		Value: 120000, Days: 40, Category: "WORK1", Account: "PAYPL", Tags: []string{"extra"}},
+	{Title: "Presente de aniversário", Kind: transactions.KindOutcome,
+		Value: 24000, Days: 44, Category: "GIFTS", Account: "NUBON"},
+	{Title: "Farmácia", Kind: transactions.KindOutcome,
+		Value: 8790, Days: 47, Category: "HLTH1", Account: "INTER", Tags: []string{"casa"}},
 }
 
 // seedTransactions files every fixture. Its idempotency is the whole table
