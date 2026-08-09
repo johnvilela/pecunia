@@ -130,19 +130,4 @@ func (s *Store) CodeTaken(code string) (bool, error) {
 }
 
 // SuggestCode returns a free code to pre-fill the form with.
-//
-// ponytail: the same loop as accounts.Store.SuggestCode. Two copies beat
-// threading a "is this taken" callback through core for one extra caller.
-func (s *Store) SuggestCode() (string, error) {
-	for range 20 {
-		code := core.RandomCode()
-		taken, err := s.CodeTaken(code)
-		if err != nil {
-			return "", err
-		}
-		if !taken {
-			return code, nil
-		}
-	}
-	return "", errors.New("could not find a free code")
-}
+func (s *Store) SuggestCode() (string, error) { return core.SuggestCode(s.CodeTaken) }

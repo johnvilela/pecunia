@@ -250,3 +250,45 @@ func TestCodeErr(t *testing.T) {
 		}
 	})
 }
+
+func TestSuggestCode(t *testing.T) {
+	t.Run("returns a valid code when nothing is taken", func(t *testing.T) {
+		code, err := SuggestCode(func(string) (bool, error) { return false, nil })
+		if err != nil {
+			t.Fatalf("SuggestCode: %v", err)
+		}
+		if err := ValidateCode(code); err != nil {
+			t.Fatalf("SuggestCode returned %q: %v", code, err)
+		}
+	})
+
+	t.Run("skips taken codes", func(t *testing.T) {
+		n := 0
+		code, err := SuggestCode(func(string) (bool, error) {
+			n++
+			return n < 3, nil
+		})
+		if err != nil {
+			t.Fatalf("SuggestCode: %v", err)
+		}
+		if n != 3 {
+			t.Fatalf("asked %d times; want 3", n)
+		}
+		if err := ValidateCode(code); err != nil {
+			t.Fatalf("SuggestCode returned %q: %v", code, err)
+		}
+	})
+
+	t.Run("gives up when every code is taken", func(t *testing.T) {
+		if _, err := SuggestCode(func(string) (bool, error) { return true, nil }); err == nil {
+			t.Fatal("SuggestCode = nil error; want it to give up")
+		}
+	})
+
+	t.Run("passes the lookup error through", func(t *testing.T) {
+		boom := errors.New("disk on fire")
+		if _, err := SuggestCode(func(string) (bool, error) { return false, boom }); !errors.Is(err, boom) {
+			t.Fatalf("SuggestCode = %v; want the lookup error", err)
+		}
+	})
+}

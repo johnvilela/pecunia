@@ -88,6 +88,23 @@ func RandomCode() string {
 	return string(out)
 }
 
+// SuggestCode returns a code no row is using yet, for a form to pre-fill.
+// taken is the store's own lookup — the alternative was a copy of this loop in
+// every store.
+func SuggestCode(taken func(string) (bool, error)) (string, error) {
+	for range 20 {
+		code := RandomCode()
+		used, err := taken(code)
+		if err != nil {
+			return "", err
+		}
+		if !used {
+			return code, nil
+		}
+	}
+	return "", errors.New("could not find a free code")
+}
+
 // NormalizeCode uppercases and trims so "wllt" and "WLLT " are the same code.
 func NormalizeCode(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
