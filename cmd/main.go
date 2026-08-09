@@ -1,12 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 
 	"kakei/internal/core"
+	"kakei/internal/db"
 )
 
 const banner = `
@@ -29,6 +31,7 @@ Commands:
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
   credit-card | cc  manage credit cards (new, edit, delete, details)
   category | ct     manage categories (new, edit, delete, details)
+  transactions | t  record and review transactions (new, edit, delete)
   help              show this message
 
 Environment:
@@ -66,11 +69,26 @@ func run() int {
 	case "category", "ct":
 		return report("category", runCategories(os.Args[2:]))
 
+	case "transactions", "t":
+		return report("transactions", runTransactions(os.Args[2:]))
+
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])
 		fmt.Fprint(os.Stderr, help)
 		return 2
 	}
+}
+
+// withConn opens the database, hands the connection over and closes it after.
+// Transactions need four stores off one connection, which is what pulled this
+// out of the copy each module used to keep.
+func withConn(fn func(*sql.DB) error) error {
+	conn, err := db.Open()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return fn(conn)
 }
 
 // report turns a command's error into an exit code. Backing out of a form or

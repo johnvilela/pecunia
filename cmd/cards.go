@@ -1,12 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 
 	"kakei/internal/cards"
 	"kakei/internal/core"
-	"kakei/internal/db"
 )
 
 const cardsHelp = `Manage credit cards.
@@ -108,12 +108,7 @@ func runCards(args []string) error {
 }
 
 func withCards(fn func(*cards.Store) error) error {
-	conn, err := db.Open()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	return fn(cards.NewStore(conn))
+	return withConn(func(conn *sql.DB) error { return fn(cards.NewStore(conn)) })
 }
 
 // resolveOrPickCard turns an optional {CODE|ID} argument into a card, falling

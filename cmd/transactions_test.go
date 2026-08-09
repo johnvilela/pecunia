@@ -1,0 +1,344 @@
+package main
+
+import (
+	"bytes"
+	"database/sql"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"kakei/internal/accounts"
+	"kakei/internal/cards"
+	"kakei/internal/categories"
+	"kakei/internal/db"
+	"kakei/internal/transactions"
+)
+
+// runTransactionsIn points KAKEI_DB at a database of this case's own, captures
+// what the command writes and returns both.
+//
+// Only the paths that never open a form are driven from here: new, edit and the
+// delete confirmation all block on a TTY, so they stay in transactions.Form's
+// territory and are covered through the store instead.
+func runTransactionsIn(t *testing.T, dbPath string, args ...string) (string, error) {
+	t.Helper()
+	t.Setenv("KAKEI_DB", dbPath)
+
+	var buf bytes.Buffer
+	old := out
+	out = &buf
+	t.Cleanup(func() { out = old })
+
+	err := runTransactions(args)
+	return buf.String(), err
+}
+
+// ledger is a database with one account, one card, one category and whatever
+// transactions the case asks for.
+type ledger struct {
+	path     string
+	account  accounts.Account
+	card     cards.Card
+	category categories.Category
+}
+
+func newLedger(t *testing.T) *ledger {
+	t.Helper()
+	l := &ledger{path: filepath.Join(t.TempDir(), "kakei.db")}
+	l.with(t, func(conn *sql.DB) {
+		l.account = accounts.Account{Code: "INTER", Name: "Banco Inter", Color: "orange",
+			Currency: "BRL", Balance: 1000000}
+		if err := accounts.NewStore(conn).Create(&l.account); err != nil {
+			t.Fatal(err)
+		}
+		l.card = cards.Card{Code: "NUCRD", Name: "Nubank", Color: "violet", Currency: "BRL",
+			Limit: 500000, ClosingDay: 15, DueDay: 22}
+		if err := cards.NewStore(conn).Create(&l.card); err != nil {
+			t.Fatal(err)
+		}
+		l.category = categories.Category{Code: "FOOD1", Name: "Food", Color: "lime"}
+		if err := categories.NewStore(conn).Create(&l.category); err != nil {
+			t.Fatal(err)
+		}
+	})
+	return l
+}
+
+func (l *ledger) with(t *testing.T, fn func(*sql.DB)) {
+	t.Helper()
+	t.Setenv("KAKEI_DB", l.path)
+	conn, err := db.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fn(conn)
+}
+
+func (l *ledger) add(t *testing.T, tr transactions.Transaction) transactions.Transaction {
+	t.Helper()
+	if tr.Value == 0 {
+		tr.Value = 12000
+	}
+	if tr.Kind == "" {
+		tr.Kind = transactions.KindOutcome
+	}
+	if tr.Account.ID == 0 && tr.Card.ID == 0 {
+		tr.Account = transactions.Ref{ID: l.account.ID}
+	}
+	l.with(t, func(conn *sql.DB) {
+		if err := transactions.NewStore(conn).Create(&tr); err != nil {
+			t.Fatal(err)
+		}
+	})
+	return tr
+}
+
+// today and lastMonth keep the cases off fixed dates: the default list is the
+// current month, so what "this month" means moves with the clock.
+func today() string { return time.Now().Format("2006-01-02") }
+
+func lastMonth() string {
+	// The first of this month, minus a day, is always in the month before —
+	// which the 31st of this one would not be.
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).
+		AddDate(0, 0, -1).Format("2006-01-02")
+}
+
+func TestTransactionsHelp(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"top level -h", []string{"-h"}, "Record and review"},
+		{"top level --help", []string{"--help"}, "Record and review"},
+		{"new -h", []string{"new", "-h"}, "Record a transaction"},
+		{"n -h", []string{"n", "-h"}, "Record a transaction"},
+		{"edit -h", []string{"edit", "-h"}, "Edit a transaction"},
+		{"e --help", []string{"e", "--help"}, "Edit a transaction"},
+		{"delete --help", []string{"delete", "--help"}, "Delete a transaction"},
+		{"d -h", []string{"d", "-h"}, "Delete a transaction"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Help must not need a database at all — point at a path that
+			// cannot be created and it should still print.
+			got, err := runTransactionsIn(t, filepath.Join(t.TempDir(), "nope", "unused.db"), tc.args...)
+			if err != nil {
+				t.Fatalf("kakei t %v = %v", tc.args, err)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("kakei t %v printed %q; want it to contain %q", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTransactionsList(t *testing.T) {
+	t.Run("defaults to this month and says so", func(t *testing.T) {
+		l := newLedger(t)
+		l.add(t, transactions.Transaction{Title: "Groceries", Date: today()})
+		l.add(t, transactions.Transaction{Title: "Old rent", Date: lastMonth()})
+
+		got, err := runTransactionsIn(t, l.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Groceries") {
+			t.Fatalf("this month's transaction is missing:\n%s", got)
+		}
+		if strings.Contains(got, "Old rent") {
+			t.Fatalf("last month's transaction should not be in the default list:\n%s", got)
+		}
+		// The scope is implicit, so the footer has to make it explicit.
+		for _, want := range []string{time.Now().Format("January 2006"), "--all"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("the footer is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("--all reaches back", func(t *testing.T) {
+		l := newLedger(t)
+		l.add(t, transactions.Transaction{Title: "Groceries", Date: today()})
+		l.add(t, transactions.Transaction{Title: "Old rent", Date: lastMonth()})
+
+		got, err := runTransactionsIn(t, l.path, "--all")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"DATE", "TITLE", "CATEGORY", "SOURCE", "AMOUNT", "Groceries", "Old rent"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("kakei t --all is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("an empty database says how to start", func(t *testing.T) {
+		l := newLedger(t)
+		got, err := runTransactionsIn(t, l.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"no transactions yet", "kakei t n"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("empty list = %q; want it to mention %q", got, want)
+			}
+		}
+	})
+
+	t.Run("an empty month says so without saying the ledger is empty", func(t *testing.T) {
+		l := newLedger(t)
+		l.add(t, transactions.Transaction{Title: "Old rent", Date: lastMonth()})
+
+		got, err := runTransactionsIn(t, l.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(got, "no transactions yet") {
+			t.Fatalf("an empty month reads as an empty ledger:\n%s", got)
+		}
+		if !strings.Contains(got, "--all") {
+			t.Fatalf("an empty month does not say how to widen:\n%s", got)
+		}
+	})
+}
+
+func TestTransactionsFilters(t *testing.T) {
+	// build gives every filter something to leave out.
+	build := func(t *testing.T) *ledger {
+		t.Helper()
+		l := newLedger(t)
+		l.add(t, transactions.Transaction{Title: "Groceries", Date: "2026-03-08",
+			Tags: []string{"food"}, Category: transactions.Ref{ID: l.category.ID}})
+		l.add(t, transactions.Transaction{Title: "Coffee", Date: "2026-03-20", Value: 800})
+		l.add(t, transactions.Transaction{Title: "Card lunch", Date: "2026-04-02",
+			Card: transactions.Ref{ID: l.card.ID}})
+		return l
+	}
+
+	cases := []struct {
+		name  string
+		args  []string
+		want  []string
+		avoid []string
+	}{
+		{"--date", []string{"--date", "2026-03-08"}, []string{"Groceries"}, []string{"Coffee", "Card lunch"}},
+		{"--month", []string{"--month", "2026-03"}, []string{"Groceries", "Coffee"}, []string{"Card lunch"}},
+		{"--from and --to", []string{"--from", "2026-03-10", "--to", "2026-04-30"},
+			[]string{"Coffee", "Card lunch"}, []string{"Groceries"}},
+		{"--tag", []string{"--tag", "food"}, []string{"Groceries"}, []string{"Coffee"}},
+		{"--search", []string{"--search", "coff"}, []string{"Coffee"}, []string{"Groceries"}},
+		{"--category by code", []string{"--category", "FOOD1"}, []string{"Groceries"}, []string{"Coffee"}},
+		{"--category in any case", []string{"--category", "food1"}, []string{"Groceries"}, []string{"Coffee"}},
+		{"--account", []string{"--account", "INTER"}, []string{"Groceries", "Coffee"}, []string{"Card lunch"}},
+		{"--card", []string{"--card", "NUCRD"}, []string{"Card lunch"}, []string{"Groceries"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := build(t)
+			got, err := runTransactionsIn(t, l.path, tc.args...)
+			if err != nil {
+				t.Fatalf("kakei t %v = %v", tc.args, err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("kakei t %v is missing %q:\n%s", tc.args, want, got)
+				}
+			}
+			for _, avoid := range tc.avoid {
+				if strings.Contains(got, avoid) {
+					t.Fatalf("kakei t %v should have left %q out:\n%s", tc.args, avoid, got)
+				}
+			}
+		})
+	}
+
+	t.Run("an unknown flag is an error, not a silent list", func(t *testing.T) {
+		l := build(t)
+		if _, err := runTransactionsIn(t, l.path, "--nope"); err == nil {
+			t.Fatal("kakei t --nope = nil; want an error")
+		}
+	})
+
+	t.Run("a filter naming something that is not there says which", func(t *testing.T) {
+		l := build(t)
+		_, err := runTransactionsIn(t, l.path, "--category", "NOPE1")
+		if err == nil || !strings.Contains(err.Error(), "NOPE1") {
+			t.Fatalf("kakei t --category NOPE1 = %v; want it to name the reference", err)
+		}
+	})
+
+	t.Run("a malformed date is an error", func(t *testing.T) {
+		l := build(t)
+		for _, args := range [][]string{{"--date", "08/03/2026"}, {"--month", "2026-3"}, {"--from", "nope"}} {
+			if _, err := runTransactionsIn(t, l.path, args...); err == nil {
+				t.Fatalf("kakei t %v = nil; want an error", args)
+			}
+		}
+	})
+}
+
+func TestTransactionsDetails(t *testing.T) {
+	t.Run("an id shows the card", func(t *testing.T) {
+		l := newLedger(t)
+		made := l.add(t, transactions.Transaction{Title: "Groceries", Date: today(),
+			Tags: []string{"food"}, Category: transactions.Ref{ID: l.category.ID}})
+
+		got, err := runTransactionsIn(t, l.path, strconv.FormatInt(made.ID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"Groceries", "120.00", "FOOD1", "INTER", "food"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("the details card is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("an unknown id names what was asked for", func(t *testing.T) {
+		l := newLedger(t)
+		_, err := runTransactionsIn(t, l.path, "999")
+		if err == nil || !strings.Contains(err.Error(), `no transaction matching "999"`) {
+			t.Fatalf("kakei t 999 = %v; want it to name the reference", err)
+		}
+	})
+
+	t.Run("a transaction is referenced by id and nothing else", func(t *testing.T) {
+		l := newLedger(t)
+		l.add(t, transactions.Transaction{Title: "Groceries", Date: today()})
+		_, err := runTransactionsIn(t, l.path, "Groceries")
+		if err == nil || !strings.Contains(err.Error(), "Groceries") {
+			t.Fatalf("kakei t Groceries = %v; want it to say that is not an id", err)
+		}
+	})
+}
+
+// Edit and delete open a form or a confirm prompt, but the lookup happens
+// first — so the failing-lookup path is reachable without a TTY.
+func TestTransactionsEditAndDeleteMissing(t *testing.T) {
+	for _, sub := range []string{"edit", "e", "delete", "d"} {
+		t.Run(sub+" on an unknown id", func(t *testing.T) {
+			l := newLedger(t)
+			l.add(t, transactions.Transaction{Title: "Groceries", Date: today()})
+
+			_, err := runTransactionsIn(t, l.path, sub, "999")
+			if err == nil || !strings.Contains(err.Error(), `no transaction matching "999"`) {
+				t.Fatalf("kakei t %s 999 = %v", sub, err)
+			}
+		})
+	}
+}
+
+func TestTransactionsWithoutADatabase(t *testing.T) {
+	t.Run("reports the error instead of panicking", func(t *testing.T) {
+		// A directory where the file should be: Open cannot create it.
+		if _, err := runTransactionsIn(t, t.TempDir()); err == nil {
+			t.Fatal("kakei t on an unopenable database = nil; want an error")
+		}
+	})
+}

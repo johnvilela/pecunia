@@ -83,7 +83,7 @@ func TestOpenMigratesOnceOnly(t *testing.T) {
 		if n != len(entries) {
 			t.Fatalf("open %d: expected %d applied migrations, got %d", i+1, len(entries), n)
 		}
-		for _, table := range []string{"accounts", "credit_cards", "categories"} {
+		for _, table := range []string{"accounts", "credit_cards", "categories", "transactions", "transaction_tags"} {
 			if _, err := conn.Exec("SELECT 1 FROM " + table); err != nil {
 				t.Fatalf("open %d: %s table missing: %v", i+1, table, err)
 			}

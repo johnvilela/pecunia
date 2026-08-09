@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -8,7 +9,6 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/core"
-	"kakei/internal/db"
 )
 
 // out is where every command writes; tests swap it for a buffer.
@@ -128,12 +128,7 @@ func runAccounts(args []string) error {
 }
 
 func withStore(fn func(*accounts.Store) error) error {
-	conn, err := db.Open()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	return fn(accounts.NewStore(conn))
+	return withConn(func(conn *sql.DB) error { return fn(accounts.NewStore(conn)) })
 }
 
 // resolveOrPick turns an optional {CODE|ID} argument into an account, falling

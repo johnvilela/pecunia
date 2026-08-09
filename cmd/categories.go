@@ -1,12 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 
 	"kakei/internal/categories"
 	"kakei/internal/core"
-	"kakei/internal/db"
 )
 
 const categoriesHelp = `Manage categories.
@@ -104,12 +104,7 @@ func runCategories(args []string) error {
 }
 
 func withCategories(fn func(*categories.Store) error) error {
-	conn, err := db.Open()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	return fn(categories.NewStore(conn))
+	return withConn(func(conn *sql.DB) error { return fn(categories.NewStore(conn)) })
 }
 
 // resolveOrPickCategory turns an optional {CODE|ID} argument into a category,
