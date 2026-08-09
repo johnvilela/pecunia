@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/cards"
+	"kakei/internal/categories"
 	"kakei/internal/db"
 )
 
@@ -116,7 +117,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// Categories have no dev fixtures of their own — the dev DB gets the same
+	// starter set a real one does, because that is what needs looking at.
+	ct, err := categories.Seed(categories.NewStore(conn))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts and %d of %d credit cards into %s\n",
-		n, len(fixtures), c, len(cardFixtures), path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards and %d of %d categories into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), path)
 }
