@@ -518,3 +518,26 @@ func TestBalanceMayNotPassTheLimit(t *testing.T) {
 		}
 	})
 }
+
+// Same as the accounts case: a transaction always names exactly one account or
+// card, so the card cannot be deleted out from under it. Raw INSERT because
+// importing kakei/internal/transactions here would be an import cycle.
+func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
+	t.Run("says what is blocking it", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, nubank())
+		if _, err := s.db.Exec(
+			`INSERT INTO transactions (title, card_id, value, kind, date)
+			 VALUES ('Groceries', ?, 12000, 'outcome', '2026-08-08')`, c.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		err := s.Delete(c.ID)
+		if err == nil {
+			t.Fatal("delete = nil; want the foreign key to refuse it")
+		}
+		if !strings.Contains(err.Error(), "transaction") {
+			t.Fatalf("delete = %q; want it to name transactions", err)
+		}
+	})
+}

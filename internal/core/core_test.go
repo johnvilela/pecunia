@@ -292,3 +292,22 @@ func TestSuggestCode(t *testing.T) {
 		}
 	})
 }
+
+func TestFKErr(t *testing.T) {
+	t.Run("names what the caller said, not what SQLite said", func(t *testing.T) {
+		err := FKErr(errors.New("constraint failed: FOREIGN KEY constraint failed (787)"), "still in use")
+		if err == nil || err.Error() != "still in use" {
+			t.Fatalf("FKErr = %v; want the caller's sentence", err)
+		}
+	})
+
+	t.Run("leaves anything else alone", func(t *testing.T) {
+		boom := errors.New("disk on fire")
+		if err := FKErr(boom, "still in use"); !errors.Is(err, boom) {
+			t.Fatalf("FKErr = %v; want the original error", err)
+		}
+		if err := FKErr(nil, "still in use"); err != nil {
+			t.Fatalf("FKErr(nil) = %v; want nil", err)
+		}
+	})
+}

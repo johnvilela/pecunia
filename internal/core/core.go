@@ -140,6 +140,16 @@ func CodeErr(err error, code string) error {
 	return err
 }
 
+// FKErr turns a foreign key violation into something readable. SQLite words
+// every one of them the same way — "FOREIGN KEY constraint failed" and a
+// number — so only the caller knows what was still holding on.
+func FKErr(err error, msg string) error {
+	if err != nil && strings.Contains(err.Error(), "FOREIGN KEY") {
+		return errors.New(msg)
+	}
+	return err
+}
+
 // ParseAmount converts a decimal string into minor units for c. It works on the
 // digits as text — no float ever touches an amount — so BTC keeps all eight
 // places and fiat cents stay exact. A comma is accepted as the decimal

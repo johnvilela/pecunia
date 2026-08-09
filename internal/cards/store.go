@@ -115,7 +115,9 @@ func (s *Store) Update(c Card) error {
 func (s *Store) Delete(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM credit_cards WHERE id = ?`, id)
 	if err != nil {
-		return err
+		// A transaction always names exactly one account or card, so the row
+		// cannot be pulled out from under one.
+		return core.FKErr(err, "this card still has transactions — delete or move them first")
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound

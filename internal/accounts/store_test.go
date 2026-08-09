@@ -454,3 +454,26 @@ func TestNameIsRequired(t *testing.T) {
 		})
 	}
 }
+
+// A transaction must always name exactly one account or card, so the row cannot
+// be pulled out from under it. The raw INSERT is deliberate: importing
+// kakei/internal/transactions here would be an import cycle.
+func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
+	t.Run("says what is blocking it", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		if _, err := s.db.Exec(
+			`INSERT INTO transactions (title, account_id, value, kind, date)
+			 VALUES ('Groceries', ?, 12000, 'outcome', '2026-08-08')`, a.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		err := s.Delete(a.ID)
+		if err == nil {
+			t.Fatal("delete = nil; want the foreign key to refuse it")
+		}
+		if !strings.Contains(err.Error(), "transaction") {
+			t.Fatalf("delete = %q; want it to name transactions", err)
+		}
+	})
+}

@@ -104,7 +104,9 @@ func (s *Store) Update(a Account) error {
 func (s *Store) Delete(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM accounts WHERE id = ?`, id)
 	if err != nil {
-		return err
+		// A transaction always names exactly one account or card, so the row
+		// cannot be pulled out from under one.
+		return core.FKErr(err, "this account still has transactions — delete or move them first")
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
