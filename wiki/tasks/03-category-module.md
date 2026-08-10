@@ -58,7 +58,8 @@ Some rules will be add later when transactions module is created.
 
 ## Status: Implemented
 
-Built and verified in the `category-module` session. Key implementation decisions beyond the
+Built and verified in the `category-module` session
+([[sessions/2a7339bb-af86-47f1-a0fb-8fbc097dd9ea]]). Key implementation decisions beyond the
 original spec:
 
 - **The starter set is Go data seeded by `kakei setup`**, and `runSetup` no longer returns early
@@ -89,5 +90,4 @@ Files: `internal/db/migrations/004_categories.sql`, `internal/categories/{catego
 Commits: `refactor(core): move the free-code search into core` → `feat: add category cli with
 sqlite storage and tui` → `feat(setup): seed starter categories into a new database`.
 
-Links: [[decisions/0007-category-starter-set-seeded-from-go]] · [[decisions/0005-internal-core-shared-kernel]] · [[gotchas/huh-form-skips-validators-on-eof]] · [[rules/tdd]]
-
+Links: [[decisions/0007-category-starter-set-seeded-from-go]] · [[decisions/0005-internal-core-shared-kernel]] · [[gotchas/huh-form-skips-validators-on-eof]] · [[rules/tdd]] · [[sessions/2a7339bb-af86-47f1-a0fb-8fbc097dd9ea]]

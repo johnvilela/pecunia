@@ -40,7 +40,7 @@ updatedAt, createdAt
 
 ## Status: Implemented
 
-Built and verified in the `transactions-module` session. Key implementation decisions beyond the
+Built and verified in the `transactions-module` session ([[sessions/2a7339bb-af86-47f1-a0fb-8fbc097dd9ea]]). Key implementation decisions beyond the
 original spec, all written up in [[decisions/0008-transaction-double-entry-tags-and-filters]]:
 
 - **A credit card's balance moves the other way from an account's.** The spec says an outcome
@@ -61,10 +61,19 @@ original spec, all written up in [[decisions/0008-transaction-double-entry-tags-
 - **`transaction_tags` is a join table**; a transaction has no code and no currency of its own,
   and `kind` is the spec's `type` renamed to read as Go.
 - **Deleting an account or card that has transactions is refused** with a readable sentence via
-  the new `core.FKErr`; deleting a category just unlabels them.
+  the new `core.FKErr`; deleting a category just unlabels them. Pinned by
+  `TestDeleteWhileTransactionsPointAtIt` in both stores' test files, inserting a raw transaction
+  row to avoid an import cycle back into `internal/transactions`.
+- **`cmd/main.go` gained a shared `withConn` helper**, replacing the three near-identical
+  per-module open/defer/close copies that had accumulated in `accounts.go`, `cards.go` and
+  `categories.go`.
+- **Dev seed fixtures use days-ago offsets instead of fixed month/day literals** — simpler, and
+  it keeps the fixtures from bunching on whatever day the dev DB happens to be reseeded.
 - Test suite built per [[rules/tdd]]: schema, model, store, UI and command layers each
   red-then-green, own SQLite file per subtest, substring assertions for anything lipgloss
-  renders. The balance arithmetic is pinned across create, every shape of edit, and delete.
+  renders. The balance arithmetic is pinned across create, every shape of edit, and delete —
+  and verified live against the reseeded dev DB: `NUCRD` (R$1238.50, three purchases, one
+  payment) landed at R$502.40; `INTER` moved from R$4823.50 to R$10851.10.
 
 Files: `internal/db/migrations/005_transactions.sql`,
 `internal/transactions/{transaction,store,ui}.go`, `cmd/transactions.go`, `cmd/main.go`,
@@ -75,4 +84,4 @@ Commits: `feat: add transactions cli with sqlite storage and tui` → `feat(acco
 what is blocking a delete` → `feat(seed): add transaction fixtures to the dev database` →
 `fix(transactions): tidy the list output and spread the seeded dates`.
 
-Links: [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[decisions/0006-credit-card-money-schedule-and-over-limit-model]] · [[decisions/0007-category-starter-set-seeded-from-go]] · [[rules/tdd]]
+Links: [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[decisions/0006-credit-card-money-schedule-and-over-limit-model]] · [[decisions/0007-category-starter-set-seeded-from-go]] · [[rules/tdd]] · [[sessions/2a7339bb-af86-47f1-a0fb-8fbc097dd9ea]]
