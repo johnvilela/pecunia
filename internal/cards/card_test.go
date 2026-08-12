@@ -180,3 +180,42 @@ func TestValidateBalance(t *testing.T) {
 		}
 	})
 }
+
+func TestAddMonths(t *testing.T) {
+	date := func(s string) time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+
+	cases := []struct {
+		name string
+		from string
+		n    int
+		want string
+	}{
+		{"the same day next month", "2026-08-14", 1, "2026-09-14"},
+		{"nowhere at all", "2026-08-14", 0, "2026-08-14"},
+		{"across the year", "2026-11-14", 3, "2027-02-14"},
+		// AddDate alone turns 31 January into 3 March.
+		{"the 31st into february", "2026-01-31", 1, "2026-02-28"},
+		{"the 31st into a leap february", "2028-01-31", 1, "2028-02-29"},
+		{"the 31st into a 30-day month", "2026-08-31", 1, "2026-09-30"},
+		// The clamp is per step from the original day, not cumulative: five
+		// months on from the 31st is the 31st again, not the 28th.
+		{"the 31st five months on", "2026-01-31", 5, "2026-06-30"},
+		{"the 31st twelve months on", "2026-01-31", 12, "2027-01-31"},
+		{"backwards", "2026-08-14", -2, "2026-06-14"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AddMonths(date(tc.from), tc.n)
+			if got.Format("2006-01-02") != tc.want {
+				t.Fatalf("AddMonths(%s, %d) = %s; want %s",
+					tc.from, tc.n, got.Format("2006-01-02"), tc.want)
+			}
+		})
+	}
+}

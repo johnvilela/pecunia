@@ -55,13 +55,19 @@ Usage:
   kakei t n
 
 Opens a form: title, description (optional), date, kind, account or credit
-card, amount, category (optional) and tags. The amount is typed without a
-sign — income and outcome is what the kind says — and is read at the currency
-of whatever it is filed against.
+card, amount, category (optional), installments and tags. The amount is typed
+without a sign — income and outcome is what the kind says — and is read at the
+currency of whatever it is filed against.
 
 Spending from an account lowers its balance; spending on a credit card raises
 what the card owes. A card that declines at its limit refuses a transaction
 that would push it past.
+
+Installments split a credit card purchase over that many bills: one row per
+bill, dated a month apart from the date given, with the amount divided between
+them and any odd cents on the first. The whole purchase hits the card's limit
+at once, the way a real issuer takes it. 1 is an ordinary charge, and an
+account purchase cannot be split — it has no bills to spread over.
 `,
 	"edit": `Edit a transaction.
 
@@ -73,6 +79,12 @@ Opens the create form pre-filled. Without ID, pick from a list first. The
 balance the old transaction moved is put back before the new one is applied,
 so changing the amount, flipping the kind or moving it to another account
 leaves every balance right.
+
+One installment of a series asks first whether the edit is for that one, for
+it and the ones after it, or for the whole series. A wider scope carries the
+title, description, category, tags and kind across; each installment keeps its
+own date and amount, since each falls on its own bill. To change what a series
+is worth, delete it and record it again.
 `,
 	"delete": `Delete a transaction for good.
 
@@ -82,6 +94,10 @@ Usage:
 
 Asks for confirmation, then gives the account or credit card back what the
 transaction took. Without ID, pick from a list first.
+
+One installment of a series asks first whether to remove that one, it and the
+ones after it, or the whole series. Deleting a bill payment gives the account
+its money back and the card its debt.
 `,
 }
 
@@ -372,6 +388,10 @@ func editTransaction(args []string) error {
 		if err != nil {
 			return err
 		}
+		scope, err := transactions.AskScope(t, "Edit")
+		if err != nil {
+			return err
+		}
 		d, err := formData(conn)
 		if err != nil {
 			return err
@@ -379,7 +399,7 @@ func editTransaction(args []string) error {
 		if err := transactions.Form(d, &t, "Edit transaction"); err != nil {
 			return err
 		}
-		if err := s.Update(t); err != nil {
+		if err := s.Update(t, scope); err != nil {
 			return err
 		}
 		saved, err := s.Get(t.ID)
@@ -397,6 +417,10 @@ func deleteTransaction(args []string) error {
 		if err != nil {
 			return err
 		}
+		scope, err := transactions.AskScope(t, "Delete")
+		if err != nil {
+			return err
+		}
 		ok, err := core.Confirm(
 			fmt.Sprintf("Delete #%d %s (%s)?", t.ID, t.Title, transactions.Amount(t)),
 			"This cannot be undone. "+t.Target().Code+" gets the money back.")
@@ -407,7 +431,7 @@ func deleteTransaction(args []string) error {
 			fmt.Fprintln(out, "cancelled")
 			return nil
 		}
-		if err := s.Delete(t.ID); err != nil {
+		if err := s.Delete(t.ID, scope); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "deleted #%d %s\n", t.ID, t.Title)

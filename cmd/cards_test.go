@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"kakei/internal/cards"
 	"kakei/internal/db"
@@ -43,6 +44,24 @@ func seedCard(t *testing.T, path string, c cards.Card) cards.Card {
 		t.Fatal(err)
 	}
 	return c
+}
+
+// seedCharge puts one outcome on the card, dated today, straight through the
+// schema — importing kakei/internal/transactions here is not needed for a row
+// this simple.
+func seedCharge(t *testing.T, path string, c cards.Card, title string, value int64) {
+	t.Helper()
+	t.Setenv("KAKEI_DB", path)
+	conn, err := db.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Exec(
+		`INSERT INTO transactions (title, card_id, value, kind, date) VALUES (?, ?, ?, 'outcome', ?)`,
+		title, c.ID, value, time.Now().Format("2006-01-02")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func nubank() cards.Card {
@@ -191,5 +210,117 @@ func TestCardsWithoutADatabase(t *testing.T) {
 	}
 	if _, err := runCardsIn(t, path); err == nil {
 		t.Fatal("listing with an unopenable database was not an error")
+	}
+}
+
+func TestBillCommand(t *testing.T) {
+	// `bill` is four characters and `pay` is three, so neither can ever collide
+	// with a five-character card code the way `bills` would.
+	t.Run("neither verb can be a card code", func(t *testing.T) {
+		for _, verb := range []string{"bill", "pay"} {
+			if len(verb) == 5 {
+				t.Errorf("%q is code-length and would shadow a card", verb)
+			}
+		}
+	})
+
+	t.Run("a card with nothing on it still has an open bill", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedCard(t, path, nubank())
+
+		got, err := runCardsIn(t, path, "bill", "NUCRD")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"NUCRD", "CLOSES", "DUE", "open"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("output is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("with no card it lists every card's bills", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedCard(t, path, nubank())
+		itau := nubank()
+		itau.Code, itau.Name, itau.Balance = "ITAU1", "Itau", 0
+		seedCard(t, path, itau)
+
+		got, err := runCardsIn(t, path, "bill")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "NUCRD") || !strings.Contains(got, "ITAU1") {
+			t.Errorf("output does not cover both cards:\n%s", got)
+		}
+	})
+
+	t.Run("with no cards at all it says how to start", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		got, err := runCardsIn(t, path, "bill")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "kakei cc n") {
+			t.Errorf("output does not say how to make a card:\n%s", got)
+		}
+	})
+
+	t.Run("one cycle in detail", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		c := seedCard(t, path, nubank())
+		seedCharge(t, path, c, "Groceries", 12000)
+
+		// The month of the charge, which is the cycle it falls in.
+		month := time.Now().Format("2006-01")
+		got, err := runCardsIn(t, path, "bill", "NUCRD", month)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Groceries") || !strings.Contains(got, "R$120.00") {
+			t.Errorf("the detail view is missing the charge:\n%s", got)
+		}
+	})
+
+	t.Run("a month with no cycle says so", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedCard(t, path, nubank())
+		_, err := runCardsIn(t, path, "bill", "NUCRD", "1999-01")
+		if err == nil {
+			t.Fatal("a month the card has no bill for was accepted")
+		}
+	})
+
+	t.Run("an unreadable month is refused", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedCard(t, path, nubank())
+		_, err := runCardsIn(t, path, "bill", "NUCRD", "august")
+		if err == nil {
+			t.Fatal("a month that is not YYYY-MM was accepted")
+		}
+	})
+
+	t.Run("an unknown card is refused", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedCard(t, path, nubank())
+		if _, err := runCardsIn(t, path, "bill", "NOPE1"); err == nil {
+			t.Fatal("bill on a card that does not exist = nil")
+		}
+	})
+}
+
+func TestPayWithNothingOwing(t *testing.T) {
+	// Nothing to pay must not open a form with no options in it.
+	path := filepath.Join(t.TempDir(), "kakei.db")
+	c := nubank()
+	c.Balance = 0
+	seedCard(t, path, c)
+
+	got, err := runCardsIn(t, path, "pay", "NUCRD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "nothing") {
+		t.Errorf("output does not say there is nothing to pay:\n%s", got)
 	}
 }

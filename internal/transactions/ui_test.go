@@ -157,3 +157,44 @@ func TestSourceOptions(t *testing.T) {
 		}
 	})
 }
+
+func TestInstallmentRender(t *testing.T) {
+	one := func() Transaction {
+		tr := shown()
+		tr.Title = "Phone"
+		tr.Card = Ref{ID: 2, Code: "NUCRD", Name: "Nubank", Color: "violet"}
+		tr.Account = Ref{}
+		tr.Installment = Installment{Group: 101, Seq: 3, Count: 5}
+		return tr
+	}
+
+	t.Run("a series row says where it sits", func(t *testing.T) {
+		contains(t, "Label", Label(one()), "Phone", "(3/5)")
+		contains(t, "Table", Table([]Transaction{one()}), "Phone", "(3/5)")
+		contains(t, "Details", Details(one()), "Phone", "(3/5)")
+	})
+
+	t.Run("an ordinary transaction says nothing", func(t *testing.T) {
+		got := Label(shown())
+		if strings.Contains(got, "/") && strings.Contains(got, "(") {
+			t.Errorf("a plain transaction was rendered as a series: %q", got)
+		}
+	})
+
+	t.Run("the title itself is left alone", func(t *testing.T) {
+		// The position lives in its own column, so an edit never has to strip
+		// "(3/5)" back out of what the user typed.
+		if one().Title != "Phone" {
+			t.Errorf("the title carries the position: %q", one().Title)
+		}
+	})
+}
+
+func TestDetailsNamesTheBillItPays(t *testing.T) {
+	tr := shown()
+	tr.Title = "Bill payment"
+	tr.PaysBillID = 7
+
+	got := Details(tr)
+	contains(t, "Details", got, "bill")
+}

@@ -5,11 +5,13 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"kakei/internal/accounts"
+	"kakei/internal/bills"
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/db"
@@ -118,6 +120,9 @@ type txFixture struct {
 	Account     string // exactly one of these two
 	Card        string
 	Tags        []string
+	// Installments spreads a card purchase over that many bills. 0 and 1 both
+	// mean one ordinary charge.
+	Installments int
 }
 
 func (f txFixture) date(now time.Time) string {
@@ -146,9 +151,11 @@ var txFixtures = []txFixture{
 		Value: 15900, Days: 5, Category: "PETS1", Account: "NUBON", Tags: []string{"casa"}},
 	{Title: "Assinatura de streaming", Kind: transactions.KindOutcome,
 		Value: 5590, Days: 8, Category: "ENTER", Card: "NUCRD", Tags: []string{"fixo"}},
-	// An income on a card is a payment against the invoice, which lowers it.
-	{Title: "Pagamento da fatura", Kind: transactions.KindIncome,
-		Value: 100000, Days: 11, Category: "DEBT1", Card: "NUCRD", Tags: []string{"fixo"}},
+	// An income on a card is a credit against the bill it falls in — a refund,
+	// not a payment. Paying a bill is `kakei cc pay`, which files the money as an
+	// outcome on the account it came from.
+	{Title: "Estorno de compra", Kind: transactions.KindIncome,
+		Value: 100000, Days: 11, Category: "HOBBY", Card: "NUCRD", Tags: []string{"extra"}},
 	{Title: "Supermercado", Description: "compra da semana", Kind: transactions.KindOutcome,
 		Value: 63200, Days: 14, Category: "FOOD1", Account: "NUBON", Tags: []string{"mercado"}},
 	{Title: "Uber para o aeroporto", Kind: transactions.KindOutcome,
@@ -168,6 +175,23 @@ var txFixtures = []txFixture{
 		Value: 24000, Days: 44, Category: "GIFTS", Account: "NUBON"},
 	{Title: "Farmácia", Kind: transactions.KindOutcome,
 		Value: 8790, Days: 47, Category: "HLTH1", Account: "INTER", Tags: []string{"casa"}},
+
+	// A split purchase, so the dev database has a series to look at: five rows a
+	// month apart, the first two already behind and the rest still to come. The
+	// value is well inside NUCRD's limit, which the whole purchase takes at once.
+	{Title: "Celular novo", Description: "5x sem juros", Kind: transactions.KindOutcome,
+		Value: 100000, Days: 40, Category: "HOBBY", Card: "NUCRD", Tags: []string{"extra"},
+		Installments: 5},
+}
+
+// txRows is how many transaction rows the fixtures come to, which is more than
+// there are fixtures once one of them is a series.
+func txRows() int {
+	n := 0
+	for _, f := range txFixtures {
+		n += max(1, f.Installments)
+	}
+	return n
 }
 
 // seedTransactions files every fixture. Its idempotency is the whole table
@@ -189,6 +213,7 @@ func seedTransactions(conn *sql.DB) (int, error) {
 		t := transactions.Transaction{
 			Title: f.Title, Description: f.Description, Kind: f.Kind,
 			Value: f.Value, Date: f.date(now), Tags: f.Tags,
+			Installment: transactions.Installment{Count: int64(f.Installments)},
 		}
 		if f.Category != "" {
 			c, err := categoryStore.ByCode(f.Category)
@@ -213,9 +238,39 @@ func seedTransactions(conn *sql.DB) (int, error) {
 		if err := s.Create(&t); err != nil {
 			return n, fmt.Errorf("%s: %w", f.Title, err)
 		}
-		n++
+		n += max(1, f.Installments)
 	}
 	return n, nil
+}
+
+// seedBillPayment leaves NUCRD's oldest unpaid bill partly settled, so the dev
+// database has a bill in every state to look at: open, closed, partial and paid.
+// Bills themselves need no fixture — asking for them is what creates them.
+func seedBillPayment(conn *sql.DB) (int, error) {
+	card, err := cards.NewStore(conn).ByCode("NUCRD")
+	if err != nil {
+		return 0, err
+	}
+	bill, err := bills.NewStore(conn).OldestUnpaid(card)
+	if errors.Is(err, bills.ErrNotFound) {
+		// Nothing owed, which is a fine state for the seeder to leave alone.
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	// Already settled by hand, or by a second run of the seeder.
+	if bill.Paid > 0 {
+		return 0, nil
+	}
+
+	inter, err := accounts.NewStore(conn).ByCode("INTER")
+	if err != nil {
+		return 0, err
+	}
+	// Two fifths of it, so the bill lands on "partial" rather than "paid".
+	return 1, transactions.NewStore(conn).PayBill(
+		bill.ID, inter.ID, bill.Remaining()*2/5, bill.DueOn)
 }
 
 func main() {
@@ -250,7 +305,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// Last of all: a bill only exists once something asks for it, and only a
+	// transaction can pay one.
+	paid, err := seedBillPayment(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories and %d of %d transactions into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), tx, len(txFixtures), path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d transactions and %d bill payment(s) into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), tx, txRows(), paid, path)
 }

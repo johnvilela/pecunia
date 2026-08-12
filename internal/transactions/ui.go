@@ -38,10 +38,29 @@ func tag(r Ref) string {
 	return "[" + code + "]"
 }
 
+// Position is where an installment sits in its series, or nothing at all on an
+// ordinary transaction. It is rendered rather than stored in the title, so an
+// edit never has to strip it back out of what the user typed.
+func Position(t Transaction) string {
+	if !t.IsInstallment() {
+		return ""
+	}
+	return "(" + strconv.FormatInt(t.Installment.Seq, 10) + "/" +
+		strconv.FormatInt(t.Installment.Count, 10) + ")"
+}
+
+// title is what a transaction is called wherever there is one column for it.
+func title(t Transaction) string {
+	if p := Position(t); p != "" {
+		return t.Title + " " + core.DimStyle.Render(p)
+	}
+	return t.Title
+}
+
 // Label is how a transaction is named in a list: when it happened, then what it
 // was. A transaction has no code of its own to lead with.
 func Label(t Transaction) string {
-	return core.DimStyle.Render(t.Date) + "  " + t.Title
+	return core.DimStyle.Render(t.Date) + "  " + title(t)
 }
 
 // sourceKind names what the money moved through, for the places with room to say
@@ -71,7 +90,7 @@ func Table(ts []Transaction) string {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 	for _, t := range ts {
-		tbl.Row(core.DimStyle.Render(t.Date), t.Title, tag(t.Category), tag(t.Target()), Amount(t))
+		tbl.Row(core.DimStyle.Render(t.Date), title(t), tag(t.Category), tag(t.Target()), Amount(t))
 	}
 	return tbl.Render()
 }
@@ -111,7 +130,7 @@ func Details(t Transaction) string {
 		accent = lipgloss.Color(t.Target().Col().Hex)
 	}
 
-	lines := []string{lipgloss.NewStyle().Bold(true).Render(t.Title)}
+	lines := []string{lipgloss.NewStyle().Bold(true).Render(title(t))}
 	if t.Description != "" {
 		lines = append(lines, core.DimStyle.Render(t.Description))
 	}
@@ -123,6 +142,13 @@ func Details(t Transaction) string {
 	lines = append(lines,
 		tag(t.Target())+" "+core.DimStyle.Render(t.Target().Name+" ("+sourceKind(t)+")"),
 		core.DimStyle.Render(t.Date))
+
+	// A payment moves two balances — the account it left and the card whose bill
+	// it settles — so the card says so rather than leaving the second a surprise.
+	if t.PaysBillID != 0 {
+		lines = append(lines, core.DimStyle.Render(
+			"pays bill #"+strconv.FormatInt(t.PaysBillID, 10)))
+	}
 
 	if len(t.Tags) > 0 {
 		lines = append(lines, "", core.DimStyle.Render("#"+strings.Join(t.Tags, "  #")))
@@ -279,6 +305,26 @@ func Form(d FormData, t *Transaction, title string) error {
 		huh.NewSelect[int64]().Title("Category").Options(d.categoryOptions()...).Value(&category),
 	}
 
+	// Only offered on a new transaction: an edit that re-split a live series
+	// would have to re-date and re-price rows that are already on closed bills.
+	// And only when there is a card to split against at all.
+	installments := "1"
+	if t.ID == 0 && len(d.Cards) > 0 {
+		fields = append(fields, huh.NewInput().Title("Installments").
+			Description("how many bills to spread it over — 1 is a normal charge").
+			Value(&installments).Validate(func(v string) error {
+			n, err := ParseInstallments(v)
+			if err != nil {
+				return err
+			}
+			// The source comes first in the form, so this can tell which it was.
+			if s, err := parseSource(source); err == nil && n > 1 && !s.IsCard {
+				return errors.New("only a credit card purchase can be split into installments")
+			}
+			return nil
+		}))
+	}
+
 	// Nothing to reuse on a database whose first transaction this is, and an
 	// empty select is worse than no select.
 	if len(d.Tags) > 0 {
@@ -326,7 +372,43 @@ func Form(d FormData, t *Transaction, title string) error {
 	t.Currency = d.currency(s)
 	t.Category = Ref{ID: category}
 	t.Tags = NormalizeTags(append(reused, ParseTags(fresh)...))
+	// Same as the date: huh skips its validators when stdin ends mid-form, so an
+	// unreadable count falls back to one charge rather than being written through.
+	if n, err := ParseInstallments(installments); err == nil && s.IsCard {
+		t.Installment.Count = int64(n)
+	}
 	return nil
+}
+
+// AskScope asks what an edit or a delete applies to. A transaction that is not
+// part of a series has only one answer, so it is not asked.
+func AskScope(t Transaction, verb string) (Scope, error) {
+	if !t.IsInstallment() {
+		return ScopeOne, nil
+	}
+	after := t.Installment.Count - t.Installment.Seq
+
+	opts := []huh.Option[Scope]{
+		huh.NewOption("Just this installment "+Position(t), ScopeOne),
+	}
+	if after > 0 {
+		opts = append(opts, huh.NewOption(
+			fmt.Sprintf("This one and the %d after it", after), ScopeForward))
+	}
+	opts = append(opts, huh.NewOption(
+		fmt.Sprintf("The whole series (all %d)", t.Installment.Count), ScopeAll))
+
+	scope := ScopeOne
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[Scope]().
+			Title(verb + " " + t.Title + " " + Position(t)).
+			Description("this is one of " + strconv.FormatInt(t.Installment.Count, 10) + " installments").
+			Options(opts...).Value(&scope),
+	)).WithTheme(huh.ThemeCharm()).Run()
+	if errors.Is(err, huh.ErrUserAborted) {
+		return ScopeOne, core.ErrCancelled
+	}
+	return scope, err
 }
 
 // pick keeps only the values that are still on offer, so an edit's pre-selected

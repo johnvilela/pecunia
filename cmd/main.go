@@ -29,7 +29,7 @@ const help = `Usage:
 Commands:
   setup             create the SQLite database (--force to back up and recreate)
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
-  credit-card | cc  manage credit cards (new, edit, delete, details)
+  credit-card | cc  manage credit cards (new, edit, delete, bill, pay)
   category | ct     manage categories (new, edit, delete, details)
   transactions | t  record and review transactions (new, edit, delete)
   help              show this message

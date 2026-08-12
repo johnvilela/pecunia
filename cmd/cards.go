@@ -4,9 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
+	"time"
 
+	"kakei/internal/accounts"
+	"kakei/internal/bills"
 	"kakei/internal/cards"
 	"kakei/internal/core"
+	"kakei/internal/transactions"
 )
 
 const cardsHelp = `Manage credit cards.
@@ -20,6 +26,8 @@ Commands:
   new     | n         create a credit card
   edit    | e  [ref]  edit a credit card
   delete  | d  [ref]  delete a credit card
+  bill    | b  [ref] [YYYY-MM]  bills, or one of them in detail
+  pay     | p  [ref]  pay a bill
   CODE|ID             show one credit card in detail
 
 Leaving [ref] out opens a picker. Add -h to any command for its own help.
@@ -59,6 +67,37 @@ Usage:
 
 Asks for confirmation. Without CODE|ID, pick from a list first.
 `,
+	"bill": `Show a credit card's bills.
+
+Usage:
+  kakei credit-card bill [CODE|ID] [YYYY-MM]
+  kakei cc b [CODE|ID] [YYYY-MM]
+
+A bill is one closing cycle: everything charged from the day after the last
+closing through the closing date itself. Without CODE|ID, every card's bills.
+With a YYYY-MM, that card's cycle closing in that month, in detail, with the
+charges that make it up.
+
+Bills are worked out from the card's closing day the first time anything asks
+for them, so there is no closing step to run. A bill's total is a snapshot
+taken when the cycle closes; if a transaction inside a closed one is edited
+afterwards the detail view says what the ledger sums to now.
+`,
+	"pay": `Pay a credit card bill.
+
+Usage:
+  kakei credit-card pay [CODE|ID]
+  kakei cc p [CODE|ID]
+
+Asks which account pays, how much, and when. The amount comes pre-filled with
+what is still owed — type over it to pay part of it, and the bill reads as
+partial until the payments cover the total.
+
+The payment is an ordinary outcome on the account that paid, which happens to
+name the bill. That account's balance drops and the card's debt drops with it,
+and because the payment is not a card transaction it never shows up as
+spending on the next bill.
+`,
 }
 
 var errNoCards = errors.New("no credit cards yet — create one with: kakei cc n")
@@ -73,10 +112,14 @@ func runCards(args []string) error {
 		return nil
 	}
 
+	// Every verb here is shorter or longer than a code, never five characters —
+	// "bills" would have made a card coded BILLS unreachable.
 	name := map[string]string{
 		"new": "new", "n": "new",
 		"edit": "edit", "e": "edit",
 		"delete": "delete", "d": "delete",
+		"bill": "bill", "b": "bill",
+		"pay": "pay", "p": "pay",
 	}[sub]
 
 	if name == "" {
@@ -95,6 +138,12 @@ func runCards(args []string) error {
 		return nil
 	}
 
+	switch name {
+	case "bill":
+		return showBills(rest)
+	case "pay":
+		return payBill(rest)
+	}
 	return withCards(func(s *cards.Store) error {
 		switch name {
 		case "new":
@@ -203,4 +252,128 @@ func deleteCard(s *cards.Store, args []string) error {
 	}
 	fmt.Fprintf(out, "deleted credit card %s (%s)\n", c.Code, c.Name)
 	return nil
+}
+
+// showBills drives `kakei cc bill`: every card's bills, one card's bills, or one
+// cycle in detail.
+func showBills(args []string) error {
+	return withConn(func(conn *sql.DB) error {
+		cs := cards.NewStore(conn)
+		bs := bills.NewStore(conn)
+
+		if len(args) == 0 || args[0] == "" {
+			all, err := cs.List()
+			if err != nil {
+				return err
+			}
+			if len(all) == 0 {
+				fmt.Fprintln(out, errNoCards)
+				return nil
+			}
+			var found []bills.Bill
+			for _, c := range all {
+				of, err := bs.List(c)
+				if err != nil {
+					return err
+				}
+				found = append(found, of...)
+			}
+			// Newest first across every card, the same order one card's list uses.
+			slices.SortFunc(found, func(a, b bills.Bill) int {
+				return strings.Compare(b.ClosesOn, a.ClosesOn)
+			})
+			fmt.Fprintln(out, bills.Table(found))
+			return nil
+		}
+
+		c, err := resolveOrPickCard(cs, args, "Whose bills?")
+		if err != nil {
+			return err
+		}
+		if len(args) < 2 {
+			found, err := bs.List(c)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(out, bills.Table(found))
+			return nil
+		}
+		return showBill(bs, c, args[1])
+	})
+}
+
+// showBill is one cycle in detail. The month names it, because the closing day
+// is the card's own business and nobody remembers whether it was the 10th.
+func showBill(bs *bills.Store, c cards.Card, month string) error {
+	if _, err := time.Parse("2006-01", strings.TrimSpace(month)); err != nil {
+		return fmt.Errorf("a month is YYYY-MM, like %s", time.Now().Format("2006-01"))
+	}
+	found, err := bs.List(c)
+	if err != nil {
+		return err
+	}
+	for _, b := range found {
+		if strings.HasPrefix(b.ClosesOn, strings.TrimSpace(month)) {
+			charges, err := bs.Charges(b)
+			if err != nil {
+				return err
+			}
+			live, err := bs.LiveTotal(b)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(out, bills.Details(b, charges, live))
+			return nil
+		}
+	}
+	return fmt.Errorf("%s has no bill closing in %s", c.Code, month)
+}
+
+// payBill drives `kakei cc pay`: pick the bill, then say which account settles it
+// and by how much.
+func payBill(args []string) error {
+	return withConn(func(conn *sql.DB) error {
+		cs := cards.NewStore(conn)
+		c, err := resolveOrPickCard(cs, args, "Pay which card's bill?")
+		if err != nil {
+			return err
+		}
+
+		bs := bills.NewStore(conn)
+		owing, err := bs.Unpaid(c)
+		if err != nil {
+			return err
+		}
+		if len(owing) == 0 {
+			fmt.Fprintf(out, "%s has nothing to pay\n", c.Code)
+			return nil
+		}
+		// One bill is not a choice. Oldest first, so that is the one offered.
+		bill := owing[0]
+		if len(owing) > 1 {
+			if bill, err = bills.Pick(owing, "Pay which bill?"); err != nil {
+				return err
+			}
+		}
+
+		accs, err := accounts.NewStore(conn).List()
+		if err != nil {
+			return err
+		}
+		p, err := bills.PayForm(bill, accs)
+		if err != nil {
+			return err
+		}
+		if err := transactions.NewStore(conn).PayBill(bill.ID, p.AccountID, p.Value, p.Date); err != nil {
+			return err
+		}
+
+		after, err := bs.Get(c, bill.ClosesOn)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "paid %s off the %s bill closing %s — %s\n",
+			after.Fmt(p.Value), c.Code, after.ClosesOn, after.Status)
+		return nil
+	})
 }

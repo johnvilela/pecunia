@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"kakei/internal/accounts"
+	"kakei/internal/bills"
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/core"
@@ -266,16 +267,17 @@ func seedEverything(t *testing.T, conn *sql.DB) int {
 func TestSeedTransactions(t *testing.T) {
 	t.Run("inserts every fixture", func(t *testing.T) {
 		conn := newTestConn(t)
-		if n := seedEverything(t, conn); n != len(txFixtures) {
-			t.Fatalf("seeded %d transactions; want %d", n, len(txFixtures))
+		// More rows than fixtures: one of them is a five-way split.
+		if n := seedEverything(t, conn); n != txRows() {
+			t.Fatalf("seeded %d transactions; want %d", n, txRows())
 		}
 
 		all, err := transactions.NewStore(conn).List(transactions.Filter{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(all) != len(txFixtures) {
-			t.Fatalf("database holds %d transactions; want %d", len(all), len(txFixtures))
+		if len(all) != txRows() {
+			t.Fatalf("database holds %d transactions; want %d", len(all), txRows())
 		}
 	})
 
@@ -328,6 +330,88 @@ func TestSeedTransactions(t *testing.T) {
 		}
 		if before.Balance == after.Balance {
 			t.Fatal("INTER's balance did not move; want the transactions to have reached it")
+		}
+	})
+}
+
+func TestSeedInstallments(t *testing.T) {
+	conn := newTestConn(t)
+	seedEverything(t, conn)
+
+	all, err := transactions.NewStore(conn).List(transactions.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var series []transactions.Transaction
+	for _, tr := range all {
+		if tr.IsInstallment() {
+			series = append(series, tr)
+		}
+	}
+	if len(series) != 5 {
+		t.Fatalf("%d installment rows; want 5", len(series))
+	}
+	var sum int64
+	group := series[0].Installment.Group
+	for _, tr := range series {
+		if tr.Installment.Group != group {
+			t.Fatalf("the series is split across groups %d and %d", group, tr.Installment.Group)
+		}
+		if tr.Card.Code != "NUCRD" {
+			t.Fatalf("an installment landed on %q", tr.Target().Code)
+		}
+		sum += tr.Value
+	}
+	if sum != 100000 {
+		t.Fatalf("the installments sum to %d; want the whole 100000", sum)
+	}
+}
+
+func TestSeedBillPayment(t *testing.T) {
+	t.Run("leaves a bill partly paid", func(t *testing.T) {
+		conn := newTestConn(t)
+		seedEverything(t, conn)
+
+		n, err := seedBillPayment(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("seeded %d payments; want 1", n)
+		}
+
+		card, err := cards.NewStore(conn).ByCode("NUCRD")
+		if err != nil {
+			t.Fatal(err)
+		}
+		found, err := bills.NewStore(conn).List(card)
+		if err != nil {
+			t.Fatal(err)
+		}
+		partial := 0
+		for _, b := range found {
+			if b.Status == bills.StatusPartial {
+				partial++
+			}
+		}
+		if partial != 1 {
+			t.Fatalf("%d partial bill(s); want exactly 1", partial)
+		}
+	})
+
+	t.Run("running twice pays nothing more", func(t *testing.T) {
+		conn := newTestConn(t)
+		seedEverything(t, conn)
+		if _, err := seedBillPayment(conn); err != nil {
+			t.Fatal(err)
+		}
+
+		n, err := seedBillPayment(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("the second run paid %d more", n)
 		}
 	})
 }

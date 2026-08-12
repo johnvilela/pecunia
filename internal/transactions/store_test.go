@@ -300,7 +300,7 @@ func TestCardLimit(t *testing.T) {
 		made := w.create(t, tr)
 
 		made.Value = 600000
-		if err := w.store.Update(made); err == nil {
+		if err := w.store.Update(made, ScopeOne); err == nil {
 			t.Fatal("update past the limit = nil; want the card's refusal")
 		}
 		got, err := w.store.Get(made.ID)
@@ -321,7 +321,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
 		made.Value = 20000
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.accountBalance(t, w.inter.ID); got != 100000-20000 {
@@ -333,7 +333,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
 		made.Kind = KindIncome
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.accountBalance(t, w.inter.ID); got != 100000+12000 {
@@ -345,7 +345,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
 		made.Account = Ref{ID: w.cash.ID}
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.accountBalance(t, w.inter.ID); got != 100000 {
@@ -360,7 +360,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
 		made.Account, made.Card = Ref{}, Ref{ID: w.nucrd.ID}
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.accountBalance(t, w.inter.ID); got != 100000 {
@@ -379,7 +379,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		made := w.create(t, tr)
 
 		made.Tags = []string{"restaurant"}
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		got, err := w.store.Get(made.ID)
@@ -399,7 +399,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 		made.Title = "Groceries and fuel"
-		if err := w.store.Update(made); err != nil {
+		if err := w.store.Update(made, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		got, err := w.store.Get(made.ID)
@@ -415,7 +415,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		tr := w.tx()
 		tr.ID = 999
-		if err := w.store.Update(tr); !errors.Is(err, ErrNotFound) {
+		if err := w.store.Update(tr, ScopeOne); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("Update(999) = %v; want ErrNotFound", err)
 		}
 	})
@@ -424,7 +424,7 @@ func TestBalanceOnUpdate(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
 		made.Title = ""
-		if err := w.store.Update(made); err == nil {
+		if err := w.store.Update(made, ScopeOne); err == nil {
 			t.Fatal("Update with a blank title = nil; want the store to refuse it")
 		}
 		got, err := w.store.Get(made.ID)
@@ -444,7 +444,7 @@ func TestBalanceOnDelete(t *testing.T) {
 	t.Run("deleting gives the account its money back", func(t *testing.T) {
 		w := newWorld(t)
 		made := w.create(t, w.tx())
-		if err := w.store.Delete(made.ID); err != nil {
+		if err := w.store.Delete(made.ID, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.accountBalance(t, w.inter.ID); got != 100000 {
@@ -460,7 +460,7 @@ func TestBalanceOnDelete(t *testing.T) {
 		tr := w.tx()
 		tr.Account, tr.Card = Ref{}, Ref{ID: w.nucrd.ID}
 		made := w.create(t, tr)
-		if err := w.store.Delete(made.ID); err != nil {
+		if err := w.store.Delete(made.ID, ScopeOne); err != nil {
 			t.Fatal(err)
 		}
 		if got := w.cardBalance(t, w.nucrd.ID); got != 0 {
@@ -470,7 +470,7 @@ func TestBalanceOnDelete(t *testing.T) {
 
 	t.Run("an unknown id is not found", func(t *testing.T) {
 		w := newWorld(t)
-		if err := w.store.Delete(999); !errors.Is(err, ErrNotFound) {
+		if err := w.store.Delete(999, ScopeOne); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("Delete(999) = %v; want ErrNotFound", err)
 		}
 	})
@@ -623,6 +623,411 @@ func TestAllTags(t *testing.T) {
 		}
 		if len(got) != 0 {
 			t.Fatalf("AllTags = %q; want nothing", got)
+		}
+	})
+}
+
+// bill writes a card_bills row directly. The bills store generates them from the
+// clock, and every case here is about a fixed date.
+func (w *world) bill(t *testing.T, card cards.Card, closesOn, dueOn string, total int64) int64 {
+	t.Helper()
+	res, err := w.conn.Exec(
+		`INSERT INTO card_bills (card_id, closes_on, due_on, total, status)
+		 VALUES (?, ?, ?, ?, 'closed')`, card.ID, closesOn, dueOn, total)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func (w *world) billStatus(t *testing.T, id int64) string {
+	t.Helper()
+	var status string
+	if err := w.conn.QueryRow(`SELECT status FROM card_bills WHERE id = ?`, id).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
+}
+
+// series is the rows of an installment purchase, in order.
+func (w *world) series(t *testing.T, groupID int64) []Transaction {
+	t.Helper()
+	got, err := w.store.Series(groupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// phone is the task's own example: a 1000.00 purchase on NUCRD split five ways.
+func (w *world) phone() Transaction {
+	return Transaction{
+		Title: "Phone", Value: 100000, Kind: KindOutcome, Date: "2026-08-14",
+		Card: Ref{ID: w.nucrd.ID}, Installment: Installment{Count: 5},
+	}
+}
+
+func TestCreateInstallments(t *testing.T) {
+	t.Run("writes one row per bill, dated a month apart", func(t *testing.T) {
+		w := newWorld(t)
+		made := w.create(t, w.phone())
+
+		rows := w.series(t, made.ID)
+		if len(rows) != 5 {
+			t.Fatalf("%d rows written; want 5", len(rows))
+		}
+		wantDates := []string{"2026-08-14", "2026-09-14", "2026-10-14", "2026-11-14", "2026-12-14"}
+		for i, r := range rows {
+			if r.Date != wantDates[i] {
+				t.Errorf("row %d dated %s; want %s", i+1, r.Date, wantDates[i])
+			}
+			if r.Value != 20000 {
+				t.Errorf("row %d is worth %d; want 20000", i+1, r.Value)
+			}
+			if r.Installment.Seq != int64(i+1) || r.Installment.Count != 5 {
+				t.Errorf("row %d is %d/%d; want %d/5", i+1, r.Installment.Seq, r.Installment.Count, i+1)
+			}
+			if r.Installment.Group != made.ID {
+				t.Errorf("row %d groups under %d; want %d", i+1, r.Installment.Group, made.ID)
+			}
+			if r.Title != "Phone" {
+				t.Errorf("row %d is titled %q; the position belongs in its own column", i+1, r.Title)
+			}
+		}
+	})
+
+	t.Run("the whole purchase hits the limit at once", func(t *testing.T) {
+		// What a real issuer does: the limit is committed at the till, not a
+		// fifth at a time.
+		w := newWorld(t)
+		w.create(t, w.phone())
+		if got := w.cardBalance(t, w.nucrd.ID); got != 100000 {
+			t.Fatalf("card owes %d after a 5x purchase of 100000; want the lot", got)
+		}
+	})
+
+	t.Run("the odd cents ride on the first", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.phone()
+		tr.Value, tr.Installment.Count = 100000, 3
+		made := w.create(t, tr)
+
+		rows := w.series(t, made.ID)
+		if rows[0].Value != 33334 || rows[1].Value != 33333 || rows[2].Value != 33333 {
+			t.Fatalf("split = %d/%d/%d; want 33334/33333/33333",
+				rows[0].Value, rows[1].Value, rows[2].Value)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 100000 {
+			t.Fatalf("card owes %d; the split lost or invented %d", got, got-100000)
+		}
+	})
+
+	t.Run("a series from the 31st clamps into the short months", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.phone()
+		tr.Date, tr.Installment.Count = "2026-01-31", 3
+		made := w.create(t, tr)
+
+		rows := w.series(t, made.ID)
+		want := []string{"2026-01-31", "2026-02-28", "2026-03-31"}
+		for i, r := range rows {
+			if r.Date != want[i] {
+				t.Fatalf("dates = %s/%s/%s; want %v", rows[0].Date, rows[1].Date, rows[2].Date, want)
+			}
+		}
+	})
+
+	t.Run("a limit that refuses the series leaves nothing behind", func(t *testing.T) {
+		// The rollback is what makes the refusal clean: no rows, no moved balance,
+		// not even the installments that would have fitted on their own.
+		w := newWorld(t)
+		tr := w.phone()
+		tr.Value = 600000 // NUCRD's limit is 500000 and it declines at it
+		if err := w.store.Create(&tr); err == nil {
+			t.Fatal("a series over the card's limit was accepted")
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d row(s) survived the refusal", n)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 0 {
+			t.Fatalf("card owes %d after a refused series", got)
+		}
+	})
+
+	t.Run("one installment is an ordinary transaction", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.phone()
+		tr.Installment.Count = 1
+		made := w.create(t, tr)
+
+		got, err := w.store.Get(made.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.IsInstallment() || got.Installment.Group != 0 || got.Installment.Count > 1 {
+			t.Fatalf("a single charge was recorded as a series: %+v", got.Installment)
+		}
+		if n := w.count(t); n != 1 {
+			t.Fatalf("%d rows written for one installment", n)
+		}
+	})
+}
+
+func TestDeleteScope(t *testing.T) {
+	// The middle of the series, so "this one" and "this and the rest" differ.
+	third := func(t *testing.T, w *world) (Transaction, Transaction) {
+		t.Helper()
+		made := w.create(t, w.phone())
+		return made, w.series(t, made.ID)[2]
+	}
+
+	t.Run("one installment leaves the rest alone", func(t *testing.T) {
+		w := newWorld(t)
+		made, row := third(t, w)
+
+		if err := w.store.Delete(row.ID, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(w.series(t, made.ID)); n != 4 {
+			t.Fatalf("%d rows left; want 4", n)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 80000 {
+			t.Fatalf("card owes %d; want 80000 back from 100000", got)
+		}
+	})
+
+	t.Run("this one and the ones after it", func(t *testing.T) {
+		w := newWorld(t)
+		made, row := third(t, w)
+
+		if err := w.store.Delete(row.ID, ScopeForward); err != nil {
+			t.Fatal(err)
+		}
+		rows := w.series(t, made.ID)
+		if len(rows) != 2 || rows[0].Installment.Seq != 1 || rows[1].Installment.Seq != 2 {
+			t.Fatalf("rows left = %+v; want installments 1 and 2", rows)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 40000 {
+			t.Fatalf("card owes %d; want 40000", got)
+		}
+	})
+
+	t.Run("the whole series", func(t *testing.T) {
+		w := newWorld(t)
+		_, row := third(t, w)
+
+		if err := w.store.Delete(row.ID, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d row(s) left after deleting the series", n)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 0 {
+			t.Fatalf("card owes %d after the series went away", got)
+		}
+	})
+
+	t.Run("a scope wider than one row is harmless on a plain transaction", func(t *testing.T) {
+		w := newWorld(t)
+		made := w.create(t, w.tx())
+		if err := w.store.Delete(made.ID, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d row(s) left", n)
+		}
+	})
+}
+
+func TestUpdateScope(t *testing.T) {
+	t.Run("the series takes the new title and category", func(t *testing.T) {
+		w := newWorld(t)
+		made := w.create(t, w.phone())
+		row := w.series(t, made.ID)[2]
+
+		row.Title = "Phone, refurbished"
+		row.Category = Ref{ID: w.work.ID}
+		row.Tags = []string{"gadget"}
+		if err := w.store.Update(row, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+
+		for i, r := range w.series(t, made.ID) {
+			if r.Title != "Phone, refurbished" {
+				t.Errorf("row %d is titled %q", i+1, r.Title)
+			}
+			if r.Category.Code != "WORK1" {
+				t.Errorf("row %d is filed under %q", i+1, r.Category.Code)
+			}
+			if len(r.Tags) != 1 || r.Tags[0] != "gadget" {
+				t.Errorf("row %d carries %v", i+1, r.Tags)
+			}
+		}
+	})
+
+	t.Run("each installment keeps its own date and amount", func(t *testing.T) {
+		// Re-splitting a live series is a different operation; an edit that
+		// stamped one date and one amount over five rows would be a data loss.
+		w := newWorld(t)
+		made := w.create(t, w.phone())
+		row := w.series(t, made.ID)[0]
+
+		row.Title = "Renamed"
+		row.Date = "2026-08-01"
+		row.Value = 50000
+		if err := w.store.Update(row, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+
+		rows := w.series(t, made.ID)
+		if rows[0].Date != "2026-08-01" || rows[0].Value != 50000 {
+			t.Fatalf("the edited row did not take its own change: %+v", rows[0])
+		}
+		if rows[1].Date != "2026-09-14" || rows[1].Value != 20000 {
+			t.Fatalf("a sibling took the edited row's date or amount: %+v", rows[1])
+		}
+		// 100000 - 20000 + 50000
+		if got := w.cardBalance(t, w.nucrd.ID); got != 130000 {
+			t.Fatalf("card owes %d; want 130000", got)
+		}
+	})
+
+	t.Run("one row only", func(t *testing.T) {
+		w := newWorld(t)
+		made := w.create(t, w.phone())
+		row := w.series(t, made.ID)[2]
+
+		row.Title = "Only this one"
+		if err := w.store.Update(row, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		rows := w.series(t, made.ID)
+		if rows[2].Title != "Only this one" || rows[0].Title != "Phone" {
+			t.Fatalf("ScopeOne reached further than one row: %q / %q", rows[0].Title, rows[2].Title)
+		}
+	})
+}
+
+func TestPayBill(t *testing.T) {
+	setup := func(t *testing.T) (*world, int64) {
+		t.Helper()
+		w := newWorld(t)
+		// A cycle with 890.50 charged on it, already closed.
+		tr := w.tx()
+		tr.Account, tr.Card = Ref{}, Ref{ID: w.nucrd.ID}
+		tr.Value, tr.Date = 89050, "2026-07-05"
+		w.create(t, tr)
+		return w, w.bill(t, w.nucrd, "2026-07-15", "2026-07-22", 89050)
+	}
+
+	t.Run("moves the account and the card, and marks the bill", func(t *testing.T) {
+		w, billID := setup(t)
+		if err := w.store.PayBill(billID, w.inter.ID, 89050, "2026-07-20"); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := w.accountBalance(t, w.inter.ID); got != 100000-89050 {
+			t.Errorf("INTER = %d; want %d", got, 100000-89050)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 0 {
+			t.Errorf("NUCRD owes %d; want nothing", got)
+		}
+		if got := w.billStatus(t, billID); got != "paid" {
+			t.Errorf("bill is %q; want paid", got)
+		}
+	})
+
+	t.Run("part of it is partial", func(t *testing.T) {
+		w, billID := setup(t)
+		if err := w.store.PayBill(billID, w.inter.ID, 40000, "2026-07-20"); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 49050 {
+			t.Errorf("NUCRD owes %d; want 49050", got)
+		}
+		if got := w.billStatus(t, billID); got != "partial" {
+			t.Errorf("bill is %q; want partial", got)
+		}
+	})
+
+	t.Run("the payment is not a charge on the card", func(t *testing.T) {
+		w, billID := setup(t)
+		if err := w.store.PayBill(billID, w.inter.ID, 89050, "2026-07-20"); err != nil {
+			t.Fatal(err)
+		}
+		found, err := w.store.List(Filter{CardID: w.nucrd.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(found) != 1 || found[0].Title != "Groceries" {
+			t.Fatalf("the card lists %+v; the payment should be on the account", found)
+		}
+	})
+
+	t.Run("deleting it puts both balances and the status back", func(t *testing.T) {
+		w, billID := setup(t)
+		if err := w.store.PayBill(billID, w.inter.ID, 89050, "2026-07-20"); err != nil {
+			t.Fatal(err)
+		}
+		found, err := w.store.List(Filter{AccountID: w.inter.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(found) != 1 {
+			t.Fatalf("expected one payment on INTER, got %+v", found)
+		}
+		if found[0].PaysBillID != billID {
+			t.Fatalf("the payment names bill %d; want %d", found[0].PaysBillID, billID)
+		}
+
+		if err := w.store.Delete(found[0].ID, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != 100000 {
+			t.Errorf("INTER = %d; want its money back", got)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 89050 {
+			t.Errorf("NUCRD owes %d; want the debt back", got)
+		}
+		if got := w.billStatus(t, billID); got != "closed" {
+			t.Errorf("bill is %q; want closed again", got)
+		}
+	})
+
+	t.Run("editing the amount moves both sides", func(t *testing.T) {
+		w, billID := setup(t)
+		if err := w.store.PayBill(billID, w.inter.ID, 89050, "2026-07-20"); err != nil {
+			t.Fatal(err)
+		}
+		found, _ := w.store.List(Filter{AccountID: w.inter.ID})
+		tr := found[0]
+		tr.Value = 40000
+		if err := w.store.Update(tr, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := w.accountBalance(t, w.inter.ID); got != 100000-40000 {
+			t.Errorf("INTER = %d; want %d", got, 100000-40000)
+		}
+		if got := w.cardBalance(t, w.nucrd.ID); got != 49050 {
+			t.Errorf("NUCRD owes %d; want 49050", got)
+		}
+		if got := w.billStatus(t, billID); got != "partial" {
+			t.Errorf("bill is %q; want partial", got)
+		}
+	})
+
+	t.Run("a bill that does not exist is refused", func(t *testing.T) {
+		w, _ := setup(t)
+		if err := w.store.PayBill(404, w.inter.ID, 1000, "2026-07-20"); err == nil {
+			t.Fatal("a payment against a missing bill was accepted")
+		}
+		if n := w.count(t); n != 1 {
+			t.Fatalf("%d rows; the refused payment left one behind", n)
 		}
 	})
 }

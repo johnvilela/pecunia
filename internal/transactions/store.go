@@ -3,10 +3,24 @@ package transactions
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 
+	"kakei/internal/bills"
 	"kakei/internal/cards"
+)
+
+// Scope is how far an edit or a delete reaches through an installment series.
+// The zero value is one row, which is what every transaction that is not part of
+// a series gets.
+type Scope int
+
+const (
+	ScopeOne     Scope = iota // this row only
+	ScopeForward              // this row and the installments after it
+	ScopeAll                  // every installment in the series
 )
 
 type Store struct{ db *sql.DB }
@@ -37,7 +51,8 @@ const columns = `
 	COALESCE(c.id, 0), COALESCE(c.code, ''), COALESCE(c.name, ''), COALESCE(c.color, ''),
 	COALESCE(a.id, 0), COALESCE(a.code, ''), COALESCE(a.name, ''), COALESCE(a.color, ''), COALESCE(a.currency, ''),
 	COALESCE(k.id, 0), COALESCE(k.code, ''), COALESCE(k.name, ''), COALESCE(k.color, ''), COALESCE(k.currency, ''),
-	COALESCE((SELECT group_concat(tag) FROM transaction_tags WHERE transaction_id = t.id), '')`
+	COALESCE((SELECT group_concat(tag) FROM transaction_tags WHERE transaction_id = t.id), ''),
+	COALESCE(t.installment_group, 0), t.installment_seq, t.installment_count, COALESCE(t.pays_bill_id, 0)`
 
 const from = `
 	FROM transactions t
@@ -52,7 +67,8 @@ func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 		&t.Category.ID, &t.Category.Code, &t.Category.Name, &t.Category.Color,
 		&t.Account.ID, &t.Account.Code, &t.Account.Name, &t.Account.Color, &accountCur,
 		&t.Card.ID, &t.Card.Code, &t.Card.Name, &t.Card.Color, &cardCur,
-		&tags)
+		&tags,
+		&t.Installment.Group, &t.Installment.Seq, &t.Installment.Count, &t.PaysBillID)
 	if err != nil {
 		return t, err
 	}
@@ -159,89 +175,252 @@ func (s *Store) AllTags() ([]string, error) {
 // Create writes the transaction and moves its target's balance, both or
 // neither: a card that would be pushed past a limit it may not pass refuses the
 // whole thing.
+//
+// An installment purchase is Installment.Count rows rather than one, dated a
+// month apart and sharing a group, with Value split between them. They are
+// written inside the same transaction, so the limit refuses the series whole or
+// not at all — a purchase that only half fits is not a purchase.
 func (s *Store) Create(t *Transaction) error {
 	t.Tags = NormalizeTags(t.Tags)
 	if err := t.Validate(); err != nil {
 		return err
 	}
+	n := int(t.Installment.Count)
+	if n < 1 {
+		n = 1
+	}
+	first, err := time.Parse(DateLayout, t.Date)
+	if err != nil {
+		return err
+	}
+
 	return s.inTx(func(tx *sql.Tx) error {
-		res, err := tx.Exec(
-			`INSERT INTO transactions (title, description, category_id, account_id, card_id, value, kind, date)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
-			t.Value, t.Kind, t.Date)
-		if err != nil {
-			return err
+		var group int64
+		for i, value := range SplitInstallments(t.Value, n) {
+			row := *t
+			row.Value = value
+			row.Date = cards.AddMonths(first, i).Format(DateLayout)
+			row.Installment = Installment{Group: group, Seq: int64(i + 1), Count: int64(n)}
+			if n == 1 {
+				// A single charge is not a series, and saying so with a 1/1 would
+				// only put "(1/1)" on every ordinary row.
+				row.Installment = Installment{}
+			}
+
+			id, err := insertRow(tx, row)
+			if err != nil {
+				return err
+			}
+			if i == 0 {
+				t.ID = id
+				// The group is the first row's id, which does not exist until the
+				// row does.
+				if n > 1 {
+					group = id
+					if _, err := tx.Exec(
+						`UPDATE transactions SET installment_group = ? WHERE id = ?`, id, id); err != nil {
+						return err
+					}
+				}
+			}
+			if err := writeTags(tx, id, row.Tags); err != nil {
+				return err
+			}
+			if err := applyBalance(tx, row, 1); err != nil {
+				return err
+			}
 		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		if err := writeTags(tx, id, t.Tags); err != nil {
-			return err
-		}
-		if err := applyBalance(tx, *t, 1); err != nil {
-			return err
-		}
-		t.ID = id
-		return nil
+		return refreshBills(tx, t.PaysBillID)
 	})
+}
+
+// PayBill records a bill payment: an ordinary outcome on whichever account paid,
+// which happens to name the bill. There is no matching row on the card — the
+// card's balance moves because the payment names the bill, which is what keeps a
+// payment from ever showing up as spending on the next one.
+func (s *Store) PayBill(billID, accountID, value int64, date string) error {
+	t := Transaction{
+		Title:      "Bill payment",
+		Value:      value,
+		Kind:       KindOutcome,
+		Date:       date,
+		Account:    Ref{ID: accountID},
+		PaysBillID: billID,
+	}
+	return s.Create(&t)
 }
 
 // Update reverses what the stored row did to its target before applying what the
 // new one does, so an edit that changes the value, flips the kind or moves the
 // transaction to another account or card leaves every balance right.
-func (s *Store) Update(t Transaction) error {
+//
+// scope says how far it reaches through an installment series. The rows beside
+// the edited one take its title, description, category, tags and kind, and keep
+// their own date and amount: each installment falls on its own bill, and
+// re-splitting a live series is a different operation.
+func (s *Store) Update(t Transaction, scope Scope) error {
 	t.Tags = NormalizeTags(t.Tags)
 	if err := t.Validate(); err != nil {
 		return err
 	}
 	return s.inTx(func(tx *sql.Tx) error {
-		old, err := scan(tx.QueryRow(`SELECT `+columns+from+`
-			WHERE t.id = ?`, t.ID))
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
+		targets, err := scoped(tx, t.ID, scope)
 		if err != nil {
 			return err
 		}
-		if err := applyBalance(tx, old, -1); err != nil {
-			return err
+		var touched []int64
+		for _, old := range targets {
+			row := t
+			if old.ID != t.ID {
+				// A sibling keeps everything that is its own.
+				row.ID, row.Value, row.Date = old.ID, old.Value, old.Date
+				row.Installment, row.PaysBillID = old.Installment, old.PaysBillID
+			}
+			if err := applyBalance(tx, old, -1); err != nil {
+				return err
+			}
+			if err := updateRow(tx, row); err != nil {
+				return err
+			}
+			if err := applyBalance(tx, row, 1); err != nil {
+				return err
+			}
+			touched = append(touched, old.PaysBillID, row.PaysBillID)
 		}
-		if _, err := tx.Exec(
-			`UPDATE transactions SET title = ?, description = ?, category_id = ?, account_id = ?,
-			 card_id = ?, value = ?, kind = ?, date = ?, updated_at = datetime('now') WHERE id = ?`,
-			t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
-			t.Value, t.Kind, t.Date, t.ID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM transaction_tags WHERE transaction_id = ?`, t.ID); err != nil {
-			return err
-		}
-		if err := writeTags(tx, t.ID, t.Tags); err != nil {
-			return err
-		}
-		return applyBalance(tx, t, 1)
+		return refreshBills(tx, touched...)
 	})
 }
 
 // Delete takes the row away and gives its target the money back. The tags go
-// with it, by the cascade in the schema.
-func (s *Store) Delete(id int64) error {
+// with it, by the cascade in the schema. scope says how far it reaches through
+// an installment series.
+func (s *Store) Delete(id int64, scope Scope) error {
 	return s.inTx(func(tx *sql.Tx) error {
-		old, err := scan(tx.QueryRow(`SELECT `+columns+from+`
-			WHERE t.id = ?`, id))
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
+		targets, err := scoped(tx, id, scope)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`DELETE FROM transactions WHERE id = ?`, id); err != nil {
+		var touched []int64
+		for _, old := range targets {
+			if _, err := tx.Exec(`DELETE FROM transactions WHERE id = ?`, old.ID); err != nil {
+				return err
+			}
+			if err := applyBalance(tx, old, -1); err != nil {
+				return err
+			}
+			touched = append(touched, old.PaysBillID)
+		}
+		return refreshBills(tx, touched...)
+	})
+}
+
+// Series is the rows of one installment purchase, in the order they fall due.
+func (s *Store) Series(groupID int64) ([]Transaction, error) {
+	rows, err := s.db.Query(`SELECT `+columns+from+`
+		WHERE t.installment_group = ?
+		ORDER BY t.installment_seq`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Transaction
+	for rows.Next() {
+		t, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// scoped is the rows one write applies to. Anything that is not part of a
+// series is itself and nothing else, whatever scope was asked for — so a caller
+// that does not care about series never has to think about one.
+func scoped(tx *sql.Tx, id int64, scope Scope) ([]Transaction, error) {
+	one, err := scan(tx.QueryRow(`SELECT `+columns+from+`
+		WHERE t.id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if scope == ScopeOne || !one.IsInstallment() {
+		return []Transaction{one}, nil
+	}
+
+	where := `t.installment_group = ?`
+	args := []any{one.Installment.Group}
+	if scope == ScopeForward {
+		where += ` AND t.installment_seq >= ?`
+		args = append(args, one.Installment.Seq)
+	}
+	rows, err := tx.Query(`SELECT `+columns+from+`
+		WHERE `+where+`
+		ORDER BY t.installment_seq`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Transaction
+	for rows.Next() {
+		t, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func insertRow(tx *sql.Tx, t Transaction) (int64, error) {
+	res, err := tx.Exec(
+		`INSERT INTO transactions (title, description, category_id, account_id, card_id, value, kind, date,
+		   installment_group, installment_seq, installment_count, pays_bill_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
+		t.Value, t.Kind, t.Date,
+		nullID(t.Installment.Group), t.Installment.Seq, t.Installment.Count, nullID(t.PaysBillID))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func updateRow(tx *sql.Tx, t Transaction) error {
+	if _, err := tx.Exec(
+		`UPDATE transactions SET title = ?, description = ?, category_id = ?, account_id = ?,
+		 card_id = ?, value = ?, kind = ?, date = ?, pays_bill_id = ?, updated_at = datetime('now')
+		 WHERE id = ?`,
+		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
+		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), t.ID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM transaction_tags WHERE transaction_id = ?`, t.ID); err != nil {
+		return err
+	}
+	return writeTags(tx, t.ID, t.Tags)
+}
+
+// refreshBills rewrites the status of every bill the write touched. It runs last
+// because the status is read back out of the transactions table, so it has to
+// see the rows as they finally are — not halfway through an edit that has
+// reversed the old row but not yet written the new one.
+func refreshBills(tx *sql.Tx, ids ...int64) error {
+	seen := map[int64]bool{}
+	for _, id := range ids {
+		if id == 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if err := bills.Refresh(tx, id); err != nil {
 			return err
 		}
-		return applyBalance(tx, old, -1)
-	})
+	}
+	return nil
 }
 
 // inTx runs fn in one SQL transaction. Every write here touches two tables, so
@@ -282,18 +461,45 @@ func writeTags(tx *sql.Tx, id int64, tags []string) error {
 // transaction is being added and -1 when it is being taken back, which is what
 // lets Update reverse the old row before applying the new one.
 func applyBalance(tx *sql.Tx, t Transaction, sign int64) error {
-	if !t.IsCard() {
-		_, err := tx.Exec(
-			`UPDATE accounts SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?`,
-			sign*t.Signed(), t.Account.ID)
+	if t.IsCard() {
+		if _, err := tx.Exec(
+			`UPDATE credit_cards SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?`,
+			sign*t.CardDelta(), t.Card.ID); err != nil {
+			return err
+		}
+		return checkLimit(tx, t.Card.ID)
+	}
+	if _, err := tx.Exec(
+		`UPDATE accounts SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?`,
+		sign*t.Signed(), t.Account.ID); err != nil {
+		return err
+	}
+	if t.PaysBillID == 0 {
+		return nil
+	}
+	return applyPayment(tx, t, sign)
+}
+
+// applyPayment lowers what the paid bill's card owes. This is the one place a
+// transaction moves a balance it does not name: a payment lives on the account
+// it came out of, and the card it settles is reached through the bill.
+func applyPayment(tx *sql.Tx, t Transaction, sign int64) error {
+	var cardID int64
+	err := tx.QueryRow(`SELECT card_id FROM card_bills WHERE id = ?`, t.PaysBillID).Scan(&cardID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("no bill %d to pay", t.PaysBillID)
+	}
+	if err != nil {
 		return err
 	}
 	if _, err := tx.Exec(
-		`UPDATE credit_cards SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?`,
-		sign*t.CardDelta(), t.Card.ID); err != nil {
+		`UPDATE credit_cards SET balance = balance - ?, updated_at = datetime('now') WHERE id = ?`,
+		sign*t.Value, cardID); err != nil {
 		return err
 	}
-	return checkLimit(tx, t.Card.ID)
+	// Paying can only lower the debt, but taking a payment back raises it — and
+	// that can push a card past a limit it may not pass.
+	return checkLimit(tx, cardID)
 }
 
 // checkLimit reads the card back and asks the cards module whether it would

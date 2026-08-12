@@ -84,6 +84,18 @@ func NextDate(from time.Time, day int) time.Time {
 	return time.Date(y, m, clamp(y, m, day), 0, 0, 0, 0, from.Location())
 }
 
+// AddMonths is d moved n months, keeping its day of the month and clamping it
+// into a month too short for it: 31 January plus one month is 28 February.
+// time.AddDate alone normalizes instead of clamping, which turns that into
+// 3 March — and an installment series built on it drifts a day at a time.
+func AddMonths(d time.Time, n int) time.Time {
+	// Day 1 of the target month, so the shift itself can never overflow; the day
+	// is put back afterwards, clamped.
+	m := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location()).AddDate(0, n, 0)
+	return time.Date(m.Year(), m.Month(), clamp(m.Year(), m.Month(), d.Day()),
+		0, 0, 0, 0, d.Location())
+}
+
 // clamp caps day at the last day of that month. Day 0 of the next month is the
 // last day of this one, which is how the stdlib spells "how long is February".
 func clamp(y int, m time.Month, day int) int {

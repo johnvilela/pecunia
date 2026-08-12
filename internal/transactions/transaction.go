@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,10 @@ const (
 // MaxTags is how many tags one transaction may carry.
 const MaxTags = 5
 
+// MaxInstallments is as far as a purchase may be spread. Five years of bills is
+// past any real card, and the cap is what stops a typo writing a thousand rows.
+const MaxInstallments = 60
+
 // DateLayout is the one date format kakei reads or writes, everywhere.
 const DateLayout = "2006-01-02"
 
@@ -39,6 +44,16 @@ type Ref struct {
 
 func (r Ref) Col() core.Color { return core.ColorByName(r.Color) }
 
+// Installment is where one charge sits in a series. A purchase split over five
+// bills is five real transactions, one per bill, sharing a Group — the id of the
+// first of them. Count is stored rather than counted so a row can render "(3/5)"
+// on its own, and so the title stays what the user typed.
+type Installment struct {
+	Group int64
+	Seq   int64 // 1-based
+	Count int64 // 0 or 1 on an ordinary transaction
+}
+
 type Transaction struct {
 	ID          int64
 	Title       string
@@ -51,8 +66,13 @@ type Transaction struct {
 	Account     Ref // exactly one of Account.ID and Card.ID is set
 	Card        Ref
 	Currency    string // inherited from whichever target is set
-	CreatedAt   string
-	UpdatedAt   string
+	Installment Installment
+	// PaysBillID is the credit-card bill this transaction pays, 0 when it pays
+	// none. A payment is an ordinary outcome on whichever account paid, which is
+	// why it never shows up as spending on the card it settles.
+	PaysBillID int64
+	CreatedAt  string
+	UpdatedAt  string
 }
 
 var ErrNotFound = errors.New("transaction not found")
@@ -119,7 +139,46 @@ func (t Transaction) Validate() error {
 	if len(t.Tags) > MaxTags {
 		return fmt.Errorf("a transaction carries at most %d tags", MaxTags)
 	}
+	if n := t.Installment.Count; n < 0 || n > MaxInstallments {
+		return fmt.Errorf("installments must be between 1 and %d, not %d", MaxInstallments, n)
+	}
+	// Only a credit card has bills to spread a purchase over.
+	if t.IsInstallment() && !t.IsCard() {
+		return errors.New("only a credit card purchase can be split into installments")
+	}
+	if t.PaysBillID != 0 {
+		// The money has to come from somewhere, and a card settling its own bill
+		// is a loop.
+		if t.IsCard() {
+			return errors.New("a bill is paid from an account, not from a credit card")
+		}
+		if t.Kind != KindOutcome {
+			return errors.New("paying a bill is money going out")
+		}
+	}
 	return nil
+}
+
+// IsInstallment says whether this row is one of a split purchase. A count of 1
+// is a purchase that happens to have been left at the default, not a series.
+func (t Transaction) IsInstallment() bool { return t.Installment.Count > 1 }
+
+// SplitInstallments divides total into n parts that add back up to it exactly.
+// The remainder rides on the first: it is the one already agreed at the till,
+// and the ones after it are the round number the card statement will show.
+//
+// Integer arithmetic throughout — no float ever touches an amount.
+func SplitInstallments(total int64, n int) []int64 {
+	if n < 1 {
+		n = 1
+	}
+	each := total / int64(n)
+	out := make([]int64, n)
+	for i := range out {
+		out[i] = each
+	}
+	out[0] += total - each*int64(n)
+	return out
 }
 
 // NormalizeTags is what makes a tag reusable: trimmed, lowercased so "Food" and
@@ -141,6 +200,20 @@ func NormalizeTags(tags []string) []string {
 
 // ParseTags reads the comma-separated list the form's free-text tag field takes.
 func ParseTags(s string) []string { return NormalizeTags(strings.Split(s, ",")) }
+
+// ParseInstallments reads the form's installment count. Blank is one charge,
+// which is what an untouched field means.
+func ParseInstallments(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > MaxInstallments {
+		return 0, fmt.Errorf("installments must be a number between 1 and %d", MaxInstallments)
+	}
+	return n, nil
+}
 
 // ParseDate accepts YYYY-MM-DD and nothing else, and hands back the canonical
 // form. Rejecting 2026-02-30 is time.Parse's own doing.
