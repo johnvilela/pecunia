@@ -11,6 +11,7 @@ import (
 	"kakei/internal/categories"
 	"kakei/internal/core"
 	"kakei/internal/db"
+	"kakei/internal/goals"
 	"kakei/internal/transactions"
 )
 
@@ -257,6 +258,9 @@ func seedEverything(t *testing.T, conn *sql.DB) int {
 	if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := seedGoals(conn); err != nil {
+		t.Fatal(err)
+	}
 	n, err := seedTransactions(conn)
 	if err != nil {
 		t.Fatal(err)
@@ -414,4 +418,124 @@ func TestSeedBillPayment(t *testing.T) {
 			t.Fatalf("the second run paid %d more", n)
 		}
 	})
+}
+
+func TestSeedGoals(t *testing.T) {
+	t.Run("inserts every fixture", func(t *testing.T) {
+		conn := newTestConn(t)
+		n, err := seedGoals(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(goalFixtures) {
+			t.Fatalf("seedGoals inserted %d; want %d", n, len(goalFixtures))
+		}
+
+		all, err := goals.NewStore(conn).List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(goalFixtures) {
+			t.Fatalf("database holds %d goals; want %d", len(all), len(goalFixtures))
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := newTestConn(t)
+		if _, err := seedGoals(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedGoals(conn)
+		if err != nil {
+			t.Fatalf("second seed: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second seed inserted %d; want 0", n)
+		}
+	})
+}
+
+func TestGoalFixturesAreValid(t *testing.T) {
+	t.Run("every fixture passes its own validation", func(t *testing.T) {
+		for _, f := range goalFixtures {
+			if err := f.Validate(); err != nil {
+				t.Errorf("%s: %v", f.Name, err)
+			}
+		}
+	})
+
+	t.Run("the fixtures cover the render branches", func(t *testing.T) {
+		var saving, paying, described, bare bool
+		for _, f := range goalFixtures {
+			switch f.Kind {
+			case goals.KindSaving:
+				saving = true
+			case goals.KindPaying:
+				paying = true
+			}
+			if f.Description == "" {
+				bare = true
+			} else {
+				described = true
+			}
+		}
+		if !saving || !paying {
+			t.Error("the fixtures do not cover both kinds of goal")
+		}
+		if !described || !bare {
+			t.Error("the fixtures do not cover a goal with and without a description")
+		}
+	})
+
+	t.Run("every linked transaction is in its goal's currency", func(t *testing.T) {
+		// The store would refuse the seed outright, but failing here says which
+		// fixture is wrong instead of which insert.
+		currency := map[string]string{}
+		for _, g := range goalFixtures {
+			currency[g.Name] = g.Currency
+		}
+		accountCurrency := map[string]string{}
+		for _, a := range fixtures {
+			accountCurrency[a.Code] = a.Currency
+		}
+		for _, c := range cardFixtures {
+			accountCurrency[c.Code] = c.Currency
+		}
+		for _, f := range txFixtures {
+			if f.Goal == "" {
+				continue
+			}
+			want, ok := currency[f.Goal]
+			if !ok {
+				t.Errorf("%s names goal %q, which is not a fixture", f.Title, f.Goal)
+				continue
+			}
+			source := f.Account
+			if source == "" {
+				source = f.Card
+			}
+			if got := accountCurrency[source]; got != want {
+				t.Errorf("%s is filed in %s against a goal counting %s", f.Title, got, want)
+			}
+		}
+	})
+}
+
+func TestSeedLinksTransactionsToGoals(t *testing.T) {
+	conn := newTestConn(t)
+	seedEverything(t, conn)
+
+	all, err := goals.NewStore(conn).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var moved int
+	for _, g := range all {
+		if g.Progress() != 0 {
+			moved++
+		}
+	}
+	if moved == 0 {
+		t.Fatal("no seeded goal has any progress; the dev database would render only empty bars")
+	}
 }

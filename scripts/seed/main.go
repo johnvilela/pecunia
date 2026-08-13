@@ -15,6 +15,7 @@ import (
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/db"
+	"kakei/internal/goals"
 	"kakei/internal/transactions"
 )
 
@@ -104,6 +105,47 @@ func seedCards(s *cards.Store) (int, error) {
 	return n, nil
 }
 
+// goalFixtures are the sample goals — both kinds, one past its target so the
+// bar has its clamp to render, one in Bitcoin with nothing filed against it so
+// the empty bar and the eight decimal places both show up, and one without a
+// description.
+var goalFixtures = []goals.Goal{
+	{Name: "Notebook novo", Description: "trocar o notebook do trabalho",
+		Target: 300000, Currency: "BRL", Kind: goals.KindSaving},
+	{Name: "Quitar o Itaú", Description: "cartão estourado",
+		Target: 412000, Currency: "BRL", Kind: goals.KindPaying},
+	{Name: "Fone de ouvido", Target: 20000, Currency: "BRL", Kind: goals.KindSaving},
+	{Name: "Um bitcoin inteiro", Description: "sem pressa",
+		Target: 100000000, Currency: "BTC", Kind: goals.KindSaving},
+}
+
+// seedGoals inserts the fixtures that are not there yet. A goal has no code to
+// skip on, so the name is what stands in for one here — it is what the
+// transaction fixtures name them by too.
+func seedGoals(conn *sql.DB) (int, error) {
+	s := goals.NewStore(conn)
+	existing, err := s.List()
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	for _, g := range existing {
+		seen[g.Name] = true
+	}
+
+	n := 0
+	for _, f := range goalFixtures {
+		if seen[f.Name] {
+			continue
+		}
+		if err := s.Create(&f); err != nil {
+			return n, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
 // txFixture is one sample transaction, written against codes rather than ids
 // because the rows it points at only get their ids when they are seeded.
 //
@@ -120,6 +162,9 @@ type txFixture struct {
 	Account     string // exactly one of these two
 	Card        string
 	Tags        []string
+	// Goal is the name of the goal this feeds, empty for none. The name rather
+	// than a code, because a goal has neither.
+	Goal string
 	// Installments spreads a card purchase over that many bills. 0 and 1 both
 	// mean one ordinary charge.
 	Installments int
@@ -175,6 +220,19 @@ var txFixtures = []txFixture{
 		Value: 24000, Days: 44, Category: "GIFTS", Account: "NUBON"},
 	{Title: "Farmácia", Kind: transactions.KindOutcome,
 		Value: 8790, Days: 47, Category: "HLTH1", Account: "INTER", Tags: []string{"casa"}},
+
+	// Filed against goals, so the dev database has bars in three states to look
+	// at: part way, past the target, and a goal with nothing against it at all.
+	{Title: "Guardar para o notebook", Kind: transactions.KindIncome,
+		Value: 120000, Days: 6, Category: "INVST", Account: "NUBON", Goal: "Notebook novo"},
+	{Title: "Guardar para o notebook", Kind: transactions.KindIncome,
+		Value: 90000, Days: 34, Category: "INVST", Account: "NUBON", Goal: "Notebook novo"},
+	{Title: "Amortização do Itaú", Description: "adiantando a fatura", Kind: transactions.KindOutcome,
+		Value: 150000, Days: 20, Category: "DEBT1", Account: "INTER", Goal: "Quitar o Itaú",
+		Tags: []string{"fixo"}},
+	// More than the goal asked for, which is what the clamped bar is there for.
+	{Title: "Venda do fone antigo", Kind: transactions.KindIncome,
+		Value: 25000, Days: 9, Category: "HOBBY", Account: "CASH1", Goal: "Fone de ouvido"},
 
 	// A split purchase, so the dev database has a series to look at: five rows a
 	// month apart, the first two already behind and the rest still to come. The
@@ -235,12 +293,34 @@ func seedTransactions(conn *sql.DB) (int, error) {
 			}
 			t.Card = transactions.Ref{ID: c.ID}
 		}
+		if f.Goal != "" {
+			g, err := goalByName(conn, f.Goal)
+			if err != nil {
+				return n, fmt.Errorf("%s: goal %s: %w", f.Title, f.Goal, err)
+			}
+			t.Goal = transactions.Ref{ID: g.ID}
+		}
 		if err := s.Create(&t); err != nil {
 			return n, fmt.Errorf("%s: %w", f.Title, err)
 		}
 		n += max(1, f.Installments)
 	}
 	return n, nil
+}
+
+// goalByName is the lookup the transaction fixtures need, since a goal has no
+// code for them to name it by.
+func goalByName(conn *sql.DB, name string) (goals.Goal, error) {
+	all, err := goals.NewStore(conn).List()
+	if err != nil {
+		return goals.Goal{}, err
+	}
+	for _, g := range all {
+		if g.Name == name {
+			return g, nil
+		}
+	}
+	return goals.Goal{}, errors.New("no such goal")
 }
 
 // seedBillPayment leaves NUCRD's oldest unpaid bill partly settled, so the dev
@@ -298,8 +378,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
-	// Last, because a transaction points at an account, a card and a category,
-	// and moves the balance of whichever of the first two it names.
+	// Before the transactions, because a transaction may name the goal it feeds.
+	g, err := seedGoals(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
+	// Last, because a transaction points at an account, a card, a category and
+	// maybe a goal, and moves the balance of whichever of the first two it names.
 	tx, err := seedTransactions(conn)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
@@ -313,6 +399,6 @@ func main() {
 		os.Exit(1)
 	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d transactions and %d bill payment(s) into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), tx, txRows(), paid, path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions and %d bill payment(s) into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), paid, path)
 }
