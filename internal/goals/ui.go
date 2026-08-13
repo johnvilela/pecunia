@@ -12,10 +12,25 @@ import (
 	"kakei/internal/core"
 )
 
+// reachedMark flags a goal that is there. Plain Unicode, same as the ❄ accounts
+// use and the ↑ on a card — no Nerd Font needed.
+const reachedMark = "✓"
+
+// name is what a goal is called wherever there is one column for it, with the
+// mark when it is done. Rendered rather than stored, so nothing has to be
+// stripped back out of what the user typed.
+func name(g Goal) string {
+	if !g.Reached() {
+		return g.Name
+	}
+	return g.Name + " " + lipgloss.NewStyle().
+		Foreground(lipgloss.Color(core.ColorByName("green").Hex)).Render(reachedMark)
+}
+
 // Label is how a goal is named in a list. A goal has no code and no colour to
 // lead with, so the name leads and the target follows it, dimmed.
 func Label(g Goal) string {
-	return g.Name + "  " + core.DimStyle.Render(g.Fmt(g.Target))
+	return name(g) + "  " + core.DimStyle.Render(g.Fmt(g.Target))
 }
 
 // stateColor is the goal's own state, since it has no colour of its own: green
@@ -153,7 +168,7 @@ func Table(gs []Goal) string {
 		// The currency symbol is in the amounts, so a currency column would only
 		// repeat it — and the verb is what tells a saving goal from a paying one
 		// without a column of its own.
-		t.Row(g.Name,
+		t.Row(name(g),
 			lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor(g))).Render(g.Fmt(g.Progress()))+
 				" "+core.DimStyle.Render(g.Verb()+"  "+pct(g)),
 			core.DimStyle.Render(g.Fmt(g.Target)))

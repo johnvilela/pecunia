@@ -167,3 +167,38 @@ func TestPickerRow(t *testing.T) {
 		t.Errorf("picker filter = %q; want the name to be searchable", row.Filter)
 	}
 }
+
+func TestReachedMark(t *testing.T) {
+	reached := laptop()
+	reached.Net = 500000
+
+	t.Run("the table marks a reached goal after its name", func(t *testing.T) {
+		got := Table([]Goal{reached})
+		if !strings.Contains(got, "New laptop "+reachedMark) {
+			t.Fatalf("the table does not mark the reached goal:\n%s", got)
+		}
+	})
+
+	t.Run("a goal still going is not marked", func(t *testing.T) {
+		if got := Table([]Goal{laptop()}); strings.Contains(got, reachedMark) {
+			t.Fatalf("the table marks a goal that is not there yet:\n%s", got)
+		}
+	})
+
+	t.Run("a paying goal is marked the same way", func(t *testing.T) {
+		g := laptop()
+		g.Kind, g.Net = KindPaying, -500000
+		if got := Table([]Goal{g}); !strings.Contains(got, reachedMark) {
+			t.Fatalf("a paid-off goal is not marked:\n%s", got)
+		}
+	})
+
+	t.Run("the picker and the transaction form's select carry it too", func(t *testing.T) {
+		if !strings.Contains(Label(reached), reachedMark) {
+			t.Errorf("Label = %q; want the mark on a reached goal", Label(reached))
+		}
+		if strings.Contains(Label(laptop()), reachedMark) {
+			t.Errorf("Label = %q; want no mark while there is still something to go", Label(laptop()))
+		}
+	})
+}
