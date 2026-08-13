@@ -230,6 +230,73 @@ func TestDetailsTargetLog(t *testing.T) {
 		}
 	})
 
+	// lineOf finds the rendered line a piece of text landed on, which is what
+	// these layout cases are really about.
+	lineOf := func(card, text string) int {
+		for i, line := range strings.Split(card, "\n") {
+			if strings.Contains(line, text) {
+				return i
+			}
+		}
+		return -1
+	}
+
+	t.Run("the reason sits under the date and the amounts, not beside them", func(t *testing.T) {
+		got := Details(laptop(), log)
+		amounts := lineOf(got, "R$3500.00")
+		reason := lineOf(got, "consegui um desconto")
+		if amounts < 0 || reason < 0 {
+			t.Fatalf("card is missing the entry:\n%s", got)
+		}
+		if reason != amounts+1 {
+			t.Fatalf("the reason is on line %d and the amounts on %d; want it on the line below:\n%s",
+				reason, amounts, got)
+		}
+	})
+
+	t.Run("the goal's own dates come above the history", func(t *testing.T) {
+		g := laptop()
+		g.CreatedAt, g.UpdatedAt = "2026-07-01 10:00:00", "2026-08-13 09:12:00"
+		got := Details(g, log)
+
+		stamps := lineOf(got, createdIcon)
+		entries := lineOf(got, "target")
+		if stamps < 0 || entries < 0 {
+			t.Fatalf("card is missing the dates or the history:\n%s", got)
+		}
+		if stamps > entries {
+			t.Fatalf("the goal's dates are below the history; want them above:\n%s", got)
+		}
+	})
+
+	// The card's own border is drawn with the same rune, top and bottom, so a
+	// third one is the divider and two is none.
+	rules := func(card string) int {
+		n := 0
+		for _, line := range strings.Split(card, "\n") {
+			if strings.Contains(line, strings.Repeat(dividerRune, 3)) {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("a divider separates the dates from the history", func(t *testing.T) {
+		g := laptop()
+		g.CreatedAt, g.UpdatedAt = "2026-07-01 10:00:00", "2026-08-13 09:12:00"
+		if n := rules(Details(g, log)); n != 3 {
+			t.Fatalf("card has %d horizontal rules; want the two border lines and one divider", n)
+		}
+	})
+
+	t.Run("no history, no divider", func(t *testing.T) {
+		g := laptop()
+		g.CreatedAt, g.UpdatedAt = "2026-07-01 10:00:00", "2026-08-13 09:12:00"
+		if n := rules(Details(g, nil)); n != 2 {
+			t.Fatalf("card has %d horizontal rules; want only the two border lines", n)
+		}
+	})
+
 	t.Run("an entry with no reason still renders", func(t *testing.T) {
 		got := Details(laptop(), log[1:])
 		if !strings.Contains(got, "R$6000.00") || !strings.Contains(got, "2026-07-02") {

@@ -210,20 +210,24 @@ func left(g Goal) string {
 	}
 }
 
-// history is what the target has been, newest first, one line each: the day it
-// moved, what it moved from and to, and why if a reason was given.
+// dividerRune draws the rule between the goal itself and its history. Box
+// drawing, the same rune the card's own rounded border is made of.
+const dividerRune = "─"
+
+// history is what the target has been, newest first: the day it moved and what
+// it moved between, then the reason on its own line under them, where a long
+// one has room to be read.
 //
 // The day only — the clock time is stored but a target does not move twice in an
 // afternoon, and the date is what anyone reading this is looking for.
 func history(g Goal, log []TargetChange) []string {
-	lines := []string{"", core.DimStyle.Render("target")}
+	lines := []string{core.DimStyle.Render("target")}
 	for _, c := range log {
-		line := core.DimStyle.Render(day(c.CreatedAt)) + "  " +
-			g.Fmt(c.Previous) + core.DimStyle.Render(" → ") + g.Fmt(c.Target)
+		lines = append(lines, core.DimStyle.Render(day(c.CreatedAt))+"  "+
+			g.Fmt(c.Previous)+core.DimStyle.Render(" → ")+g.Fmt(c.Target))
 		if c.Note != "" {
-			line += "  " + core.DimStyle.Render(c.Note)
+			lines = append(lines, core.DimStyle.Render(c.Note))
 		}
-		lines = append(lines, line)
 	}
 	return lines
 }
@@ -233,6 +237,16 @@ func history(g Goal, log []TargetChange) []string {
 func day(stamp string) string {
 	date, _, _ := strings.Cut(stamp, " ")
 	return date
+}
+
+// rule is a divider as wide as the widest line it sits among, so it spans the
+// card rather than guessing at it.
+func rule(lines []string) string {
+	w := cardWidth - 4 // the card's floor, less the padding it will get back
+	for _, l := range lines {
+		w = max(w, lipgloss.Width(l))
+	}
+	return core.DimStyle.Render(strings.Repeat(dividerRune, w))
 }
 
 // Details renders one goal as a card bordered in the colour of its state. There
@@ -258,13 +272,18 @@ func Details(g Goal, log []TargetChange) string {
 		left(g),
 		bar(g)+"  "+core.DimStyle.Render(pct(g)))
 
-	if len(log) > 0 {
-		lines = append(lines, history(g, log)...)
-	}
-
+	// The goal's own dates first, then the rule, then what its target has been:
+	// the two blocks are about different things, and the rule is what says so.
 	if g.CreatedAt != "" {
 		lines = append(lines, "", core.DimStyle.Render(
 			createdIcon+" "+g.CreatedAt+"   "+updatedIcon+" "+g.UpdatedAt))
+	}
+	if len(log) > 0 {
+		entries := history(g, log)
+		// Drawn to the width of everything it has to separate, which is only
+		// known once every line exists.
+		lines = append(lines, rule(append(append([]string{}, lines...), entries...)))
+		lines = append(lines, entries...)
 	}
 
 	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
