@@ -3,6 +3,8 @@ package transactions
 import (
 	"strings"
 	"testing"
+
+	"kakei/internal/goals"
 )
 
 // shown is what a rendered transaction looks like once the joins have filled it
@@ -197,4 +199,74 @@ func TestDetailsNamesTheBillItPays(t *testing.T) {
 
 	got := Details(tr)
 	contains(t, "Details", got, "bill")
+}
+
+func TestDetailsNamesTheGoalItFeeds(t *testing.T) {
+	t.Run("says which goal", func(t *testing.T) {
+		tr := shown()
+		tr.Goal = Ref{ID: 3, Name: "New laptop"}
+		contains(t, "Details", Details(tr), "New laptop")
+	})
+
+	t.Run("leaves the line out when there is none", func(t *testing.T) {
+		if got := Details(shown()); strings.Contains(got, "goal") {
+			t.Fatalf("the details card talks about a goal it does not have:\n%s", got)
+		}
+	})
+}
+
+func TestGoalOptions(t *testing.T) {
+	d := FormData{Goals: []goals.Goal{
+		{ID: 1, Name: "New laptop", Target: 500000, Currency: "BRL", Kind: goals.KindSaving},
+		{ID: 2, Name: "Satoshis", Target: 100000000, Currency: "BTC", Kind: goals.KindSaving},
+	}}
+
+	t.Run("only the goals in the source's currency are offered", func(t *testing.T) {
+		opts := d.goalOptions("BRL")
+		if len(opts) != 2 {
+			t.Fatalf("goalOptions(BRL) = %d options; want the sentinel and the one BRL goal", len(opts))
+		}
+		if opts[1].Value != 1 {
+			t.Errorf("the offered goal is %d; want the BRL one", opts[1].Value)
+		}
+	})
+
+	t.Run("the none sentinel always comes first", func(t *testing.T) {
+		for _, currency := range []string{"BRL", "BTC", "", "ZZZ"} {
+			opts := d.goalOptions(currency)
+			if len(opts) == 0 || opts[0].Value != 0 {
+				t.Fatalf("goalOptions(%q) does not start with the none option", currency)
+			}
+		}
+	})
+
+	t.Run("no goals at all is just the sentinel", func(t *testing.T) {
+		if opts := (FormData{}).goalOptions("BRL"); len(opts) != 1 {
+			t.Fatalf("goalOptions with no goals = %d options; want only the sentinel", len(opts))
+		}
+	})
+}
+
+func TestGoalCurrency(t *testing.T) {
+	d := FormData{Goals: []goals.Goal{
+		{ID: 1, Name: "New laptop", Target: 500000, Currency: "BRL", Kind: goals.KindSaving},
+	}}
+	if got := d.goalCurrency(1); got != "BRL" {
+		t.Errorf("goalCurrency(1) = %q; want BRL", got)
+	}
+	if got := d.goalCurrency(0); got != "" {
+		t.Errorf("goalCurrency(0) = %q; want empty — there is no goal", got)
+	}
+}
+
+func TestTableHasNoGoalColumn(t *testing.T) {
+	// A goal column would be empty on nearly every row, which is why the goal
+	// lives on the details card instead. This is the decision, so it should
+	// break loudly if someone adds one.
+	tr := shown()
+	tr.Goal = Ref{ID: 3, Name: "New laptop"}
+	got := Table([]Transaction{tr})
+	if strings.Contains(got, "GOAL") || strings.Contains(got, "New laptop") {
+		t.Fatalf("the list table grew a goal column:\n%s", got)
+	}
 }

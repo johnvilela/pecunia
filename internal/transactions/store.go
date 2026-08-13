@@ -36,6 +36,7 @@ type Filter struct {
 	CategoryID int64
 	AccountID  int64
 	CardID     int64
+	GoalID     int64
 }
 
 // columns joins in the three tables a transaction points at, so a row comes back
@@ -52,13 +53,15 @@ const columns = `
 	COALESCE(a.id, 0), COALESCE(a.code, ''), COALESCE(a.name, ''), COALESCE(a.color, ''), COALESCE(a.currency, ''),
 	COALESCE(k.id, 0), COALESCE(k.code, ''), COALESCE(k.name, ''), COALESCE(k.color, ''), COALESCE(k.currency, ''),
 	COALESCE((SELECT group_concat(tag) FROM transaction_tags WHERE transaction_id = t.id), ''),
-	COALESCE(t.installment_group, 0), t.installment_seq, t.installment_count, COALESCE(t.pays_bill_id, 0)`
+	COALESCE(t.installment_group, 0), t.installment_seq, t.installment_count, COALESCE(t.pays_bill_id, 0),
+	COALESCE(g.id, 0), COALESCE(g.name, ''), COALESCE(g.currency, '')`
 
 const from = `
 	FROM transactions t
 	LEFT JOIN categories   c ON c.id = t.category_id
 	LEFT JOIN accounts     a ON a.id = t.account_id
-	LEFT JOIN credit_cards k ON k.id = t.card_id`
+	LEFT JOIN credit_cards k ON k.id = t.card_id
+	LEFT JOIN goals        g ON g.id = t.goal_id`
 
 func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 	var t Transaction
@@ -68,7 +71,8 @@ func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 		&t.Account.ID, &t.Account.Code, &t.Account.Name, &t.Account.Color, &accountCur,
 		&t.Card.ID, &t.Card.Code, &t.Card.Name, &t.Card.Color, &cardCur,
 		&tags,
-		&t.Installment.Group, &t.Installment.Seq, &t.Installment.Count, &t.PaysBillID)
+		&t.Installment.Group, &t.Installment.Seq, &t.Installment.Count, &t.PaysBillID,
+		&t.Goal.ID, &t.Goal.Name, &t.GoalCurrency)
 	if err != nil {
 		return t, err
 	}
@@ -116,6 +120,9 @@ func (s *Store) List(f Filter) ([]Transaction, error) {
 	}
 	if f.CardID != 0 {
 		add(`t.card_id = ?`, f.CardID)
+	}
+	if f.GoalID != 0 {
+		add(`t.goal_id = ?`, f.GoalID)
 	}
 
 	query := `SELECT ` + columns + from
@@ -182,6 +189,9 @@ func (s *Store) AllTags() ([]string, error) {
 // not at all — a purchase that only half fits is not a purchase.
 func (s *Store) Create(t *Transaction) error {
 	t.Tags = NormalizeTags(t.Tags)
+	if err := s.fillGoalCurrency(t); err != nil {
+		return err
+	}
 	if err := t.Validate(); err != nil {
 		return err
 	}
@@ -255,11 +265,14 @@ func (s *Store) PayBill(billID, accountID, value int64, date string) error {
 // transaction to another account or card leaves every balance right.
 //
 // scope says how far it reaches through an installment series. The rows beside
-// the edited one take its title, description, category, tags and kind, and keep
-// their own date and amount: each installment falls on its own bill, and
+// the edited one take its title, description, category, goal, tags and kind, and
+// keep their own date and amount: each installment falls on its own bill, and
 // re-splitting a live series is a different operation.
 func (s *Store) Update(t Transaction, scope Scope) error {
 	t.Tags = NormalizeTags(t.Tags)
+	if err := s.fillGoalCurrency(&t); err != nil {
+		return err
+	}
 	if err := t.Validate(); err != nil {
 		return err
 	}
@@ -376,14 +389,42 @@ func scoped(tx *sql.Tx, id int64, scope Scope) ([]Transaction, error) {
 	return out, rows.Err()
 }
 
+// fillGoalCurrency reads back the two currencies a goal link has to agree on:
+// the goal's own, and the one the transaction inherits from whatever it is
+// filed against. Both are facts of other tables, so a caller that only knew the
+// ids still gets a mismatch refused rather than filing satoshis against a goal
+// counted in centavos.
+//
+// It costs nothing on the transactions that name no goal, which is nearly all
+// of them.
+func (s *Store) fillGoalCurrency(t *Transaction) error {
+	if t.Goal.ID == 0 {
+		t.GoalCurrency = ""
+		return nil
+	}
+	if err := s.db.QueryRow(`SELECT currency FROM goals WHERE id = ?`, t.Goal.ID).
+		Scan(&t.GoalCurrency); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("no goal %d to link this to", t.Goal.ID)
+		}
+		return err
+	}
+	query, id := `SELECT currency FROM accounts WHERE id = ?`, t.Account.ID
+	if t.IsCard() {
+		query, id = `SELECT currency FROM credit_cards WHERE id = ?`, t.Card.ID
+	}
+	return s.db.QueryRow(query, id).Scan(&t.Currency)
+}
+
 func insertRow(tx *sql.Tx, t Transaction) (int64, error) {
 	res, err := tx.Exec(
 		`INSERT INTO transactions (title, description, category_id, account_id, card_id, value, kind, date,
-		   installment_group, installment_seq, installment_count, pays_bill_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   installment_group, installment_seq, installment_count, pays_bill_id, goal_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
 		t.Value, t.Kind, t.Date,
-		nullID(t.Installment.Group), t.Installment.Seq, t.Installment.Count, nullID(t.PaysBillID))
+		nullID(t.Installment.Group), t.Installment.Seq, t.Installment.Count, nullID(t.PaysBillID),
+		nullID(t.Goal.ID))
 	if err != nil {
 		return 0, err
 	}
@@ -393,10 +434,11 @@ func insertRow(tx *sql.Tx, t Transaction) (int64, error) {
 func updateRow(tx *sql.Tx, t Transaction) error {
 	if _, err := tx.Exec(
 		`UPDATE transactions SET title = ?, description = ?, category_id = ?, account_id = ?,
-		 card_id = ?, value = ?, kind = ?, date = ?, pays_bill_id = ?, updated_at = datetime('now')
+		 card_id = ?, value = ?, kind = ?, date = ?, pays_bill_id = ?, goal_id = ?,
+		 updated_at = datetime('now')
 		 WHERE id = ?`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
-		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), t.ID); err != nil {
+		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), nullID(t.Goal.ID), t.ID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM transaction_tags WHERE transaction_id = ?`, t.ID); err != nil {

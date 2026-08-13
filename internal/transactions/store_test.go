@@ -1031,3 +1031,245 @@ func TestPayBill(t *testing.T) {
 		}
 	})
 }
+
+// goal puts one goal in the world's database and hands back its id. Raw SQL
+// rather than goals.NewStore, so this package's tests stay as free of the other
+// module as the package itself is.
+func (w *world) goal(t *testing.T, name, currency string) int64 {
+	t.Helper()
+	res, err := w.conn.Exec(
+		`INSERT INTO goals (name, target, currency, kind) VALUES (?, 500000, ?, 'saving')`,
+		name, currency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestGoalLink(t *testing.T) {
+	t.Run("a linked transaction comes back carrying its goal", func(t *testing.T) {
+		w := newWorld(t)
+		id := w.goal(t, "New laptop", "BRL")
+		tr := w.tx()
+		tr.Goal = Ref{ID: id}
+		tr = w.create(t, tr)
+
+		got, err := w.store.Get(tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Goal.ID != id {
+			t.Fatalf("Goal.ID = %d; want %d", got.Goal.ID, id)
+		}
+		if got.Goal.Name != "New laptop" {
+			t.Errorf("Goal.Name = %q; want the join to fill it in", got.Goal.Name)
+		}
+		if got.GoalCurrency != "BRL" {
+			t.Errorf("GoalCurrency = %q; want BRL", got.GoalCurrency)
+		}
+	})
+
+	t.Run("a transaction naming no goal comes back with none", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		got, err := w.store.Get(tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Goal.ID != 0 {
+			t.Fatalf("Goal.ID = %d; want 0", got.Goal.ID)
+		}
+	})
+
+	t.Run("an edit can attach, move and drop the goal", func(t *testing.T) {
+		w := newWorld(t)
+		one := w.goal(t, "New laptop", "BRL")
+		two := w.goal(t, "Holiday", "BRL")
+		tr := w.create(t, w.tx())
+
+		tr.Goal = Ref{ID: one}
+		if err := w.store.Update(tr, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := w.store.Get(tr.ID)
+		if got.Goal.ID != one {
+			t.Fatalf("after attaching, Goal.ID = %d; want %d", got.Goal.ID, one)
+		}
+
+		got.Goal = Ref{ID: two}
+		if err := w.store.Update(got, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		got, _ = w.store.Get(tr.ID)
+		if got.Goal.ID != two {
+			t.Fatalf("after moving, Goal.ID = %d; want %d", got.Goal.ID, two)
+		}
+
+		got.Goal = Ref{}
+		if err := w.store.Update(got, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		got, _ = w.store.Get(tr.ID)
+		if got.Goal.ID != 0 {
+			t.Fatalf("after dropping, Goal.ID = %d; want 0", got.Goal.ID)
+		}
+	})
+
+	t.Run("a goal in another currency is refused even when the caller only knew the id", func(t *testing.T) {
+		w := newWorld(t)
+		id := w.goal(t, "Satoshis", "BTC")
+		tr := w.tx() // filed against INTER, which is BRL
+		tr.Goal = Ref{ID: id}
+
+		err := w.store.Create(&tr)
+		if err == nil {
+			t.Fatal("a BRL transaction was linked to a BTC goal")
+		}
+		if !strings.Contains(err.Error(), "currency") {
+			t.Fatalf("Create = %v; want it to say why", err)
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d transactions written; want the refusal to leave none", n)
+		}
+	})
+
+	t.Run("an edit onto a goal in another currency is refused too", func(t *testing.T) {
+		w := newWorld(t)
+		id := w.goal(t, "Satoshis", "BTC")
+		tr := w.create(t, w.tx())
+
+		tr.Goal = Ref{ID: id}
+		if err := w.store.Update(tr, ScopeOne); err == nil {
+			t.Fatal("an edit linked a BRL transaction to a BTC goal")
+		}
+		got, _ := w.store.Get(tr.ID)
+		if got.Goal.ID != 0 {
+			t.Errorf("Goal.ID = %d; want the refused edit to leave none", got.Goal.ID)
+		}
+	})
+
+	t.Run("a goal that does not exist is refused", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.tx()
+		tr.Goal = Ref{ID: 404}
+		if err := w.store.Create(&tr); err == nil {
+			t.Fatal("a link to a goal that is not there was accepted")
+		}
+	})
+
+	t.Run("every row of an installment series carries the goal", func(t *testing.T) {
+		w := newWorld(t)
+		id := w.goal(t, "New phone", "BRL")
+		tr := w.tx()
+		tr.Account, tr.Card = Ref{}, Ref{ID: w.nucrd.ID}
+		tr.Title, tr.Value = "Phone", 100000
+		tr.Installment = Installment{Count: 5}
+		tr.Goal = Ref{ID: id}
+		tr = w.create(t, tr)
+
+		series, err := w.store.Series(tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(series) != 5 {
+			t.Fatalf("series has %d rows; want 5", len(series))
+		}
+		for _, row := range series {
+			if row.Goal.ID != id {
+				t.Errorf("installment %d has Goal.ID %d; want %d", row.Installment.Seq, row.Goal.ID, id)
+			}
+		}
+	})
+}
+
+func TestListByGoal(t *testing.T) {
+	t.Run("narrows to the linked transactions", func(t *testing.T) {
+		w := newWorld(t)
+		mine := w.goal(t, "New laptop", "BRL")
+		other := w.goal(t, "Holiday", "BRL")
+
+		linked := w.tx()
+		linked.Title, linked.Goal = "Toward the laptop", Ref{ID: mine}
+		w.create(t, linked)
+
+		elsewhere := w.tx()
+		elsewhere.Title, elsewhere.Goal = "Toward the holiday", Ref{ID: other}
+		w.create(t, elsewhere)
+
+		w.create(t, w.tx()) // no goal at all
+
+		got, err := w.store.List(Filter{GoalID: mine})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Title != "Toward the laptop" {
+			t.Fatalf("List by goal = %d rows (%+v); want only the linked one", len(got), got)
+		}
+	})
+
+	t.Run("a goal with nothing linked lists nothing", func(t *testing.T) {
+		w := newWorld(t)
+		id := w.goal(t, "New laptop", "BRL")
+		w.create(t, w.tx())
+
+		got, err := w.store.List(Filter{GoalID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("List by an empty goal = %d rows; want none", len(got))
+		}
+	})
+}
+
+func TestGoalAcrossASeries(t *testing.T) {
+	// A goal is a label, so it carries across a series the way the title and the
+	// category do — the scope is what says how far.
+	w := newWorld(t)
+	id := w.goal(t, "New phone", "BRL")
+	tr := w.tx()
+	tr.Account, tr.Card = Ref{}, Ref{ID: w.nucrd.ID}
+	tr.Title, tr.Value = "Phone", 100000
+	tr.Installment = Installment{Count: 5}
+	tr = w.create(t, tr)
+
+	first, err := w.store.Get(tr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Goal = Ref{ID: id}
+	if err := w.store.Update(first, ScopeAll); err != nil {
+		t.Fatal(err)
+	}
+
+	series, err := w.store.Series(tr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range series {
+		if row.Goal.ID != id {
+			t.Errorf("installment %d has Goal.ID %d; want the whole series linked", row.Installment.Seq, row.Goal.ID)
+		}
+	}
+
+	// And with ScopeOne it reaches only the row it was asked about.
+	other := w.goal(t, "Holiday", "BRL")
+	series[0].Goal = Ref{ID: other}
+	if err := w.store.Update(series[0], ScopeOne); err != nil {
+		t.Fatal(err)
+	}
+	after, err := w.store.Series(tr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after[0].Goal.ID != other {
+		t.Errorf("the edited row has Goal.ID %d; want %d", after[0].Goal.ID, other)
+	}
+	if after[1].Goal.ID != id {
+		t.Errorf("a sibling moved to Goal.ID %d; want it left at %d", after[1].Goal.ID, id)
+	}
+}

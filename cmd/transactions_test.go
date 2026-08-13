@@ -13,6 +13,7 @@ import (
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/db"
+	"kakei/internal/goals"
 	"kakei/internal/transactions"
 )
 
@@ -339,6 +340,57 @@ func TestTransactionsWithoutADatabase(t *testing.T) {
 		// A directory where the file should be: Open cannot create it.
 		if _, err := runTransactionsIn(t, t.TempDir()); err == nil {
 			t.Fatal("kakei t on an unopenable database = nil; want an error")
+		}
+	})
+}
+
+// goal puts one goal in the ledger's database and hands it back.
+func (l *ledger) goal(t *testing.T, name string) goals.Goal {
+	t.Helper()
+	g := goals.Goal{Name: name, Target: 500000, Currency: "BRL", Kind: goals.KindSaving}
+	l.with(t, func(conn *sql.DB) {
+		if err := goals.NewStore(conn).Create(&g); err != nil {
+			t.Fatal(err)
+		}
+	})
+	return g
+}
+
+func TestTransactionsFilterByGoal(t *testing.T) {
+	t.Run("narrows to the transactions feeding it", func(t *testing.T) {
+		l := newLedger(t)
+		g := l.goal(t, "New laptop")
+		// Deliberately last month: a goal's transactions span months, so the
+		// filter has to widen past the this-month default on its own.
+		l.add(t, transactions.Transaction{Title: "Toward the laptop", Date: lastMonth(),
+			Goal: transactions.Ref{ID: g.ID}})
+		l.add(t, transactions.Transaction{Title: "Coffee", Date: today()})
+
+		got, err := runTransactionsIn(t, l.path, "--goal", strconv.FormatInt(g.ID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Toward the laptop") {
+			t.Errorf("--goal did not widen past this month:\n%s", got)
+		}
+		if strings.Contains(got, "Coffee") {
+			t.Errorf("--goal kept a transaction that feeds no goal:\n%s", got)
+		}
+	})
+
+	t.Run("an unknown goal says so", func(t *testing.T) {
+		l := newLedger(t)
+		if _, err := runTransactionsIn(t, l.path, "--goal", "404"); err == nil {
+			t.Fatal("--goal 404 = nil; want an error")
+		}
+	})
+
+	t.Run("a goal is referenced by id, never a code", func(t *testing.T) {
+		l := newLedger(t)
+		l.goal(t, "New laptop")
+		_, err := runTransactionsIn(t, l.path, "--goal", "LAPTOP")
+		if err == nil || !strings.Contains(err.Error(), "id") {
+			t.Fatalf("--goal LAPTOP = %v; want it to say goals have no code", err)
 		}
 	})
 }

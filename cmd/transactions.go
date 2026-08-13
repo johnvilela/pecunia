@@ -14,6 +14,7 @@ import (
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/core"
+	"kakei/internal/goals"
 	"kakei/internal/transactions"
 )
 
@@ -41,6 +42,7 @@ Filters (all combine, and any of them replaces the this-month default):
   --category CODE|ID  transactions filed under a category
   --account  CODE|ID  transactions through an account
   --card     CODE|ID  transactions through a credit card
+  --goal     ID       transactions feeding a goal
 
 A transaction moves the balance of the account or credit card it names, and
 editing or deleting it moves that balance back. Leaving [ID] out opens a
@@ -55,9 +57,13 @@ Usage:
   kakei t n
 
 Opens a form: title, description (optional), date, kind, account or credit
-card, amount, category (optional), installments and tags. The amount is typed
-without a sign — income and outcome is what the kind says — and is read at the
-currency of whatever it is filed against.
+card, amount, category (optional), goal (optional), installments and tags. The
+amount is typed without a sign — income and outcome is what the kind says — and
+is read at the currency of whatever it is filed against.
+
+Only goals counting the same currency as the chosen account or card are
+offered: a goal adds up one currency and there is no rate anywhere in kakei to
+turn satoshis into centavos.
 
 Spending from an account lowers its balance; spending on a credit card raises
 what the card owes. A card that declines at its limit refuses a transaction
@@ -82,8 +88,8 @@ leaves every balance right.
 
 One installment of a series asks first whether the edit is for that one, for
 it and the ones after it, or for the whole series. A wider scope carries the
-title, description, category, tags and kind across; each installment keeps its
-own date and amount, since each falls on its own bill. To change what a series
+title, description, category, goal, tags and kind across; each installment
+keeps its own date and amount, since each falls on its own bill. To change what a series
 is worth, delete it and record it again.
 `,
 	"delete": `Delete a transaction for good.
@@ -210,6 +216,7 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 		category = fs.String("category", "", "category CODE or ID")
 		account  = fs.String("account", "", "account CODE or ID")
 		card     = fs.String("card", "", "credit card CODE or ID")
+		goal     = fs.String("goal", "", "goal ID")
 	)
 	if err := fs.Parse(args); err != nil {
 		return listFilter{}, fmt.Errorf("%w — see: kakei t -h", err)
@@ -273,6 +280,15 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 			return listFilter{}, fmt.Errorf("no credit card matching %q", *card)
 		}
 		out.filter.CardID, out.narrowed = c.ID, true
+	}
+	if *goal != "" {
+		// narrowed matters here more than anywhere: a goal's transactions span
+		// months, and the this-month default would hide most of them.
+		g, err := resolveGoal(goals.NewStore(conn), *goal)
+		if err != nil {
+			return listFilter{}, err
+		}
+		out.filter.GoalID, out.narrowed = g.ID, true
 	}
 	return out, nil
 }
@@ -352,6 +368,9 @@ func formData(conn *sql.DB) (transactions.FormData, error) {
 		return d, err
 	}
 	if d.Categories, err = categories.NewStore(conn).List(); err != nil {
+		return d, err
+	}
+	if d.Goals, err = goals.NewStore(conn).List(); err != nil {
 		return d, err
 	}
 	d.Tags, err = transactions.NewStore(conn).AllTags()

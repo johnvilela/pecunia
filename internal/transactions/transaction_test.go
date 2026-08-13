@@ -322,3 +322,47 @@ func TestIsInstallment(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateGoal(t *testing.T) {
+	toward := func() Transaction {
+		return Transaction{Title: "Set aside", Value: 30000, Kind: KindIncome,
+			Date: "2026-08-14", Account: Ref{ID: 1}, Currency: "BRL",
+			Goal: Ref{ID: 3}, GoalCurrency: "BRL"}
+	}
+
+	t.Run("a transaction in the goal's currency is accepted", func(t *testing.T) {
+		if err := toward().Validate(); err != nil {
+			t.Fatalf("a matching link was refused: %v", err)
+		}
+	})
+
+	t.Run("naming no goal is always fine", func(t *testing.T) {
+		tr := toward()
+		tr.Goal, tr.GoalCurrency = Ref{}, ""
+		if err := tr.Validate(); err != nil {
+			t.Fatalf("a transaction with no goal was refused: %v", err)
+		}
+	})
+
+	t.Run("another currency is refused, and the error names both", func(t *testing.T) {
+		tr := toward()
+		tr.GoalCurrency = "BTC"
+		err := tr.Validate()
+		if err == nil {
+			t.Fatal("a BRL transaction was linked to a BTC goal")
+		}
+		if !strings.Contains(err.Error(), "BTC") || !strings.Contains(err.Error(), "BRL") {
+			t.Fatalf("Validate() = %v; want it to name both currencies", err)
+		}
+	})
+
+	t.Run("a goal whose currency was never filled in is refused", func(t *testing.T) {
+		// The empty string is what a caller that only knew the id would leave
+		// behind, and letting it through is the whole hole this rule closes.
+		tr := toward()
+		tr.GoalCurrency = ""
+		if err := tr.Validate(); err == nil {
+			t.Fatal("a link with no goal currency was accepted")
+		}
+	})
+}

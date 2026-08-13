@@ -14,6 +14,7 @@ import (
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/core"
+	"kakei/internal/goals"
 )
 
 // Amount is the signed money, green when it arrives and red when it leaves.
@@ -143,6 +144,12 @@ func Details(t Transaction) string {
 		tag(t.Target())+" "+core.DimStyle.Render(t.Target().Name+" ("+sourceKind(t)+")"),
 		core.DimStyle.Render(t.Date))
 
+	// What the money was for, when it was for something being worked toward. The
+	// goal has no code, so its name is what names it.
+	if t.Goal.ID != 0 {
+		lines = append(lines, core.DimStyle.Render("toward "+t.Goal.Name))
+	}
+
 	// A payment moves two balances — the account it left and the card whose bill
 	// it settles — so the card says so rather than leaving the second a surprise.
 	if t.PaysBillID != 0 {
@@ -201,6 +208,7 @@ type FormData struct {
 	Accounts   []accounts.Account
 	Cards      []cards.Card
 	Categories []categories.Category
+	Goals      []goals.Goal
 	Tags       []string // every tag already in use, for the autocomplete
 }
 
@@ -240,6 +248,30 @@ func (d FormData) sourceOptions() []huh.Option[string] {
 	return opts
 }
 
+// goalCurrency is what a goal counts in, which is the only thing that decides
+// whether it may be offered.
+func (d FormData) goalCurrency(id int64) string {
+	for _, g := range d.Goals {
+		if g.ID == id {
+			return g.Currency
+		}
+	}
+	return ""
+}
+
+// goalOptions offers only the goals counting the same currency as the chosen
+// source. A goal in another currency is not a choice the store would accept, so
+// it is not a choice the form offers.
+func (d FormData) goalOptions(currency string) []huh.Option[int64] {
+	opts := []huh.Option[int64]{huh.NewOption(core.DimStyle.Render("— none —"), int64(0))}
+	for _, g := range d.Goals {
+		if g.Currency == currency {
+			opts = append(opts, huh.NewOption(goals.Label(g), g.ID))
+		}
+	}
+	return opts
+}
+
 func (d FormData) categoryOptions() []huh.Option[int64] {
 	opts := []huh.Option[int64]{huh.NewOption(core.DimStyle.Render("— none —"), int64(0))}
 	for _, c := range d.Categories {
@@ -259,6 +291,7 @@ func Form(d FormData, t *Transaction, title string) error {
 		source = sourceValue("card", t.Card.ID)
 	}
 	category := t.Category.ID
+	goal := t.Goal.ID
 	date := t.Date
 	if date == "" {
 		date = Today()
@@ -303,6 +336,16 @@ func Form(d FormData, t *Transaction, title string) error {
 			return nil
 		}),
 		huh.NewSelect[int64]().Title("Category").Options(d.categoryOptions()...).Value(&category),
+		// The options are rebuilt whenever the source moves, because what a goal
+		// counts in is what decides whether it may be offered at all.
+		huh.NewSelect[int64]().Title("Goal").Description("optional — only goals in this currency").
+			OptionsFunc(func() []huh.Option[int64] {
+				s, err := parseSource(source)
+				if err != nil {
+					return d.goalOptions("")
+				}
+				return d.goalOptions(d.currency(s))
+			}, &source).Value(&goal),
 	}
 
 	// Only offered on a new transaction: an edit that re-split a live series
@@ -371,6 +414,13 @@ func Form(d FormData, t *Transaction, title string) error {
 	}
 	t.Currency = d.currency(s)
 	t.Category = Ref{ID: category}
+	t.Goal, t.GoalCurrency = Ref{ID: goal}, d.goalCurrency(goal)
+	// Same as the date: huh skips everything when stdin ends mid-form, so a goal
+	// left over from before the source moved to another currency is dropped here
+	// rather than refused by the store.
+	if t.Goal.ID != 0 && t.GoalCurrency != t.Currency {
+		t.Goal, t.GoalCurrency = Ref{}, ""
+	}
 	t.Tags = NormalizeTags(append(reused, ParseTags(fresh)...))
 	// Same as the date: huh skips its validators when stdin ends mid-form, so an
 	// unreadable count falls back to one charge rather than being written through.

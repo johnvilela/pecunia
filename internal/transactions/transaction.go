@@ -67,6 +67,13 @@ type Transaction struct {
 	Card        Ref
 	Currency    string // inherited from whichever target is set
 	Installment Installment
+	// Goal is what this transaction feeds, ID 0 when it feeds none. Only the id
+	// and the name are joined in — a goal has no code and no colour of its own.
+	Goal Ref
+	// GoalCurrency is that goal's own currency, carried so Validate can refuse a
+	// mismatch. The store fills it from the goals table before every write, so a
+	// caller that only knew the id is checked too.
+	GoalCurrency string
 	// PaysBillID is the credit-card bill this transaction pays, 0 when it pays
 	// none. A payment is an ordinary outcome on whichever account paid, which is
 	// why it never shows up as spending on the card it settles.
@@ -145,6 +152,14 @@ func (t Transaction) Validate() error {
 	// Only a credit card has bills to spread a purchase over.
 	if t.IsInstallment() && !t.IsCard() {
 		return errors.New("only a credit card purchase can be split into installments")
+	}
+	// A goal counts one currency and nothing else: adding centavos to satoshis
+	// is not a sum, and there is no rate anywhere in kakei to make it one. An
+	// empty GoalCurrency fails this too — that is what a caller who only knew
+	// the id leaves behind, and letting it through is the whole hole.
+	if t.Goal.ID != 0 && t.Currency != t.GoalCurrency {
+		return fmt.Errorf("this goal counts %s and the transaction is in %s — link it to a goal in its own currency",
+			t.GoalCurrency, t.Currency)
 	}
 	if t.PaysBillID != 0 {
 		// The money has to come from somewhere, and a card settling its own bill
