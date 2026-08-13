@@ -539,3 +539,66 @@ func TestSeedLinksTransactionsToGoals(t *testing.T) {
 		t.Fatal("no seeded goal has any progress; the dev database would render only empty bars")
 	}
 }
+
+func TestSeedTargetChange(t *testing.T) {
+	t.Run("cuts one goal's target and says why", func(t *testing.T) {
+		conn := newTestConn(t)
+		if _, err := seedGoals(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedTargetChange(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("seedTargetChange made %d changes; want 1", n)
+		}
+
+		g, err := goalByName(conn, "Quitar o Itaú")
+		if err != nil {
+			t.Fatal(err)
+		}
+		log, err := goals.NewStore(conn).TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 1 {
+			t.Fatalf("the log has %d entries; want 1", len(log))
+		}
+		if log[0].Target != g.Target || log[0].Previous == log[0].Target {
+			t.Errorf("entry = %d → %d against a live target of %d",
+				log[0].Previous, log[0].Target, g.Target)
+		}
+		if log[0].Note == "" || log[0].CreatedAt == "" {
+			t.Errorf("entry = %+v; want a reason and a date", log[0])
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := newTestConn(t)
+		if _, err := seedGoals(conn); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedTargetChange(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedTargetChange(conn)
+		if err != nil {
+			t.Fatalf("second run: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second run made %d changes; want 0", n)
+		}
+	})
+
+	t.Run("a database without the fixture is left alone", func(t *testing.T) {
+		conn := newTestConn(t)
+		n, err := seedTargetChange(conn)
+		if err != nil {
+			t.Fatalf("no goals at all = %v; want it to do nothing quietly", err)
+		}
+		if n != 0 {
+			t.Fatalf("made %d changes with no goals seeded; want 0", n)
+		}
+	})
+}

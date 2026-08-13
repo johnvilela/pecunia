@@ -308,6 +308,24 @@ func seedTransactions(conn *sql.DB) (int, error) {
 	return n, nil
 }
 
+// seedTargetChange cuts one goal's target, so the dev database has a target
+// history to look at — the case the log exists for: a bill that settles for
+// less than it said it would.
+func seedTargetChange(conn *sql.DB) (int, error) {
+	g, err := goalByName(conn, "Quitar o Itaú")
+	if err != nil {
+		// The fixture is not there, which a hand-edited dev database is allowed
+		// to be.
+		return 0, nil
+	}
+	log, err := goals.NewStore(conn).TargetLog(g.ID)
+	if err != nil || len(log) > 0 {
+		return 0, err
+	}
+	g.Target = 350000
+	return 1, goals.NewStore(conn).Update(g, "consegui um desconto à vista")
+}
+
 // goalByName is the lookup the transaction fixtures need, since a goal has no
 // code for them to name it by.
 func goalByName(conn *sql.DB, name string) (goals.Goal, error) {
@@ -391,6 +409,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// After the goals exist and before the tally, so the dev database shows a
+	// target that has moved.
+	moved, err := seedTargetChange(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	// Last of all: a bill only exists once something asks for it, and only a
 	// transaction can pay one.
 	paid, err := seedBillPayment(conn)
@@ -399,6 +424,6 @@ func main() {
 		os.Exit(1)
 	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions and %d bill payment(s) into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), paid, path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s) and %d bill payment(s) into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, path)
 }

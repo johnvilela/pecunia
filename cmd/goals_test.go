@@ -209,3 +209,64 @@ func TestGoalsWithoutADatabase(t *testing.T) {
 		t.Fatal("listing with an unopenable database was not an error")
 	}
 }
+
+func TestGoalsTargetHistory(t *testing.T) {
+	// moved seeds a goal whose target has been cut once, the way an offer on a
+	// bill would cut it.
+	moved := func(t *testing.T, path string) goals.Goal {
+		t.Helper()
+		g := seedGoal(t, path, newLaptop())
+		t.Setenv("KAKEI_DB", path)
+		conn, err := db.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		g.Target = 350000
+		if err := goals.NewStore(conn).Update(g, "consegui um desconto"); err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+
+	t.Run("the single goal shows what the target has been", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		g := moved(t, path)
+
+		got, err := runGoalsIn(t, path, strconv.FormatInt(g.ID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"R$5000.00", "R$3500.00", "consegui um desconto"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the history is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("the list leaves it out", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		moved(t, path)
+
+		got, err := runGoalsIn(t, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(got, "consegui um desconto") {
+			t.Errorf("the list dragged the history along:\n%s", got)
+		}
+	})
+
+	t.Run("a goal whose target never moved shows no history", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		g := seedGoal(t, path, newLaptop())
+
+		got, err := runGoalsIn(t, path, strconv.FormatInt(g.ID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(got, "target") {
+			t.Errorf("the card talks about a history it does not have:\n%s", got)
+		}
+	})
+}

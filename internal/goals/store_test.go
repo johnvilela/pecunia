@@ -280,7 +280,7 @@ func TestUpdate(t *testing.T) {
 		g.Name = "Better laptop"
 		g.Target = 700000
 		g.Kind = KindPaying
-		if err := s.Update(g); err != nil {
+		if err := s.Update(g, ""); err != nil {
 			t.Fatal(err)
 		}
 
@@ -300,7 +300,7 @@ func TestUpdate(t *testing.T) {
 		s, _ := newTestStore(t)
 		g := laptop()
 		g.ID = 404
-		if err := s.Update(g); !errors.Is(err, ErrNotFound) {
+		if err := s.Update(g, ""); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("Update(404) = %v; want ErrNotFound", err)
 		}
 	})
@@ -309,7 +309,7 @@ func TestUpdate(t *testing.T) {
 		s, _ := newTestStore(t)
 		g := mustCreate(t, s, laptop())
 		g.Name = ""
-		if err := s.Update(g); err == nil {
+		if err := s.Update(g, ""); err == nil {
 			t.Fatal("Update with a blank name succeeded")
 		}
 	})
@@ -318,7 +318,7 @@ func TestUpdate(t *testing.T) {
 		s, _ := newTestStore(t)
 		g := mustCreate(t, s, laptop())
 		g.Currency = "USD"
-		if err := s.Update(g); err != nil {
+		if err := s.Update(g, ""); err != nil {
 			t.Fatalf("Update = %v; want the currency to change freely", err)
 		}
 	})
@@ -330,7 +330,7 @@ func TestUpdate(t *testing.T) {
 		file(t, conn, acc, g.ID, "income", 10000)
 
 		g.Currency = "BTC"
-		err := s.Update(g)
+		err := s.Update(g, "")
 		if err == nil || !strings.Contains(err.Error(), "linked") {
 			t.Fatalf("Update = %v; want it refused because a transaction is linked", err)
 		}
@@ -352,7 +352,7 @@ func TestUpdate(t *testing.T) {
 
 		g.Name = "Better laptop"
 		g.Target = 700000
-		if err := s.Update(g); err != nil {
+		if err := s.Update(g, ""); err != nil {
 			t.Fatalf("Update = %v; want everything but the currency to move", err)
 		}
 	})
@@ -433,6 +433,170 @@ func TestLinked(t *testing.T) {
 		}
 		if n != 0 {
 			t.Fatalf("Linked = %d; want 0", n)
+		}
+	})
+}
+
+func TestTargetLog(t *testing.T) {
+	t.Run("changing the target writes an entry", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+
+		g.Target = 350000
+		if err := s.Update(g, "consegui um desconto"); err != nil {
+			t.Fatal(err)
+		}
+
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 1 {
+			t.Fatalf("log has %d entries; want 1", len(log))
+		}
+		if log[0].Previous != 500000 || log[0].Target != 350000 {
+			t.Errorf("entry = %d → %d; want 500000 → 350000", log[0].Previous, log[0].Target)
+		}
+		if log[0].Note != "consegui um desconto" {
+			t.Errorf("note = %q; want it kept", log[0].Note)
+		}
+		if log[0].CreatedAt == "" {
+			t.Error("the entry has no date on it")
+		}
+	})
+
+	t.Run("the note is optional", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+		g.Target = 350000
+		if err := s.Update(g, ""); err != nil {
+			t.Fatal(err)
+		}
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 1 || log[0].Note != "" {
+			t.Fatalf("log = %+v; want one entry with no note", log)
+		}
+	})
+
+	t.Run("an edit that leaves the target alone writes nothing", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+
+		g.Name = "Better laptop"
+		g.Description = "mudei o nome"
+		if err := s.Update(g, "this note has nothing to explain"); err != nil {
+			t.Fatal(err)
+		}
+
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 0 {
+			t.Fatalf("log has %d entries; want none — the target never moved", len(log))
+		}
+	})
+
+	t.Run("creating a goal logs nothing", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 0 {
+			t.Fatalf("log has %d entries on a new goal; want none", len(log))
+		}
+	})
+
+	t.Run("several changes come back newest first", func(t *testing.T) {
+		s, conn := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+
+		for i, step := range []struct {
+			target int64
+			note   string
+		}{{400000, "primeiro corte"}, {350000, "consegui um desconto"}, {300000, "outro desconto"}} {
+			g.Target = step.target
+			if err := s.Update(g, step.note); err != nil {
+				t.Fatal(err)
+			}
+			// datetime('now') has one-second resolution, so without this the three
+			// entries share a timestamp and the order is the id's to decide. The
+			// offset counts up with the loop, which is the order they happened in.
+			if _, err := conn.Exec(
+				`UPDATE goal_target_log SET created_at = datetime('now', ? || ' seconds') WHERE note = ?`,
+				i, step.note); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 3 {
+			t.Fatalf("log has %d entries; want 3", len(log))
+		}
+		if log[0].Note != "outro desconto" || log[2].Note != "primeiro corte" {
+			t.Fatalf("log order = %q … %q; want newest first", log[0].Note, log[2].Note)
+		}
+		// Each entry says what it moved from, so the whole story reads without
+		// walking the chain.
+		if log[0].Previous != 350000 || log[0].Target != 300000 {
+			t.Errorf("newest entry = %d → %d; want 350000 → 300000", log[0].Previous, log[0].Target)
+		}
+	})
+
+	t.Run("a refused update logs nothing", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+
+		g.Target = 350000
+		g.Name = ""
+		if err := s.Update(g, "should not be written"); err == nil {
+			t.Fatal("an update with a blank name succeeded")
+		}
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 0 {
+			t.Fatalf("log has %d entries after a refused update; want none", len(log))
+		}
+	})
+
+	t.Run("the log goes when the goal goes", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+		g.Target = 350000
+		if err := s.Update(g, "desconto"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(g.ID); err != nil {
+			t.Fatal(err)
+		}
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 0 {
+			t.Fatalf("%d entries survived the goal; want none", len(log))
+		}
+	})
+
+	t.Run("a goal that never moved has an empty log", func(t *testing.T) {
+		s, _ := newTestStore(t)
+		g := mustCreate(t, s, laptop())
+		log, err := s.TargetLog(g.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log) != 0 {
+			t.Fatalf("log = %+v; want it empty", log)
 		}
 	})
 }

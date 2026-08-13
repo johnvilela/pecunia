@@ -22,7 +22,7 @@ Commands:
   new     | n        create a goal
   edit    | e  [ID]  edit a goal
   delete  | d  [ID]  delete a goal
-  ID                 show one goal in detail
+  ID                 show one goal in detail, with its target history
 
 Flags:
   --resume           the same list as one compact table, without the bars
@@ -58,6 +58,12 @@ Usage:
   kakei g e [ID]
 
 Opens the create form pre-filled. Without ID, pick from a list first.
+
+Changing the target is logged: the form asks why, and "kakei g ID" shows every
+move the target has made, with the day it happened. A target is a promise about
+the future, and the future moves — a R$5000.00 bill settles for R$3500.00 on an
+offer, and what it used to say is worth keeping. The reason is optional, and is
+only kept when the target really changed.
 
 The currency can only be changed while nothing is linked: the transactions
 already filed were filed in the currency they were filed in, and reading their
@@ -104,7 +110,11 @@ func runGoals(args []string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Fprint(out, goals.Details(g))
+			log, err := s.TargetLog(g.ID)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(out, goals.Details(g, log))
 			return nil
 		})
 	}
@@ -177,7 +187,9 @@ func listGoals(resume bool) error {
 			return nil
 		}
 		for _, g := range all {
-			fmt.Fprint(out, goals.Details(g))
+			// No history here — that is what "kakei g ID" is for, and a screen of
+			// goals each dragging its own log behind it is not a list.
+			fmt.Fprint(out, goals.Details(g, nil))
 		}
 		return nil
 	})
@@ -187,7 +199,7 @@ func createGoal(s *goals.Store) error {
 	g := goals.Goal{Kind: goals.KindSaving, Currency: core.Currencies[0].Code}
 	// Nothing can be linked to a goal that does not exist yet, so the currency
 	// is always on offer here.
-	if err := goals.Form(&g, "New goal", 0); err != nil {
+	if _, err := goals.Form(&g, "New goal", 0); err != nil {
 		return err
 	}
 	if err := s.Create(&g); err != nil {
@@ -206,10 +218,11 @@ func editGoal(s *goals.Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := goals.Form(&g, "Edit goal", linked); err != nil {
+	note, err := goals.Form(&g, "Edit goal", linked)
+	if err != nil {
 		return err
 	}
-	if err := s.Update(g); err != nil {
+	if err := s.Update(g, note); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "updated goal %s (%s)\n", g.Name, g.Fmt(g.Target))

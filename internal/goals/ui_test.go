@@ -95,7 +95,7 @@ func TestTable(t *testing.T) {
 
 func TestDetails(t *testing.T) {
 	t.Run("a saving goal shows what is saved, what is left and a bar", func(t *testing.T) {
-		got := Details(laptop())
+		got := Details(laptop(), nil)
 		for _, want := range []string{
 			"New laptop", "money for the new machine",
 			"R$1200.00", "saved", "R$5000.00", "R$3800.00", "to go", "24%", "█", "░",
@@ -107,7 +107,7 @@ func TestDetails(t *testing.T) {
 	})
 
 	t.Run("no field names", func(t *testing.T) {
-		got := Details(laptop())
+		got := Details(laptop(), nil)
 		for _, unwanted := range []string{"Name", "Target", "Currency", "Kind", "Description"} {
 			if strings.Contains(got, unwanted) {
 				t.Errorf("Details names the field %q:\n%s", unwanted, got)
@@ -118,7 +118,7 @@ func TestDetails(t *testing.T) {
 	t.Run("a reached goal says so", func(t *testing.T) {
 		g := laptop()
 		g.Net = 500000
-		got := Details(g)
+		got := Details(g, nil)
 		if !strings.Contains(got, "reached") {
 			t.Errorf("Details does not say the goal is reached:\n%s", got)
 		}
@@ -130,7 +130,7 @@ func TestDetails(t *testing.T) {
 	t.Run("a goal past its target says how far past", func(t *testing.T) {
 		g := laptop()
 		g.Net = 512000
-		got := Details(g)
+		got := Details(g, nil)
 		// "R$-12000.00 to go" is a riddle; "R$120.00 past it" is not.
 		if !strings.Contains(got, "R$120.00") || !strings.Contains(got, "past it") {
 			t.Errorf("Details does not say how far past the target it is:\n%s", got)
@@ -140,7 +140,7 @@ func TestDetails(t *testing.T) {
 	t.Run("a goal with no description leaves the line out", func(t *testing.T) {
 		g := laptop()
 		g.Description = ""
-		if got := Details(g); strings.Contains(got, "money for the new machine") {
+		if got := Details(g, nil); strings.Contains(got, "money for the new machine") {
 			t.Errorf("Details kept a description that is not there:\n%s", got)
 		}
 	})
@@ -148,7 +148,7 @@ func TestDetails(t *testing.T) {
 	t.Run("a paying goal reads as paid off", func(t *testing.T) {
 		g := laptop()
 		g.Kind, g.Net = KindPaying, -120000
-		got := Details(g)
+		got := Details(g, nil)
 		if !strings.Contains(got, "paid off") {
 			t.Errorf("Details does not say what a paying goal is at:\n%s", got)
 		}
@@ -194,11 +194,11 @@ func TestReachedMark(t *testing.T) {
 	})
 
 	t.Run("the card carries it too, since that is the default list", func(t *testing.T) {
-		if !strings.Contains(Details(reached), reachedMark) {
-			t.Errorf("the card does not mark the reached goal:\n%s", Details(reached))
+		if !strings.Contains(Details(reached, nil), reachedMark) {
+			t.Errorf("the card does not mark the reached goal:\n%s", Details(reached, nil))
 		}
-		if strings.Contains(Details(laptop()), reachedMark) {
-			t.Errorf("the card marks a goal that is not there yet:\n%s", Details(laptop()))
+		if strings.Contains(Details(laptop(), nil), reachedMark) {
+			t.Errorf("the card marks a goal that is not there yet:\n%s", Details(laptop(), nil))
 		}
 	})
 
@@ -208,6 +208,45 @@ func TestReachedMark(t *testing.T) {
 		}
 		if strings.Contains(Label(laptop()), reachedMark) {
 			t.Errorf("Label = %q; want no mark while there is still something to go", Label(laptop()))
+		}
+	})
+}
+
+func TestDetailsTargetLog(t *testing.T) {
+	log := []TargetChange{
+		{Previous: 500000, Target: 350000, Note: "consegui um desconto", CreatedAt: "2026-08-13 09:12:00"},
+		{Previous: 600000, Target: 500000, CreatedAt: "2026-07-02 18:30:00"},
+	}
+
+	t.Run("every entry says when, from what, to what and why", func(t *testing.T) {
+		got := Details(laptop(), log)
+		for _, want := range []string{
+			"2026-08-13", "R$5000.00", "R$3500.00", "consegui um desconto",
+			"2026-07-02", "R$6000.00",
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the history is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("an entry with no reason still renders", func(t *testing.T) {
+		got := Details(laptop(), log[1:])
+		if !strings.Contains(got, "R$6000.00") || !strings.Contains(got, "2026-07-02") {
+			t.Errorf("an entry with no note did not render:\n%s", got)
+		}
+	})
+
+	t.Run("a goal whose target never moved shows no history at all", func(t *testing.T) {
+		got := Details(laptop(), nil)
+		if strings.Contains(got, "target") {
+			t.Errorf("the card talks about a history it does not have:\n%s", got)
+		}
+	})
+
+	t.Run("the time of day is left off — the day is what matters", func(t *testing.T) {
+		if got := Details(laptop(), log); strings.Contains(got, "09:12:00") {
+			t.Errorf("the history is showing clock time:\n%s", got)
 		}
 	})
 }

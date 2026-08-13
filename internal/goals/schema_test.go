@@ -164,3 +164,88 @@ func TestSchema(t *testing.T) {
 		}
 	})
 }
+
+func TestTargetLogSchema(t *testing.T) {
+	logChange := func(conn *sql.DB, goalID, previous, target int64, note string) error {
+		_, err := conn.Exec(
+			`INSERT INTO goal_target_log (goal_id, previous, target, note) VALUES (?, ?, ?, ?)`,
+			goalID, previous, target, note)
+		return err
+	}
+
+	t.Run("an entry keeps what the target was, what it became and why", func(t *testing.T) {
+		conn := newTestDB(t)
+		id := seedGoal(t, conn, "Quitar o Itaú", 500000, "BRL", "paying")
+		if err := logChange(conn, id, 500000, 350000, "consegui um desconto"); err != nil {
+			t.Fatal(err)
+		}
+
+		var previous, target int64
+		var note, created string
+		if err := conn.QueryRow(
+			`SELECT previous, target, note, created_at FROM goal_target_log`).
+			Scan(&previous, &target, &note, &created); err != nil {
+			t.Fatal(err)
+		}
+		if previous != 500000 || target != 350000 {
+			t.Errorf("previous/target = %d/%d; want 500000/350000", previous, target)
+		}
+		if note != "consegui um desconto" {
+			t.Errorf("note = %q; want it kept", note)
+		}
+		// The date is the whole point of a log: an entry with no stamp says
+		// nothing about when the target moved.
+		if created == "" {
+			t.Error("created_at is empty; want the migration to stamp it")
+		}
+	})
+
+	t.Run("the note is optional", func(t *testing.T) {
+		conn := newTestDB(t)
+		id := seedGoal(t, conn, "New laptop", 500000, "BRL", "saving")
+		if _, err := conn.Exec(
+			`INSERT INTO goal_target_log (goal_id, previous, target) VALUES (?, ?, ?)`,
+			id, 500000, 300000); err != nil {
+			t.Fatal(err)
+		}
+		var note string
+		if err := conn.QueryRow(`SELECT note FROM goal_target_log`).Scan(&note); err != nil {
+			t.Fatal(err)
+		}
+		if note != "" {
+			t.Errorf("note = %q; want it to default to empty", note)
+		}
+	})
+
+	t.Run("a target of zero or less is refused, the same as the goal's own", func(t *testing.T) {
+		conn := newTestDB(t)
+		id := seedGoal(t, conn, "New laptop", 500000, "BRL", "saving")
+		if err := logChange(conn, id, 500000, 0, ""); err == nil {
+			t.Error("logged a target of zero; want the CHECK to refuse it")
+		}
+	})
+
+	t.Run("the log goes with the goal", func(t *testing.T) {
+		conn := newTestDB(t)
+		id := seedGoal(t, conn, "New laptop", 500000, "BRL", "saving")
+		if err := logChange(conn, id, 500000, 300000, "mudei de ideia"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(`DELETE FROM goals WHERE id = ?`, id); err != nil {
+			t.Fatal(err)
+		}
+
+		// Unlike a transaction, an entry here is worth nothing without the goal
+		// it describes — there is no money in it to lose.
+		var n int
+		if err := conn.QueryRow(`SELECT count(*) FROM goal_target_log`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%d log entries survived their goal; want the cascade to take them", n)
+		}
+	})
+}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Store struct{ db *sql.DB }
@@ -81,7 +82,12 @@ func (s *Store) Create(g *Goal) error {
 //
 // The kind is not guarded the same way: flipping it inverts the progress, which
 // is the honest consequence of a goal that counts money in rather than out.
-func (s *Store) Update(g Goal) error {
+//
+// note is why the target moved, and is kept only when it did — an edit that
+// leaves the target alone has nothing to explain. The write and its log entry
+// go in one SQL transaction, so a goal can never end up at a target its history
+// does not account for.
+func (s *Store) Update(g Goal, note string) error {
 	if err := g.Validate(); err != nil {
 		return err
 	}
@@ -100,7 +106,14 @@ func (s *Store) Update(g Goal) error {
 				n, old.Currency)
 		}
 	}
-	res, err := s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(
 		`UPDATE goals SET name = ?, description = ?, target = ?, currency = ?, kind = ?,
 			updated_at = datetime('now') WHERE id = ?`,
 		g.Name, g.Description, g.Target, g.Currency, g.Kind, g.ID)
@@ -110,7 +123,36 @@ func (s *Store) Update(g Goal) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if old.Target != g.Target {
+		if _, err := tx.Exec(
+			`INSERT INTO goal_target_log (goal_id, previous, target, note) VALUES (?, ?, ?, ?)`,
+			g.ID, old.Target, g.Target, strings.TrimSpace(note)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// TargetLog is everything this goal's target has been, newest first. An empty
+// log is a goal that has aimed at the same number since the day it was made.
+func (s *Store) TargetLog(goalID int64) ([]TargetChange, error) {
+	rows, err := s.db.Query(
+		`SELECT id, previous, target, note, created_at FROM goal_target_log
+		 WHERE goal_id = ? ORDER BY created_at DESC, id DESC`, goalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var all []TargetChange
+	for rows.Next() {
+		var c TargetChange
+		if err := rows.Scan(&c.ID, &c.Previous, &c.Target, &c.Note, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		all = append(all, c)
+	}
+	return all, rows.Err()
 }
 
 // Delete is never refused. A goal is a label on the transactions that fed it,

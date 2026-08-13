@@ -84,7 +84,11 @@ func pct(g Goal) string {
 //
 // linked is how many transactions already name this goal — zero on a new one.
 // It decides whether the currency may still be chosen.
-func Form(g *Goal, title string, linked int) error {
+//
+// The returned string is why the target moved, asked for only on an edit and
+// kept by the store only if it really did move. A new goal has no history to
+// explain: its target is where the history starts.
+func Form(g *Goal, title string, linked int) (string, error) {
 	target := ""
 	if g.Target != 0 {
 		target = core.FormatAmount(g.Target, g.Cur())
@@ -120,12 +124,21 @@ func Form(g *Goal, title string, linked int) error {
 			return nil
 		}))
 
+	// Only on an edit, and always on one: a conditional field that appears the
+	// moment the target is touched is a page huh would have to redraw underfoot,
+	// and the store drops the note when the target did not move anyway.
+	note := ""
+	if g.ID != 0 {
+		fields = append(fields, huh.NewInput().Title("Why?").
+			Description("optional — kept only if the target changed").Value(&note))
+	}
+
 	form := huh.NewForm(huh.NewGroup(fields...).Title(title)).WithTheme(huh.ThemeCharm())
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return core.ErrCancelled
+			return "", core.ErrCancelled
 		}
-		return err
+		return "", err
 	}
 
 	g.Name = strings.TrimSpace(g.Name)
@@ -135,7 +148,7 @@ func Form(g *Goal, title string, linked int) error {
 	if n, err := core.ParseAmount(target, g.Cur()); err == nil {
 		g.Target = n
 	}
-	return nil
+	return strings.TrimSpace(note), nil
 }
 
 // pickerRow is how one goal reads in the picker list.
@@ -197,10 +210,38 @@ func left(g Goal) string {
 	}
 }
 
+// history is what the target has been, newest first, one line each: the day it
+// moved, what it moved from and to, and why if a reason was given.
+//
+// The day only — the clock time is stored but a target does not move twice in an
+// afternoon, and the date is what anyone reading this is looking for.
+func history(g Goal, log []TargetChange) []string {
+	lines := []string{"", core.DimStyle.Render("target")}
+	for _, c := range log {
+		line := core.DimStyle.Render(day(c.CreatedAt)) + "  " +
+			g.Fmt(c.Previous) + core.DimStyle.Render(" → ") + g.Fmt(c.Target)
+		if c.Note != "" {
+			line += "  " + core.DimStyle.Render(c.Note)
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// day is the date out of a stored timestamp. They are written by SQLite as
+// "2026-08-13 09:12:00", so the day is everything up to the space.
+func day(stamp string) string {
+	date, _, _ := strings.Cut(stamp, " ")
+	return date
+}
+
 // Details renders one goal as a card bordered in the colour of its state. There
 // are no field names: the currency symbol, the verb and the bar already say
 // what every value is.
-func Details(g Goal) string {
+//
+// log is the goal's target history, and may be nil — the list of cards passes
+// none, so a screen of goals stays readable, and only `kakei g ID` asks for it.
+func Details(g Goal, log []TargetChange) string {
 	accent := lipgloss.Color(stateColor(g))
 	if accent == "" {
 		accent = lipgloss.Color(core.DimColor)
@@ -216,6 +257,10 @@ func Details(g Goal) string {
 			" "+core.DimStyle.Render(g.Verb()+"  of "+g.Fmt(g.Target)),
 		left(g),
 		bar(g)+"  "+core.DimStyle.Render(pct(g)))
+
+	if len(log) > 0 {
+		lines = append(lines, history(g, log)...)
+	}
 
 	if g.CreatedAt != "" {
 		lines = append(lines, "", core.DimStyle.Render(

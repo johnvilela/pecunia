@@ -38,6 +38,20 @@ type Goal struct {
 	UpdatedAt string
 }
 
+// TargetChange is one move of a goal's target, with the date it happened and
+// the reason if one was given. A target is a promise about the future, and the
+// future moves: a R$5000.00 bill settles for R$3500.00 on an offer.
+//
+// Previous is carried alongside Target so an entry explains itself without
+// walking back through the ones before it.
+type TargetChange struct {
+	ID        int64
+	Previous  int64
+	Target    int64
+	Note      string
+	CreatedAt string
+}
+
 var ErrNotFound = errors.New("goal not found")
 
 func (g Goal) Cur() core.Currency { return core.CurrencyByCode(g.Currency) }
