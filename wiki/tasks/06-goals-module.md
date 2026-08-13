@@ -87,3 +87,32 @@ Two follow-up requests after the module first landed, both driven by the user lo
 `go build`/`go test ./...`/`gofmt`/`go vet` clean throughout. Commits: `feat(goals): mark a reached goal in the list` → `feat(goals): list goals as cards, table behind --resume` → `docs(wiki): record the goals module session` (the last one updated the session's own wiki page, which had stopped documenting itself four commits early).
 
 Links: [[decisions/0010-goal-progress-summed-from-the-ledger]] · [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[decisions/0001-balance-as-int64-minor-units]] · [[rules/tdd]] · [[sessions/4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279]]
+
+## Update: the target log
+
+A target is a promise about the future, and the future moves — the case that
+drove this: a R$5000.00 credit-card bill settles for R$3500.00 on an offer, and
+the goal has to follow without losing the fact that it ever said R$5000.00.
+
+`internal/db/migrations/008_goal_target_log.sql` adds `goal_target_log`
+(`goal_id` CASCADE, `previous`, `target`, `note`, `created_at`). Four calls, all
+the user's:
+
+- **Target changes only.** Not freeform notes, not an audit trail of every edit.
+- **Entered through `kakei g e`.** The form asks "Why?" on any edit; the store
+  keeps the note only when the target actually moved, so there is no conditional
+  field for huh to redraw underfoot.
+- **`goals.target` stays the live value**, with the log beside it rather than
+  derived from it. `Store.Update(g, note)` writes the row and its log entry in
+  one SQL transaction, so a goal can never sit at a target its history does not
+  account for.
+- **Shown on `kakei g ID` only.** `Details(g, log)` takes the entries; the
+  `kakei g` list passes nil, because a screen of goals each dragging its own log
+  behind it is not a list.
+
+Each entry stores `previous` as well as `target`, so a line explains itself
+without walking back through the ones before it — and so the original target is
+not lost despite creation writing no entry. The card renders the day only; the
+clock time is stored but a target does not move twice in an afternoon.
+
+Commit: `feat(goals): log every target change with its date and reason`.
