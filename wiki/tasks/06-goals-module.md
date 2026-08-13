@@ -75,4 +75,15 @@ Commits: `feat(goals): add the goals cli with progress read from the ledger` →
 `feat(transactions): let a transaction name the goal it feeds` →
 `feat(seed): add goal fixtures to the dev database`.
 
-Links: [[decisions/0010-goal-progress-summed-from-the-ledger]] · [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[decisions/0001-balance-as-int64-minor-units]] · [[rules/tdd]]
+## Update (continues session 4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279): reached mark and card view
+
+Full session: [[sessions/4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279]].
+
+Two follow-up requests after the module first landed, both driven by the user looking at real output and both TDD'd like the rest:
+
+- **A green `✓` after the name once a goal is reached.** Rendered through a `name(g)` helper rather than inlined in `Table`, so the picker and the transaction form's goal select carry it too. A paying goal that reaches zero gets the same mark, since `Reached()` covers both kinds.
+- **`kakei g` now lists one card per goal, with its bar — the compact table moved behind `kakei g --resume`.** The bar is the point and does not fit a table row. Handled with a plain string comparison in `runGoals`, not a `flag.FlagSet`: one boolean does not need the ten-flag machinery `kakei t` has. The `✓` mark was extended to the detail card at the same time, since the card is now the default view.
+
+`go build`/`go test ./...`/`gofmt`/`go vet` clean throughout. Commits: `feat(goals): mark a reached goal in the list` → `feat(goals): list goals as cards, table behind --resume` → `docs(wiki): record the goals module session` (the last one updated the session's own wiki page, which had stopped documenting itself four commits early).
+
+Links: [[decisions/0010-goal-progress-summed-from-the-ledger]] · [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[decisions/0001-balance-as-int64-minor-units]] · [[rules/tdd]] · [[sessions/4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279]]
