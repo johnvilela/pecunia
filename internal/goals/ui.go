@@ -221,7 +221,7 @@ const dividerRune = "─"
 // The day only — the clock time is stored but a target does not move twice in an
 // afternoon, and the date is what anyone reading this is looking for.
 func history(g Goal, log []TargetChange) []string {
-	lines := []string{core.DimStyle.Render("target")}
+	lines := []string{core.DimStyle.Render("updates")}
 	for _, c := range log {
 		lines = append(lines, core.DimStyle.Render(day(c.CreatedAt))+"  "+
 			g.Fmt(c.Previous)+core.DimStyle.Render(" → ")+g.Fmt(c.Target))

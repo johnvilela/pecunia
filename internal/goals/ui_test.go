@@ -260,7 +260,7 @@ func TestDetailsTargetLog(t *testing.T) {
 		got := Details(g, log)
 
 		stamps := lineOf(got, createdIcon)
-		entries := lineOf(got, "target")
+		entries := lineOf(got, "updates")
 		if stamps < 0 || entries < 0 {
 			t.Fatalf("card is missing the dates or the history:\n%s", got)
 		}
@@ -306,7 +306,7 @@ func TestDetailsTargetLog(t *testing.T) {
 
 	t.Run("a goal whose target never moved shows no history at all", func(t *testing.T) {
 		got := Details(laptop(), nil)
-		if strings.Contains(got, "target") {
+		if strings.Contains(got, "updates") {
 			t.Errorf("the card talks about a history it does not have:\n%s", got)
 		}
 	})

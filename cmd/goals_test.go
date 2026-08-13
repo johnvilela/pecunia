@@ -265,7 +265,7 @@ func TestGoalsTargetHistory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(got, "target") {
+		if strings.Contains(got, "updates") {
 			t.Errorf("the card talks about a history it does not have:\n%s", got)
 		}
 	})
