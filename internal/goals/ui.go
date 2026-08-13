@@ -206,7 +206,7 @@ func Details(g Goal) string {
 		accent = lipgloss.Color(core.DimColor)
 	}
 
-	lines := []string{lipgloss.NewStyle().Bold(true).Render(g.Name)}
+	lines := []string{lipgloss.NewStyle().Bold(true).Render(name(g))}
 	if g.Description != "" {
 		lines = append(lines, core.DimStyle.Render(g.Description))
 	}

@@ -193,6 +193,15 @@ func TestReachedMark(t *testing.T) {
 		}
 	})
 
+	t.Run("the card carries it too, since that is the default list", func(t *testing.T) {
+		if !strings.Contains(Details(reached), reachedMark) {
+			t.Errorf("the card does not mark the reached goal:\n%s", Details(reached))
+		}
+		if strings.Contains(Details(laptop()), reachedMark) {
+			t.Errorf("the card marks a goal that is not there yet:\n%s", Details(laptop()))
+		}
+	})
+
 	t.Run("the picker and the transaction form's select carry it too", func(t *testing.T) {
 		if !strings.Contains(Label(reached), reachedMark) {
 			t.Errorf("Label = %q; want the mark on a reached goal", Label(reached))

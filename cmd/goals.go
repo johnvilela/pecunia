@@ -18,11 +18,14 @@ Usage:
   kakei g     [command] [ID]
 
 Commands:
-  (none)          list your goals
-  new     | n     create a goal
+  (none)             list your goals, one card each
+  new     | n        create a goal
   edit    | e  [ID]  edit a goal
   delete  | d  [ID]  delete a goal
-  ID              show one goal in detail
+  ID                 show one goal in detail
+
+Flags:
+  --resume           the same list as one compact table, without the bars
 
 A goal holds no money of its own: what it is at is the sum of the transactions
 linked to it, worked out every time it is read. A saving goal climbs on money
@@ -77,12 +80,15 @@ var errNoGoals = errors.New("no goals yet — create one with: kakei g n")
 
 func runGoals(args []string) error {
 	if len(args) == 0 {
-		return listGoals()
+		return listGoals(false)
 	}
 	sub, rest := args[0], args[1:]
 	if isHelpFlag(sub) {
 		fmt.Fprint(out, goalsHelp)
 		return nil
+	}
+	if sub == "--resume" {
+		return listGoals(true)
 	}
 
 	name := map[string]string{
@@ -153,7 +159,10 @@ func resolveOrPickGoal(s *goals.Store, args []string, title string) (goals.Goal,
 	return goals.Pick(all, title)
 }
 
-func listGoals() error {
+// listGoals shows every goal as its own card, which is where the bar fits. The
+// table is the same list with the bars taken out, for when there are more goals
+// than there is screen.
+func listGoals(resume bool) error {
 	return withGoals(func(s *goals.Store) error {
 		all, err := s.List()
 		if err != nil {
@@ -163,7 +172,13 @@ func listGoals() error {
 			fmt.Fprintln(out, errNoGoals)
 			return nil
 		}
-		fmt.Fprintln(out, goals.Table(all))
+		if resume {
+			fmt.Fprintln(out, goals.Table(all))
+			return nil
+		}
+		for _, g := range all {
+			fmt.Fprint(out, goals.Details(g))
+		}
 		return nil
 	})
 }

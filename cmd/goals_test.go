@@ -84,18 +84,56 @@ func TestGoalsHelp(t *testing.T) {
 }
 
 func TestGoalsList(t *testing.T) {
-	t.Run("shows the table", func(t *testing.T) {
+	t.Run("shows a card per goal, with its bar", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "kakei.db")
 		seedGoal(t, path, newLaptop())
+		other := newLaptop()
+		other.Name, other.Description = "Holiday", ""
+		seedGoal(t, path, other)
 
 		got, err := runGoalsIn(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"GOAL", "PROGRESS", "TARGET", "New laptop", "R$5000.00"} {
+		for _, want := range []string{
+			"New laptop", "money for the new machine", "Holiday",
+			"R$5000.00", "to go", "░",
+		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("list is missing %q:\n%s", want, got)
 			}
+		}
+		if strings.Contains(got, "GOAL") {
+			t.Errorf("list fell back to the table:\n%s", got)
+		}
+	})
+
+	t.Run("--resume shows the table instead", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedGoal(t, path, newLaptop())
+
+		got, err := runGoalsIn(t, path, "--resume")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"GOAL", "PROGRESS", "TARGET", "New laptop", "R$5000.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("--resume is missing %q:\n%s", want, got)
+			}
+		}
+		if strings.Contains(got, "░") {
+			t.Errorf("--resume drew a bar, so it is not the compact view:\n%s", got)
+		}
+	})
+
+	t.Run("--resume on an empty database says how to start", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		got, err := runGoalsIn(t, path, "--resume")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "kakei g n") {
+			t.Errorf("--resume does not say how to make a goal:\n%s", got)
 		}
 	})
 
