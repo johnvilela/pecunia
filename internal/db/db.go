@@ -53,9 +53,26 @@ func Open() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := conn.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		conn.Close()
-		return nil, err
+	// One connection, so two writes inside a process queue instead of colliding.
+	// Nothing here holds a transaction open while querying the pool — every
+	// store either passes its *sql.Tx down or does its reads before Begin — so
+	// this cannot deadlock.
+	conn.SetMaxOpenConns(1)
+	for _, pragma := range []string{
+		"PRAGMA foreign_keys = ON",
+		// Write-ahead logging, so a reader never blocks the writer and the
+		// writer never blocks a reader. This is a property of the file rather
+		// than of the handle: the second opener finds it already set.
+		"PRAGMA journal_mode = WAL",
+		// And when two writers do meet — a chatbot beside a terminal — wait for
+		// the lock rather than failing the command outright. Without it SQLite
+		// returns "database is locked" the instant it cannot get in.
+		"PRAGMA busy_timeout = 5000",
+	} {
+		if _, err := conn.Exec(pragma); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("%s: %w", pragma, err)
+		}
 	}
 	if err := migrate(conn); err != nil {
 		conn.Close()

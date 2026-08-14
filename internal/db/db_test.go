@@ -198,3 +198,77 @@ func TestCardBillsSchema(t *testing.T) {
 		}
 	})
 }
+
+// A second process reading while this one writes is the whole reason for these:
+// on the rollback journal, and with no busy timeout, it is an instant
+// "database is locked" rather than a wait.
+func TestOpenConcurrencySettings(t *testing.T) {
+	open := func(t *testing.T) *sql.DB {
+		t.Helper()
+		setDevDB(t, "")
+		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		conn, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		return conn
+	}
+
+	t.Run("the journal is write-ahead, so a reader never blocks the writer", func(t *testing.T) {
+		conn := open(t)
+		var mode string
+		if err := conn.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.EqualFold(mode, "wal") {
+			t.Fatalf("journal_mode = %q; want wal", mode)
+		}
+	})
+
+	t.Run("a busy database is waited on rather than refused", func(t *testing.T) {
+		conn := open(t)
+		var ms int
+		if err := conn.QueryRow(`PRAGMA busy_timeout`).Scan(&ms); err != nil {
+			t.Fatal(err)
+		}
+		if ms < 1000 {
+			t.Fatalf("busy_timeout = %dms; want a wait long enough to be worth having", ms)
+		}
+	})
+
+	t.Run("one connection, so two writes in a process queue instead of colliding", func(t *testing.T) {
+		conn := open(t)
+		if n := conn.Stats().MaxOpenConnections; n != 1 {
+			t.Fatalf("MaxOpenConnections = %d; want 1", n)
+		}
+	})
+
+	// WAL is a property of the file, not of the handle: a second opener has to
+	// find it already set rather than set it again.
+	t.Run("reopening the same file keeps every setting", func(t *testing.T) {
+		setDevDB(t, "")
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		t.Setenv("KAKEI_DB", path)
+
+		first, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		first.Close()
+
+		second, err := Open()
+		if err != nil {
+			t.Fatalf("reopening: %v", err)
+		}
+		defer second.Close()
+
+		var mode string
+		if err := second.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.EqualFold(mode, "wal") {
+			t.Fatalf("journal_mode on reopen = %q; want wal", mode)
+		}
+	})
+}
