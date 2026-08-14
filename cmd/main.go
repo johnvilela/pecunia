@@ -28,6 +28,7 @@ const help = `Usage:
 
 Commands:
   setup             create the SQLite database (--force to back up and recreate)
+  summary | s       where you stand today (--date, --month)
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
   credit-card | cc  manage credit cards (new, edit, delete, bill, pay)
   category | ct     manage categories (new, edit, delete, details)
@@ -61,6 +62,9 @@ func run() int {
 		force := fs.Bool("force", false, "back up the existing database and create a new one")
 		fs.Parse(os.Args[2:])
 		return report("setup", runSetup(*force))
+
+	case "summary", "s":
+		return report("summary", runSummary(os.Args[2:]))
 
 	case "accounts", "ac":
 		return report("accounts", runAccounts(os.Args[2:]))

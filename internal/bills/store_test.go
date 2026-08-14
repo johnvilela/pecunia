@@ -419,3 +419,43 @@ func TestUnpaidLeavesTheOpenBillOut(t *testing.T) {
 		t.Fatalf("Unpaid = %v; want only the closed July bill", closingDates(t, owing))
 	}
 }
+
+// The clock is a field so a test can pin it, but only this package could reach
+// it. A caller that has already decided its own today — a summary asks every
+// module the same date — has to be able to hand it over, or the one answer
+// coming from the wall clock is the one that disagrees.
+func TestNewStoreAt(t *testing.T) {
+	t.Run("takes the clock it is given", func(t *testing.T) {
+		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		conn, err := db.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+
+		c := card(10, 20)
+		c.ID = 0
+		if err := cards.NewStore(conn).Create(&c); err != nil {
+			t.Fatal(err)
+		}
+
+		s := NewStoreAt(conn, func() time.Time { return mustDate(t, "2026-08-06") })
+		charge(t, s, c, "2026-07-05", "Groceries", 89050, "outcome")
+
+		all, err := s.List(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) == 0 {
+			t.Fatal("no bills at all — the card should have July's and August's by now")
+		}
+		for _, b := range all {
+			// August 10th is the cycle still taking charges on the 6th; anything
+			// past it was invented against a clock nobody asked for.
+			if b.ClosesOn > "2026-08-10" {
+				t.Errorf("a bill closing on %s exists; want nothing past the clock it was given",
+					b.ClosesOn)
+			}
+		}
+	})
+}

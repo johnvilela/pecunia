@@ -24,7 +24,13 @@ type Store struct {
 	now func() time.Time
 }
 
-func NewStore(db *sql.DB) *Store { return &Store{db: db, now: time.Now} }
+func NewStore(db *sql.DB) *Store { return NewStoreAt(db, time.Now) }
+
+// NewStoreAt is NewStore with the clock named. Every read here decides what has
+// closed by comparing against today, so a caller that has already pinned its
+// own today — a summary asks every module the same date — has to be able to
+// hand it over.
+func NewStoreAt(db *sql.DB, now func() time.Time) *Store { return &Store{db: db, now: now} }
 
 const columns = `id, closes_on, due_on, total, status`
 
