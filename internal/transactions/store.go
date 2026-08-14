@@ -203,6 +203,9 @@ func (s *Store) Create(t *Transaction) error {
 	if err := t.Validate(); err != nil {
 		return err
 	}
+	if err := s.refuseFrozen(*t); err != nil {
+		return err
+	}
 	n := int(t.Installment.Count)
 	if n < 1 {
 		n = 1
@@ -282,6 +285,9 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 		return err
 	}
 	if err := t.Validate(); err != nil {
+		return err
+	}
+	if err := s.refuseFrozen(t); err != nil {
 		return err
 	}
 	return s.inTx(func(tx *sql.Tx) error {
@@ -395,6 +401,40 @@ func scoped(tx *sql.Tx, id int64, scope Scope) ([]Transaction, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// refuseFrozen keeps new money off an account that has been put out of play.
+//
+// It is a store check rather than a field on Transaction and a rule in
+// Validate, unlike the goal currency beside it: a bool defaults to false, and
+// false would mean "not frozen" — so a caller that only knew the id would sail
+// straight through the very guard it needs. There is no safe zero value here,
+// so the fact is read at the boundary instead of carried across it.
+//
+// Only the target being written to is checked. Money already sitting on a
+// frozen account must still be able to leave — moving it off, or deleting it
+// outright — or freezing an account would be a way to lose track of what is in
+// it rather than a way to close it.
+func (s *Store) refuseFrozen(t Transaction) error {
+	// Cards do not freeze; a card that should stop being used has a limit.
+	if t.Account.ID == 0 {
+		return nil
+	}
+	var frozen bool
+	var code string
+	err := s.db.QueryRow(`SELECT is_frozen, code FROM accounts WHERE id = ?`, t.Account.ID).
+		Scan(&frozen, &code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("no account %d to file this against", t.Account.ID)
+	}
+	if err != nil {
+		return err
+	}
+	if frozen {
+		return fmt.Errorf("%s is frozen — unfreeze it with `kakei ac %s freeze` before filing money against it",
+			code, code)
+	}
+	return nil
 }
 
 // fillGoalCurrency reads back the two currencies a goal link has to agree on:

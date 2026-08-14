@@ -1379,3 +1379,134 @@ func equal(a, b []int64) bool {
 	}
 	return true
 }
+
+// A frozen account is out of play. The form already leaves it off the list, but
+// the form is not the only way in: a bill payment, a recurring payment, an
+// import or a bot all reach the store directly.
+func TestFrozenAccountsRefuseNewMoney(t *testing.T) {
+	// freeze puts CASH1 out of play and hands its id back.
+	freeze := func(t *testing.T, w *world) int64 {
+		t.Helper()
+		if _, err := w.accounts.ToggleFreeze(w.cash.ID); err != nil {
+			t.Fatal(err)
+		}
+		return w.cash.ID
+	}
+
+	t.Run("a transaction against a frozen account is refused", func(t *testing.T) {
+		w := newWorld(t)
+		frozen := freeze(t, w)
+
+		tr := w.tx()
+		tr.Account = Ref{ID: frozen}
+		err := w.store.Create(&tr)
+		if err == nil {
+			t.Fatal("money was filed against a frozen account; want it refused")
+		}
+		if !strings.Contains(err.Error(), "frozen") {
+			t.Fatalf("err = %v; want it to say the account is frozen", err)
+		}
+	})
+
+	t.Run("the refused write leaves no row and no moved balance", func(t *testing.T) {
+		w := newWorld(t)
+		frozen := freeze(t, w)
+		before := w.accountBalance(t, frozen)
+
+		tr := w.tx()
+		tr.Account = Ref{ID: frozen}
+		if err := w.store.Create(&tr); err == nil {
+			t.Fatal("want the create refused")
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d transactions written; want none", n)
+		}
+		if got := w.accountBalance(t, frozen); got != before {
+			t.Fatalf("balance moved to %d; want it left at %d", got, before)
+		}
+	})
+
+	t.Run("a bill payment cannot be filed from a frozen account either", func(t *testing.T) {
+		// PayBill goes through Create, which is the point of putting the guard
+		// there rather than in the command.
+		w := newWorld(t)
+		frozen := freeze(t, w)
+
+		// A real bill, so it is the freeze that refuses this and not a missing
+		// row — the error has to name the account, not the bill.
+		res, err := w.conn.Exec(
+			`INSERT INTO card_bills (card_id, closes_on, due_on, total, status)
+			 VALUES (?, '2026-07-15', '2026-07-22', 50000, 'closed')`, w.nucrd.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bill, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = w.store.PayBill(bill, frozen, 5000, "2026-08-08")
+		if err == nil {
+			t.Fatal("a bill was paid from a frozen account; want it refused")
+		}
+		if !strings.Contains(err.Error(), "frozen") {
+			t.Fatalf("err = %v; want the freeze to be what refused it", err)
+		}
+	})
+
+	t.Run("a credit card is unaffected — only accounts freeze", func(t *testing.T) {
+		w := newWorld(t)
+		freeze(t, w)
+
+		tr := w.tx()
+		tr.Account, tr.Card = Ref{}, Ref{ID: w.nucrd.ID}
+		if err := w.store.Create(&tr); err != nil {
+			t.Fatalf("a card charge was refused: %v", err)
+		}
+	})
+
+	t.Run("an unfrozen account still takes money", func(t *testing.T) {
+		w := newWorld(t)
+		freeze(t, w)
+		if err := w.store.Create(&[]Transaction{w.tx()}[0]); err != nil {
+			t.Fatalf("INTER is not frozen and was refused: %v", err)
+		}
+	})
+
+	t.Run("moving a transaction onto a frozen account is refused", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		frozen := freeze(t, w)
+
+		tr.Account = Ref{ID: frozen}
+		if err := w.store.Update(tr, ScopeOne); err == nil {
+			t.Fatal("a transaction was moved onto a frozen account; want it refused")
+		}
+	})
+
+	// Freezing is not a trap. Money already on a frozen account has to be able
+	// to leave it, or the freeze is a way to lose track of it.
+	t.Run("moving a transaction off a frozen account is allowed", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		if _, err := w.accounts.ToggleFreeze(w.inter.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		tr.Account = Ref{ID: w.cash.ID}
+		if err := w.store.Update(tr, ScopeOne); err != nil {
+			t.Fatalf("money could not leave a frozen account: %v", err)
+		}
+	})
+
+	t.Run("deleting a transaction on a frozen account is allowed", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		if _, err := w.accounts.ToggleFreeze(w.inter.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.store.Delete(tr.ID, ScopeOne); err != nil {
+			t.Fatalf("a transaction on a frozen account could not be cleaned up: %v", err)
+		}
+	})
+}
