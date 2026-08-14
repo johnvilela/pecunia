@@ -3,6 +3,7 @@ package accounts
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -83,9 +84,33 @@ func (s *Store) Create(a *Account) error {
 	return err
 }
 
+// Update refuses to move an account to another currency while transactions are
+// filed against it. Nothing is converted by such a change: the amounts already
+// recorded stay the integers they are, and re-reading a balance of centavos as
+// satoshis changes what every one of them means without a row having moved —
+// the same call goals and budgets make, and for the same reason.
+//
+// A recurring bill's expected amount is not guarded the same way. It is
+// documented as a starting point rather than a fact, and an account with a bill
+// paid from it has the transactions to prove it anyway.
 func (s *Store) Update(a Account) error {
 	if err := core.ValidateName(a.Name); err != nil {
 		return err
+	}
+	old, err := s.Get(a.ID)
+	if err != nil {
+		return err
+	}
+	if old.Currency != a.Currency {
+		n, err := s.Linked(a.ID)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf(
+				"%d transaction(s) are already recorded against this account in %s — move or delete them before changing its currency",
+				n, old.Currency)
+		}
 	}
 	a.Code = core.NormalizeCode(a.Code)
 	res, err := s.db.Exec(
@@ -136,3 +161,12 @@ func (s *Store) CodeTaken(code string) (bool, error) {
 
 // SuggestCode returns a free code to pre-fill the form with.
 func (s *Store) SuggestCode() (string, error) { return core.SuggestCode(s.CodeTaken) }
+
+// Linked is how many transactions are filed against this account. It is what
+// stands between recorded money and a currency change, and what the form asks
+// before offering the currency at all.
+func (s *Store) Linked(id int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM transactions WHERE account_id = ?`, id).Scan(&n)
+	return n, err
+}

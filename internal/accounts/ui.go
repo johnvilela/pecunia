@@ -62,7 +62,19 @@ func Form(s *Store, a *Account, title string) error {
 	original := core.NormalizeCode(a.Code)
 	balance := core.FormatAmount(a.Balance, a.Cur())
 
-	form := huh.NewForm(huh.NewGroup(
+	// The currency is only offered while nothing is filed against the account.
+	// Asking for it and then refusing the whole form at the store is a worse way
+	// to say the same thing — and the store still says it, because huh skips its
+	// validators when stdin ends mid-form.
+	linked := 0
+	if a.ID != 0 {
+		var err error
+		if linked, err = s.Linked(a.ID); err != nil {
+			return err
+		}
+	}
+
+	fields := []huh.Field{
 		huh.NewInput().Title("Name").Value(&a.Name).Validate(core.ValidateName),
 		huh.NewInput().Title("Description").Description("optional").Value(&a.Description),
 		huh.NewInput().Title("Code").Description(fmt.Sprintf("%d characters — suggestion pre-filled", core.CodeLen)).
@@ -84,14 +96,19 @@ func Form(s *Store, a *Account, title string) error {
 				return nil
 			}),
 		huh.NewSelect[string]().Title("Color").Options(core.ColorOptions()...).Value(&a.Color),
-		huh.NewSelect[string]().Title("Currency").Options(core.CurrencyOptions()...).Value(&a.Currency),
-		// Currency comes first so this validator knows the scale to parse with.
-		huh.NewInput().Title("Balance").Value(&balance).
-			Validate(func(v string) error {
-				_, err := core.ParseAmount(v, core.CurrencyByCode(a.Currency))
-				return err
-			}),
-	).Title(title)).WithTheme(huh.ThemeCharm())
+	}
+	if linked == 0 {
+		fields = append(fields, huh.NewSelect[string]().Title("Currency").
+			Options(core.CurrencyOptions()...).Value(&a.Currency))
+	}
+	// Currency comes first so this validator knows the scale to parse with.
+	fields = append(fields, huh.NewInput().Title("Balance").Value(&balance).
+		Validate(func(v string) error {
+			_, err := core.ParseAmount(v, core.CurrencyByCode(a.Currency))
+			return err
+		}))
+
+	form := huh.NewForm(huh.NewGroup(fields...).Title(title)).WithTheme(huh.ThemeCharm())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {

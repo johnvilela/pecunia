@@ -541,3 +541,86 @@ func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
 		}
 	})
 }
+
+// file writes one transaction against the card. Raw SQL, and through the
+// store's own handle, because this package cannot import the one that owns
+// transactions.
+func file(t *testing.T, s *Store, cardID int64, value int64) {
+	t.Helper()
+	if _, err := s.db.Exec(
+		`INSERT INTO transactions (title, card_id, value, kind, date)
+		 VALUES ('Compra', ?, ?, 'outcome', '2026-08-08')`, cardID, value); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A card's currency is the scale its limit, its balance and every charge on it
+// are stored at. Moving it under live history re-reads all three.
+func TestCurrencyIsFrozenOnceAnythingIsCharged(t *testing.T) {
+	t.Run("the currency cannot move under recorded charges", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, Card{Code: "NUCRD", Name: "Nubank", Color: "violet",
+			Currency: "BRL", Limit: 500000, ClosingDay: 20, DueDay: 28})
+		file(t, s, c.ID, 50000)
+
+		c.Currency = "BTC"
+		err := s.Update(c)
+		if err == nil {
+			t.Fatal("the currency was changed under a recorded charge; want it refused")
+		}
+		if !strings.Contains(err.Error(), "BRL") {
+			t.Fatalf("err = %v; want it to name the currency already recorded", err)
+		}
+
+		got, err := s.Get(c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Currency != "BRL" {
+			t.Fatalf("currency = %q; want the refused write to have changed nothing", got.Currency)
+		}
+	})
+
+	t.Run("the currency moves freely while nothing is charged", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, Card{Code: "NUCRD", Name: "Nubank", Color: "violet",
+			Currency: "BRL", Limit: 500000, ClosingDay: 20, DueDay: 28})
+
+		c.Currency = "USD"
+		if err := s.Update(c); err != nil {
+			t.Fatalf("changing the currency of an unused card: %v", err)
+		}
+		got, err := s.Get(c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Currency != "USD" {
+			t.Fatalf("currency = %q; want USD", got.Currency)
+		}
+	})
+
+	t.Run("everything else still edits with charges on it", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, Card{Code: "NUCRD", Name: "Nubank", Color: "violet",
+			Currency: "BRL", Limit: 500000, ClosingDay: 20, DueDay: 28})
+		file(t, s, c.ID, 50000)
+
+		c.Name, c.Limit, c.DueDay = "Nubank Ultravioleta", 800000, 25
+		if err := s.Update(c); err != nil {
+			t.Fatalf("an edit that left the currency alone was refused: %v", err)
+		}
+	})
+}
+
+func TestLinked(t *testing.T) {
+	s := newTestStore(t)
+	c := mustCreate(t, s, Card{Code: "NUCRD", Name: "Nubank", Color: "violet",
+		Currency: "BRL", Limit: 500000, ClosingDay: 20, DueDay: 28})
+	if n, err := s.Linked(c.ID); err != nil || n != 0 {
+		t.Fatalf("Linked on an unused card = %d, %v; want 0", n, err)
+	}
+	file(t, s, c.ID, 50000)
+	if n, err := s.Linked(c.ID); err != nil || n != 1 {
+		t.Fatalf("Linked = %d, %v; want 1", n, err)
+	}
+}

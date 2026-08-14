@@ -108,7 +108,19 @@ func Form(s *Store, c *Card, title string) error {
 		return err
 	}
 
-	form := huh.NewForm(huh.NewGroup(
+	// The currency is only offered while nothing is charged to the card. Asking
+	// for it and then refusing the whole form at the store is a worse way to say
+	// the same thing — and the store still says it, because huh skips its
+	// validators when stdin ends mid-form.
+	linked := 0
+	if c.ID != 0 {
+		var err error
+		if linked, err = s.Linked(c.ID); err != nil {
+			return err
+		}
+	}
+
+	fields := []huh.Field{
 		huh.NewInput().Title("Name").Value(&c.Name).Validate(core.ValidateName),
 		huh.NewInput().Title("Description").Description("optional").Value(&c.Description),
 		huh.NewInput().Title("Code").Description(fmt.Sprintf("%d characters — suggestion pre-filled", core.CodeLen)).
@@ -130,7 +142,12 @@ func Form(s *Store, c *Card, title string) error {
 				return nil
 			}),
 		huh.NewSelect[string]().Title("Color").Options(core.ColorOptions()...).Value(&c.Color),
-		huh.NewSelect[string]().Title("Currency").Options(core.CurrencyOptions()...).Value(&c.Currency),
+	}
+	if linked == 0 {
+		fields = append(fields, huh.NewSelect[string]().Title("Currency").
+			Options(core.CurrencyOptions()...).Value(&c.Currency))
+	}
+	fields = append(fields,
 		// Currency comes first so the two validators below know the scale.
 		huh.NewInput().Title("Limit").Value(&limit).Validate(amount),
 		huh.NewConfirm().Title("May it be used over the limit?").
@@ -151,8 +168,9 @@ func Form(s *Store, c *Card, title string) error {
 		huh.NewInput().Title("Closing day").Description("day of the month, 1-31").
 			Value(&closing).Validate(day),
 		huh.NewInput().Title("Due day").Description("day of the month, 1-31").
-			Value(&due).Validate(day),
-	).Title(title)).WithTheme(huh.ThemeCharm())
+			Value(&due).Validate(day))
+
+	form := huh.NewForm(huh.NewGroup(fields...).Title(title)).WithTheme(huh.ThemeCharm())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {

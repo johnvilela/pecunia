@@ -477,3 +477,102 @@ func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
 		}
 	})
 }
+
+// file writes one transaction against the account. Raw SQL, and through the
+// store's own handle, because this package cannot import the one that owns
+// transactions.
+func file(t *testing.T, s *Store, accountID int64, value int64) {
+	t.Helper()
+	if _, err := s.db.Exec(
+		`INSERT INTO transactions (title, account_id, value, kind, date)
+		 VALUES ('Feira', ?, ?, 'outcome', '2026-08-08')`, accountID, value); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An account's currency is the scale every amount filed against it is stored
+// at. Moving it under live history does not convert anything — it silently
+// re-reads every centavo already recorded as a satoshi.
+func TestCurrencyIsFrozenOnceAnythingIsFiled(t *testing.T) {
+	t.Run("the currency cannot move under recorded transactions", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, Account{Code: "WLLT1", Name: "Wallet", Color: "orange",
+			Currency: "BRL", Balance: 100000})
+		file(t, s, a.ID, 50000)
+
+		a.Currency = "BTC"
+		err := s.Update(a)
+		if err == nil {
+			t.Fatal("the currency was changed under a recorded transaction; want it refused")
+		}
+		if !strings.Contains(err.Error(), "BRL") {
+			t.Fatalf("err = %v; want it to name the currency already recorded", err)
+		}
+
+		got, err := s.Get(a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Currency != "BRL" {
+			t.Fatalf("currency = %q; want the refused write to have changed nothing", got.Currency)
+		}
+	})
+
+	t.Run("the currency moves freely while nothing is filed", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, Account{Code: "WLLT1", Name: "Wallet", Color: "orange",
+			Currency: "BRL"})
+
+		a.Currency = "USD"
+		if err := s.Update(a); err != nil {
+			t.Fatalf("changing the currency of an empty account: %v", err)
+		}
+		got, err := s.Get(a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Currency != "USD" {
+			t.Fatalf("currency = %q; want USD", got.Currency)
+		}
+	})
+
+	t.Run("everything else still edits with transactions filed", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, Account{Code: "WLLT1", Name: "Wallet", Color: "orange",
+			Currency: "BRL", Balance: 100000})
+		file(t, s, a.ID, 50000)
+
+		a.Name, a.Color, a.Description = "Carteira", "green", "a de todo dia"
+		if err := s.Update(a); err != nil {
+			t.Fatalf("an edit that left the currency alone was refused: %v", err)
+		}
+	})
+
+	t.Run("another account's transactions do not freeze this one", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, Account{Code: "WLLT1", Name: "Wallet", Color: "orange",
+			Currency: "BRL"})
+		other := mustCreate(t, s, Account{Code: "WLLT2", Name: "Other", Color: "blue",
+			Currency: "BRL", Balance: 100000})
+		file(t, s, other.ID, 50000)
+
+		a.Currency = "USD"
+		if err := s.Update(a); err != nil {
+			t.Fatalf("a transaction on another account froze this one: %v", err)
+		}
+	})
+}
+
+func TestLinked(t *testing.T) {
+	s := newTestStore(t)
+	a := mustCreate(t, s, Account{Code: "WLLT1", Name: "Wallet", Color: "orange",
+		Currency: "BRL", Balance: 100000})
+	if n, err := s.Linked(a.ID); err != nil || n != 0 {
+		t.Fatalf("Linked on an empty account = %d, %v; want 0", n, err)
+	}
+	file(t, s, a.ID, 50000)
+	file(t, s, a.ID, 10000)
+	if n, err := s.Linked(a.ID); err != nil || n != 2 {
+		t.Fatalf("Linked = %d, %v; want 2", n, err)
+	}
+}

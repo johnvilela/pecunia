@@ -3,6 +3,7 @@ package cards
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -89,12 +90,32 @@ func (s *Store) Create(c *Card) error {
 	return err
 }
 
+// Update refuses to move a card to another currency while charges are recorded
+// against it. Nothing is converted by such a change: the limit, the balance and
+// every charge already filed stay the integers they are, and re-reading them at
+// another scale changes what all three mean without a row having moved — the
+// same call accounts, goals and budgets make.
 func (s *Store) Update(c Card) error {
 	if err := core.ValidateName(c.Name); err != nil {
 		return err
 	}
 	if err := c.ValidateBalance(); err != nil {
 		return err
+	}
+	old, err := s.Get(c.ID)
+	if err != nil {
+		return err
+	}
+	if old.Currency != c.Currency {
+		n, err := s.Linked(c.ID)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf(
+				"%d transaction(s) are already recorded against this card in %s — move or delete them before changing its currency",
+				n, old.Currency)
+		}
 	}
 	c.Code = core.NormalizeCode(c.Code)
 	res, err := s.db.Exec(
@@ -133,3 +154,12 @@ func (s *Store) CodeTaken(code string) (bool, error) {
 
 // SuggestCode returns a free code to pre-fill the form with.
 func (s *Store) SuggestCode() (string, error) { return core.SuggestCode(s.CodeTaken) }
+
+// Linked is how many transactions are filed against this card. It is what
+// stands between recorded charges and a currency change, and what the form asks
+// before offering the currency at all.
+func (s *Store) Linked(id int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM transactions WHERE card_id = ?`, id).Scan(&n)
+	return n, err
+}
