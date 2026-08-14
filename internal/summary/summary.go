@@ -12,6 +12,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/goals"
 	"kakei/internal/recurring"
@@ -63,13 +64,19 @@ type Summary struct {
 	Accounts []accounts.Account // frozen ones left out, as `kakei ac` leaves them
 	Cards    []cards.Card
 	Goals    []goals.Goal
+	// Budgets are read for the month the window falls in, whatever the window
+	// is: a budget is a cap on a month, so a day summary shows the month its day
+	// belongs to rather than a day's worth of one. Archived ones are left out,
+	// as `kakei bg` leaves them.
+	Budgets []budgets.Budget
 }
 
 // empty is a database nobody has put anything in yet, as opposed to a quiet
 // day. A quiet day still has balances to show.
 func (s Summary) empty() bool {
 	return len(s.Ledger) == 0 && s.Due.Empty() && s.Soon.Empty() &&
-		len(s.Accounts) == 0 && len(s.Cards) == 0 && len(s.Goals) == 0
+		len(s.Accounts) == 0 && len(s.Cards) == 0 && len(s.Goals) == 0 &&
+		len(s.Budgets) == 0
 }
 
 // live is whether the window takes in today. What is due is a fact about now,
@@ -172,7 +179,13 @@ func (s *Summary) collectBalances(conn *sql.DB) error {
 	if s.Cards, err = cards.NewStore(conn).List(); err != nil {
 		return err
 	}
-	s.Goals, err = goals.NewStore(conn).List()
+	if s.Goals, err = goals.NewStore(conn).List(); err != nil {
+		return err
+	}
+	// A budget caps a month, so the window's own month is what it is read for —
+	// and unlike what is due, it is a fact about that month rather than about
+	// now, so a window that is already over still has one worth reading.
+	s.Budgets, err = budgets.NewStore(conn).List(transactions.CycleOf(s.Period.From), false)
 	return err
 }
 

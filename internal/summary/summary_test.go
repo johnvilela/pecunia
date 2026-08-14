@@ -8,6 +8,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/db"
 	"kakei/internal/goals"
@@ -488,6 +489,101 @@ func TestCollectBalancesAndGoals(t *testing.T) {
 		}
 		if !s.empty() {
 			t.Errorf("a fresh database came back with something on it: %+v", s)
+		}
+	})
+}
+
+// budget caps a category and hands back what a summary should read for it.
+func (w *world) budget(t *testing.T, code, name string, amount int64) budgets.Budget {
+	t.Helper()
+	res, err := w.conn.Exec(
+		`INSERT INTO categories (code, name, color) VALUES (?, ?, 'green')`, code[:4]+"C", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := budgets.Budget{Code: code, Name: name, Amount: amount, Currency: "BRL",
+		Color: "green", Category: transactions.Ref{ID: cat}}
+	if err := budgets.NewStore(w.conn).Create(&b); err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestCollectBudgets(t *testing.T) {
+	t.Run("a day summary reads the budgets of the month it falls in", func(t *testing.T) {
+		w := newWorld(t)
+		b := w.budget(t, "FOOD1", "Food", 80000)
+		w.file(t, transactions.Transaction{Title: "Feira", Value: 54000,
+			Kind: transactions.KindOutcome, Date: "2026-08-10",
+			Account:  transactions.Ref{ID: w.inter.ID},
+			Category: transactions.Ref{ID: b.Category.ID}})
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Budgets) != 1 {
+			t.Fatalf("Budgets = %d; want the one budget", len(s.Budgets))
+		}
+		// The day is one day, but a budget is a month — R$540.00 went out on the
+		// 10th and it is still what the month has spent.
+		if s.Budgets[0].Spent != 54000 {
+			t.Fatalf("Spent = %d; want the whole month's 54000", s.Budgets[0].Spent)
+		}
+		if s.Budgets[0].Cycle != "2026-08" {
+			t.Fatalf("Cycle = %q; want the month the day falls in", s.Budgets[0].Cycle)
+		}
+	})
+
+	t.Run("a month summary reads that month", func(t *testing.T) {
+		w := newWorld(t)
+		b := w.budget(t, "FOOD1", "Food", 80000)
+		w.file(t, transactions.Transaction{Title: "Feira", Value: 30000,
+			Kind: transactions.KindOutcome, Date: "2026-07-04",
+			Account:  transactions.Ref{ID: w.inter.ID},
+			Category: transactions.Ref{ID: b.Category.ID}})
+
+		s, err := Collect(w.conn, Period{From: "2026-07-01", To: "2026-07-31"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Budgets) != 1 || s.Budgets[0].Spent != 30000 {
+			t.Fatalf("Budgets = %+v; want July's 30000", s.Budgets)
+		}
+	})
+
+	t.Run("an archived budget is left out, as the list leaves it out", func(t *testing.T) {
+		w := newWorld(t)
+		b := w.budget(t, "FOOD1", "Food", 80000)
+		if err := budgets.NewStore(w.conn).SetActive(b.ID, false); err != nil {
+			t.Fatal(err)
+		}
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Budgets) != 0 {
+			t.Fatalf("Budgets = %d; want the archived one left out", len(s.Budgets))
+		}
+	})
+
+	t.Run("a window that is already over still has its budgets", func(t *testing.T) {
+		// Unlike what is due, a budget is a fact about a month rather than about
+		// now, so an old month still has one worth reading.
+		w := newWorld(t)
+		w.budget(t, "FOOD1", "Food", 80000)
+
+		s, err := Collect(w.conn, Period{From: "2026-06-01", To: "2026-06-30"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Budgets) != 1 {
+			t.Fatalf("Budgets = %d; want the budget read for June anyway", len(s.Budgets))
 		}
 	})
 }

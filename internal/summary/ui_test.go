@@ -7,6 +7,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/goals"
 	"kakei/internal/recurring"
@@ -281,6 +282,38 @@ func TestRender(t *testing.T) {
 		}
 		if strings.Contains(got, "TRANSACTIONS") {
 			t.Errorf("an empty database rendered the whole screen anyway:\n%s", got)
+		}
+	})
+}
+
+func foodBudget() budgets.Budget {
+	return budgets.Budget{ID: 1, Code: "FOOD1", Name: "Food", Amount: 80000,
+		Currency: "BRL", Color: "green", Active: true, Cycle: "2026-08", Spent: 54000,
+		Category: transactions.Ref{ID: 1, Code: "FOODC", Name: "Food"}}
+}
+
+func TestRenderBudgets(t *testing.T) {
+	t.Run("the budgets get their own section", func(t *testing.T) {
+		got := Render(Summary{
+			Title: "Thursday, 13 August 2026", Today: on("2026-08-13"),
+			Period:  Period{From: "2026-08-13", To: "2026-08-13"},
+			Budgets: []budgets.Budget{foodBudget()},
+		})
+		for _, want := range []string{"BUDGETS", "Food", "R$540.00", "R$800.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the budgets section is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("no budgets means no section at all", func(t *testing.T) {
+		got := Render(Summary{
+			Title: "Thursday, 13 August 2026", Today: on("2026-08-13"),
+			Period:   Period{From: "2026-08-13", To: "2026-08-13"},
+			Accounts: []accounts.Account{inter()},
+		})
+		if strings.Contains(got, "BUDGETS") {
+			t.Errorf("an empty budgets section was printed:\n%s", got)
 		}
 	})
 }

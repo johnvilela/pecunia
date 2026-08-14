@@ -12,6 +12,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/db"
@@ -141,6 +142,105 @@ func seedGoals(conn *sql.DB) (int, error) {
 		}
 		if err := s.Create(&f); err != nil {
 			return n, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
+// budgetFixture is one sample budget, written against a category code rather
+// than an id because the category only gets one when it is seeded.
+//
+// Archived and Moved are what give the dev database something in every branch
+// of the renderers: a budget nobody is tracking, and a cap with a history.
+type budgetFixture struct {
+	Budget   budgets.Budget
+	Category string // category code
+	Archived bool
+	Moved    int64  // the cap it used to be, 0 when it has never moved
+	Why      string // why it moved
+}
+
+// budgetFixtures cover a spread the summary and the table have to render: one
+// comfortably inside its cap, one running ahead of the month, one that a real
+// August blows straight through, one in another currency, and one put away.
+var budgetFixtures = []budgetFixture{
+	{
+		Budget: budgets.Budget{Code: "FOODB", Name: "Comida", Description: "mercado e feira",
+			Amount: 90000, Currency: "BRL", Color: "lime"},
+		Category: "FOOD1",
+		Moved:    80000,
+		Why:      "arroz e carne subiram",
+	},
+	{
+		Budget: budgets.Budget{Code: "RESTB", Name: "Restaurantes", Description: "comer fora e delivery",
+			Amount: 40000, Currency: "BRL", Color: "orange"},
+		Category: "RESTA",
+	},
+	{
+		Budget: budgets.Budget{Code: "TRANB", Name: "Transporte", Description: "combustível e aplicativos",
+			Amount: 35000, Currency: "BRL", Color: "teal"},
+		Category: "TRANS",
+	},
+	{
+		Budget: budgets.Budget{Code: "LSURB", Name: "Lazer", Description: "passeios e viagens",
+			Amount: 60000, Currency: "BRL", Color: "violet"},
+		Category: "LSURE",
+	},
+	{
+		Budget: budgets.Budget{Code: "HOBBB", Name: "Hobbies em dólar", Description: "assinaturas gringas",
+			Amount: 5000, Currency: "USD", Color: "yellow"},
+		Category: "HOBBY",
+	},
+	{
+		Budget: budgets.Budget{Code: "CAREB", Name: "Cuidados", Description: "cancelado, ficou no histórico",
+			Amount: 25000, Currency: "BRL", Color: "pink"},
+		Category: "CARE1",
+		Archived: true,
+	},
+}
+
+// seedBudgets inserts the fixtures that are not there yet, skipping on the code
+// so it stays re-runnable, and then puts one of them away and moves another's
+// cap — both so the dev database has one of each to look at.
+func seedBudgets(conn *sql.DB) (int, error) {
+	s := budgets.NewStore(conn)
+
+	n := 0
+	for _, f := range budgetFixtures {
+		taken, err := s.CodeTaken(f.Budget.Code)
+		if err != nil {
+			return n, err
+		}
+		if taken {
+			continue
+		}
+		cat, err := categoryID(conn, f.Category)
+		if err != nil {
+			return n, fmt.Errorf("%s: %w", f.Budget.Code, err)
+		}
+
+		b := f.Budget
+		b.Category = transactions.Ref{ID: cat}
+		// The cap it used to have goes in first, so the update below is what
+		// writes the log entry — there is no other way to put one there, and
+		// that is the point of the log.
+		if f.Moved != 0 {
+			b.Amount = f.Moved
+		}
+		if err := s.Create(&b); err != nil {
+			return n, fmt.Errorf("%s: %w", b.Code, err)
+		}
+		if f.Moved != 0 {
+			b.Amount = f.Budget.Amount
+			if err := s.Update(b, f.Why); err != nil {
+				return n, fmt.Errorf("%s: %w", b.Code, err)
+			}
+		}
+		if f.Archived {
+			if err := s.SetActive(b.ID, false); err != nil {
+				return n, fmt.Errorf("%s: %w", b.Code, err)
+			}
 		}
 		n++
 	}
@@ -413,6 +513,20 @@ var txFixtures = []txFixture{
 	{Title: "Farmácia", Kind: transactions.KindOutcome,
 		Value: 8790, Days: 47, Category: "HLTH1", Account: "INTER", Tags: []string{"casa"}},
 
+	// Both dated today, and both against LSURE, so the Lazer budget is over its
+	// R$600.00 cap in whatever month the seeder runs in — the one budget state
+	// the fixtures above never reach, since every other cap sits comfortably
+	// inside its month.
+	//
+	// Days 0 and not a few days back: a fixture dated the 2nd of a month falls
+	// into the month before when the seeder runs on the 1st, and then the month
+	// being looked at has nothing over in it after all.
+	{Title: "Passagem para Salvador", Description: "feriado prolongado",
+		Kind: transactions.KindOutcome, Value: 52000, Days: 0, Category: "LSURE",
+		Account: "NUBON", Tags: []string{"lazer"}},
+	{Title: "Pousada", Kind: transactions.KindOutcome,
+		Value: 23500, Days: 0, Category: "LSURE", Card: "NUCRD", Tags: []string{"lazer"}},
+
 	// Filed against goals, so the dev database has bars in three states to look
 	// at: part way, past the target, and a goal with nothing against it at all.
 	{Title: "Guardar para o notebook", Kind: transactions.KindIncome,
@@ -615,6 +729,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// After the categories, which is all a budget points at.
+	bg, err := seedBudgets(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	// The recurring bills come after the accounts, cards and categories they
 	// point at, and their payments after the bills themselves.
 	rb, err := seedRecurring(conn)
@@ -628,6 +748,6 @@ func main() {
 		os.Exit(1)
 	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills and %d recurring payment(s) into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills, %d recurring payment(s) and %d of %d budgets into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, bg, len(budgetFixtures), path)
 }

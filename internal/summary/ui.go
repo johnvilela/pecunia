@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/core"
 	"kakei/internal/goals"
@@ -126,6 +127,10 @@ func Render(s Summary) string {
 	if len(s.Goals) > 0 {
 		b.WriteString(section("GOALS", goals.Table(s.Goals)))
 	}
+	// Last, and after the balances: a budget is about a month rather than about
+	// a moment, so it is what to read once the question of what is in the
+	// account has been answered.
+	b.WriteString(section("BUDGETS", budgets.Table(s.Budgets, s.Today)))
 	return b.String()
 }
 

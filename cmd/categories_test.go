@@ -163,3 +163,29 @@ func TestCategoriesWithoutADatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestCategoryDeleteNote(t *testing.T) {
+	cases := []struct {
+		name    string
+		budgets int
+		want    string
+	}{
+		{"nothing caps it", 0, "cannot be undone"},
+		{"one budget goes with it", 1, "1 budget"},
+		{"several go with it", 3, "3 budget"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := categoryDeleteNote(tc.budgets)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("note = %q; want it to mention %q", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a category nothing caps says nothing about budgets", func(t *testing.T) {
+		if strings.Contains(categoryDeleteNote(0), "budget") {
+			t.Fatalf("note = %q; want no mention of budgets", categoryDeleteNote(0))
+		}
+	})
+}

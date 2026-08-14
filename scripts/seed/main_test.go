@@ -8,6 +8,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
+	"kakei/internal/budgets"
 	"kakei/internal/cards"
 	"kakei/internal/categories"
 	"kakei/internal/core"
@@ -743,4 +744,150 @@ func TestSeedRecurring(t *testing.T) {
 			t.Errorf("%d payments linked, %d reported", linked, n)
 		}
 	})
+}
+
+func TestSeedBudgets(t *testing.T) {
+	t.Run("inserts every fixture", func(t *testing.T) {
+		conn := newTestConn(t)
+		// A budget caps a category, so the starter set has to be there first.
+		if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedBudgets(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(budgetFixtures) {
+			t.Fatalf("seedBudgets inserted %d; want %d", n, len(budgetFixtures))
+		}
+
+		all, err := budgets.NewStore(conn).List(budgets.ThisCycle(time.Now()), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(budgetFixtures) {
+			t.Fatalf("database holds %d budgets; want %d", len(all), len(budgetFixtures))
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := newTestConn(t)
+		if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedBudgets(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedBudgets(conn)
+		if err != nil {
+			t.Fatalf("second seed: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second seed inserted %d; want 0", n)
+		}
+	})
+
+	t.Run("every fixture names a category that exists", func(t *testing.T) {
+		conn := newTestConn(t)
+		if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedBudgets(conn); err != nil {
+			t.Fatal(err)
+		}
+		all, err := budgets.NewStore(conn).List(budgets.ThisCycle(time.Now()), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range all {
+			if b.Category.ID == 0 || b.Category.Code == "" {
+				t.Fatalf("budget %s caps nothing: %+v", b.Code, b.Category)
+			}
+		}
+	})
+
+	t.Run("one budget has been archived and one has moved its cap", func(t *testing.T) {
+		// The dev database is what the renderers are looked at through, so both
+		// branches need something to render.
+		conn := newTestConn(t)
+		if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedBudgets(conn); err != nil {
+			t.Fatal(err)
+		}
+		s := budgets.NewStore(conn)
+		all, err := s.List(budgets.ThisCycle(time.Now()), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		archived, moved := 0, 0
+		for _, b := range all {
+			if !b.Active {
+				archived++
+			}
+			log, err := s.AmountLog(b.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(log) > 0 {
+				moved++
+			}
+		}
+		if archived == 0 {
+			t.Error("no archived budget in the dev database")
+		}
+		if moved == 0 {
+			t.Error("no budget with a cap that has moved in the dev database")
+		}
+	})
+}
+
+// The dev database is what the budget renderers are looked at through, and an
+// over-spent budget is the one state the plain fixtures never reach on their
+// own — every other cap sits comfortably inside its month.
+func TestSeedLeavesABudgetOverSpent(t *testing.T) {
+	conn := newTestConn(t)
+	seedEverything(t, conn)
+	if _, err := seedBudgets(conn); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	all, err := budgets.NewStore(conn).List(budgets.ThisCycle(now), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	over := 0
+	for _, b := range all {
+		if b.Status(now) == budgets.StatusOver {
+			over++
+		}
+	}
+	if over == 0 {
+		t.Fatalf("no budget is over its cap in %s; the over branch has nothing to render:\n%+v",
+			budgets.ThisCycle(now), all)
+	}
+}
+
+// Whatever day of the month the seeder runs on, the over-spend has to land in
+// the month being looked at — a fixture dated a few days back falls into last
+// month when the seeder runs on the 2nd.
+func TestOverSpendFixturesAreDatedToday(t *testing.T) {
+	found := false
+	for _, f := range txFixtures {
+		if f.Category != "LSURE" {
+			continue
+		}
+		found = true
+		if f.Days != 0 {
+			t.Errorf("%q is %d days back; want 0, or it misses the month it is meant to blow",
+				f.Title, f.Days)
+		}
+	}
+	if !found {
+		t.Fatal("no fixture spends against LSURE, so the Lazer budget can never go over")
+	}
 }

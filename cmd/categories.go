@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"kakei/internal/budgets"
 	"kakei/internal/categories"
 	"kakei/internal/core"
 )
@@ -91,14 +92,17 @@ func runCategories(args []string) error {
 		return nil
 	}
 
-	return withCategories(func(s *categories.Store) error {
+	return withConn(func(conn *sql.DB) error {
+		s := categories.NewStore(conn)
 		switch name {
 		case "new":
 			return createCategory(s)
 		case "edit":
 			return editCategory(s, rest)
 		default:
-			return deleteCategory(s, rest)
+			// Deleting reaches past the categories table: a budget over this
+			// category goes with it, and the confirmation has to say so.
+			return deleteCategory(conn, s, rest)
 		}
 	})
 }
@@ -173,14 +177,32 @@ func editCategory(s *categories.Store, args []string) error {
 	return nil
 }
 
-func deleteCategory(s *categories.Store, args []string) error {
+// categoryDeleteNote is what the confirmation says the delete will cost. A
+// budget caps exactly one category and is nothing without it, so the schema
+// takes it along — which is worth knowing before the delete, not after.
+//
+// The transactions are not mentioned: they keep their money and lose the label,
+// which is what ON DELETE SET NULL has always done here.
+func categoryDeleteNote(budgetCount int) string {
+	note := "This cannot be undone."
+	if budgetCount > 0 {
+		note += fmt.Sprintf(" %d budget(s) over it go too, with everything they have been.", budgetCount)
+	}
+	return note
+}
+
+func deleteCategory(conn *sql.DB, s *categories.Store, args []string) error {
 	c, err := resolveOrPickCategory(s, args, "Delete which category?")
+	if err != nil {
+		return err
+	}
+	capped, err := budgets.NewStore(conn).CountForCategory(c.ID)
 	if err != nil {
 		return err
 	}
 	ok, err := core.Confirm(
 		fmt.Sprintf("Delete %s (%s)?", c.Code, c.Name),
-		"This cannot be undone.")
+		categoryDeleteNote(capped))
 	if err != nil {
 		return err
 	}
