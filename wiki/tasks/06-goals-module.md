@@ -1,5 +1,5 @@
 ---
-tags: [goals, module, tui, sqlite, tdd, currency]
+tags: [goals, module, tui, sqlite, tdd]
 ---
 
 # Goals module
@@ -112,7 +112,20 @@ the user's:
 
 Each entry stores `previous` as well as `target`, so a line explains itself
 without walking back through the ones before it — and so the original target is
-not lost despite creation writing no entry. The card renders the day only; the
-clock time is stored but a target does not move twice in an afternoon.
+not lost despite creation writing no entry. Verified with the dev-seed fixture
+(the "Quitar o Itaú" goal, cut from R$4120.00 to R$3500.00 with the note
+"consegui um desconto à vista"), idempotent on reseed and a no-op on a database
+missing the fixture.
 
-Commit: `feat(goals): log every target change with its date and reason`.
+Commit: `feat(goals): log every target change with its date and reason` (`806ea43`).
+
+## Update: card layout — dates above the divider, reason on its own line, header renamed
+
+Two follow-up requests from screenshots, right after the target log landed, both TDD'd.
+
+- **The goal's own `created`/`updated` line moved above the target history**, with a divider between them shown only when a log exists (`rule()`, width computed from the widest line on the card once every line exists, floor `cardWidth - 4`). A goal whose target never moved renders exactly as before — no divider, no history block. Each entry's reason moved to its own line under its date-and-amounts line, so a long reason no longer stretches the card sideways. User's own framing: "The createdAt and updatedAt related to the goal must be above the logs... a line dividing and below it the logs if exists (the divider should only be shown if a log exists)." Commit: `feat(goals): put the goal's dates above a divided target history` (`a938775`).
+- **The history header changed from `"target"` to `"updates"`** — plural, since it labels a list of entries. Commit: `feat(goals): head the target history with updates` (`dace007`).
+
+A background subagent was also sent to update the wiki for these card changes; its outcome is not confirmed by the transcript. A follow-up `/git-commit` found nothing left to commit — everything from this stretch had already landed across `806ea43`, `b924855`, `a938775`, `dace007`.
+
+Links: [[sessions/4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279]] · [[decisions/0010-goal-progress-summed-from-the-ledger]] · [[rules/tdd]]

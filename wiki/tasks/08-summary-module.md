@@ -1,5 +1,5 @@
 ---
-tags: [summary, module, cli, reporting, tdd]
+tags: [summary, cli, reporting, tdd, git]
 ---
 
 # Summary module
@@ -89,7 +89,7 @@ Files: `internal/summary/{summary,ui}.go`, `internal/bills/store.go`,
 ## Update: the floating owed-total fix
 
 A follow-up in the same session — user, from a screenshot of `kakei bill`: "The
-still owned text is feeling strange there, like floating, this also happens on
+still owed text is feeling strange there, like floating, this also happens on
 the bills command." The fix moved the owed total into `recurring.Board`'s table
 itself as its last row, and lifted the money-formatting `owedLine` used
 (one figure per currency, sorted, sign in front of the symbol) into
@@ -103,3 +103,9 @@ Links: [[decisions/0012-summary-composes-existing-stores]] ·
 [[decisions/0010-goal-progress-summed-from-the-ledger]] ·
 [[decisions/0002-flat-cmd-package-layout]] · [[rules/tdd]] ·
 [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]]
+
+## Update: committed
+
+Landed as `3937815` — `feat(summary): show where you stand for a day or a month`, wiki as `87f87e6` — `docs(wiki): record the summary module`. Committed on a resumed session, after and separately from [[tasks/07-recurring-bills-module]], on the user's request to split the two ("/git-commit separate the bill form the summary") since both had been built in the same uncommitted working tree and both touched `cmd/main.go`'s dispatch switch — the `summary` case was removed for the bill commit and restored for this one.
+
+Links: [[tasks/07-recurring-bills-module]] · [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]]

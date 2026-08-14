@@ -1,5 +1,5 @@
 ---
-tags: [recurring, bills, module, tui, sqlite, tdd]
+tags: [recurring, bills, sqlite, tdd, git]
 ---
 
 # Recurring bills module
@@ -94,9 +94,10 @@ User, from a screenshot: "i think we should improve this using the bubbles packa
 
 User: "on the seed. Add a scenario where the bill is paid too." A sixth fixture, `INTNT` (Internet, Vivo Fibra, R$129.90, opens 1st, due 10th), was added along with a new `PaidNow` fixture flag that settles the current cycle in addition to past ones — the seeded board now shows all five states (`upcoming`, `open`, `overdue`, `paid`, `archived`) at once. Payment dates clamp to today when open-day+2 hasn't happened yet, so nothing seeded is ever dated into the future. The fixture-coverage test was tightened from `len(states) >= 3` (which is how a missing `paid` state had slipped through undetected) to demanding every one of the five states by name, and a new case asserts no seeded payment is future-dated — both written red-first per [[rules/tdd]].
 
-All 11 packages green, `gofmt`/`vet` clean after each change. The user asked to commit after both the table redesign and the seed addition; both were handled by a background subagent, and the outcome is not confirmed by the transcript.
+All 11 packages green, `gofmt`/`vet` clean after each change.
 
 Links: [[decisions/0011-recurring-bills-derived-from-payments]] · [[decisions/0006-credit-card-money-schedule-and-over-limit-model]] · [[decisions/0008-transaction-double-entry-tags-and-filters]] · [[tasks/04-transactions-module]] · [[rules/tdd]] · [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]]
+
 ## Update: the owed total closes the table instead of hanging under it
 
 User, from a screenshot of `kakei bill`: "The still owned text is feeling
@@ -122,3 +123,11 @@ sits on a line that starts with the table's own border, which is what "floating"
 meant in a form a test can check.
 
 Links: [[decisions/0012-summary-composes-existing-stores]] · [[tasks/08-summary-module]] · [[rules/tdd]]
+
+## Update: committed, split from the summary work
+
+Full session (resumed): [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]].
+
+Resolves the open question this page and [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]] both left hanging — three separate "commit this" requests whose outcome went unconfirmed. On a later, resumed session the user asked to "/git-commit separate the bill form the summary", since the recurring-bills module and the summary module ([[tasks/08-summary-module]]) had been built back to back in the same uncommitted working tree. Landed as `46a7efa` — `feat(bill): add recurring monthly bills tracked from their payments`, wiki as `d4b4735` — `docs(wiki): record the recurring bills module`. Because `cmd/main.go` carried both modules' dispatch cases, the summary case was removed, the bill commit made, then the case restored before the summary work was committed separately. `core.MoneyLine` and the owed-total fix ([[decisions/0012-summary-composes-existing-stores]]) rode in this commit rather than the summary one, since `internal/recurring/ui.go` calls `core.MoneyLine` and `internal/recurring/` had no prior commit to diff against.
+
+Links: [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]] · [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]] · [[decisions/0012-summary-composes-existing-stores]] · [[tasks/08-summary-module]]
