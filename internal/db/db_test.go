@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -269,6 +270,106 @@ func TestOpenConcurrencySettings(t *testing.T) {
 		}
 		if !strings.EqualFold(mode, "wal") {
 			t.Fatalf("journal_mode on reopen = %q; want wal", mode)
+		}
+	})
+}
+
+// Every transaction you have ever recorded is in this one file. On a shared
+// machine the default umask leaves it world-readable, and the -wal beside it
+// holds the most recent writes.
+func TestOpenPermissions(t *testing.T) {
+	t.Run("the database file is readable only by its owner", func(t *testing.T) {
+		setDevDB(t, "")
+		path := filepath.Join(t.TempDir(), "kakei", "kakei.db")
+		t.Setenv("KAKEI_DB", path)
+
+		conn, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("database file is %04o; want 0600", perm)
+		}
+	})
+
+	t.Run("a directory kakei creates is its owner's alone", func(t *testing.T) {
+		setDevDB(t, "")
+		dir := filepath.Join(t.TempDir(), "kakei")
+		t.Setenv("KAKEI_DB", filepath.Join(dir, "kakei.db"))
+
+		conn, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o700 {
+			t.Fatalf("created directory is %04o; want 0700", perm)
+		}
+	})
+
+	// The directory may be $HOME, or /tmp, or anything else KAKEI_DB points
+	// into. Tightening one kakei did not create is not kakei's call to make.
+	t.Run("a directory that already existed is left exactly as it was", func(t *testing.T) {
+		setDevDB(t, "")
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("KAKEI_DB", filepath.Join(dir, "kakei.db"))
+
+		conn, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o755 {
+			t.Fatalf("an existing directory was changed to %04o; want it left at 0755", perm)
+		}
+	})
+
+	t.Run("the write-ahead log beside it is shut too", func(t *testing.T) {
+		setDevDB(t, "")
+		path := filepath.Join(t.TempDir(), "kakei", "kakei.db")
+		t.Setenv("KAKEI_DB", path)
+
+		conn, err := Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		// Something has to be written for the -wal to exist at all.
+		if _, err := conn.Exec(
+			`CREATE TABLE perm_check (id INTEGER PRIMARY KEY)`); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, suffix := range []string{"-wal", "-shm"} {
+			info, err := os.Stat(path + suffix)
+			if os.IsNotExist(err) {
+				continue // nothing written to it yet is nothing to leak
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if perm := info.Mode().Perm(); perm != 0o600 {
+				t.Errorf("%s is %04o; want 0600", suffix, perm)
+			}
 		}
 	})
 }

@@ -46,7 +46,10 @@ func Open() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// 0700 applies only to directories this creates. One that already exists is
+	// left alone: KAKEI_DB may point into $HOME, or /tmp, or anywhere else, and
+	// tightening a directory kakei did not make is not kakei's call.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 	conn, err := sql.Open("sqlite", path)
@@ -74,11 +77,34 @@ func Open() (*sql.DB, error) {
 			return nil, fmt.Errorf("%s: %w", pragma, err)
 		}
 	}
+	// Before the migrations, so SQLite takes the mode from an already-shut file
+	// when it makes the -wal and -shm beside it.
+	if err := shut(path); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	if err := migrate(conn); err != nil {
 		conn.Close()
 		return nil, err
 	}
-	return conn, nil
+	return conn, shut(path)
+}
+
+// shut takes the owner's read and write off everything else. Every transaction
+// ever recorded is in this one file, and the -wal beside it holds the most
+// recent of them — on a shared machine the default umask leaves both readable
+// by anyone with an account.
+//
+// A file that is not there yet has nothing to leak: the -wal and -shm appear
+// only once something is written, which is why this runs on both sides of the
+// migrations rather than once.
+func shut(path string) error {
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		if err := os.Chmod(p, 0o600); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrate applies every embedded migration not yet recorded in
