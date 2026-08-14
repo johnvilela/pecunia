@@ -32,6 +32,9 @@ const MaxInstallments = 60
 // DateLayout is the one date format kakei reads or writes, everywhere.
 const DateLayout = "2006-01-02"
 
+// CycleLayout is how the month a recurring bill's payment is for is written.
+const CycleLayout = "2006-01"
+
 // Ref is a resolved pointer to another module's row. The id is what a write
 // uses; the code, name and color are what the store's joins fill in, so a listed
 // transaction can be rendered without going back to the database.
@@ -78,8 +81,18 @@ type Transaction struct {
 	// none. A payment is an ordinary outcome on whichever account paid, which is
 	// why it never shows up as spending on the card it settles.
 	PaysBillID int64
-	CreatedAt  string
-	UpdatedAt  string
+	// Recurring is the recurring bill this pays — energy, Netflix, rent — and is
+	// nothing like PaysBillID above it: that one settles a credit-card
+	// statement and moves the card's balance, this one is a label saying which
+	// monthly cost the money went to. ID 0 when it pays none.
+	Recurring Ref
+	// Cycle is the month that payment was *for*, as YYYY-MM, which is not always
+	// the month it was made in: February's energy bill paid on 3 March carries
+	// the cycle 2026-02, and that is what clears February instead of leaving it
+	// overdue forever. Empty unless Recurring is set.
+	Cycle     string
+	CreatedAt string
+	UpdatedAt string
 }
 
 var ErrNotFound = errors.New("transaction not found")
@@ -161,6 +174,17 @@ func (t Transaction) Validate() error {
 		return fmt.Errorf("this goal counts %s and the transaction is in %s — link it to a goal in its own currency",
 			t.GoalCurrency, t.Currency)
 	}
+	// A recurring bill's payment says which month it settles, always. Without it
+	// a bill paid late leaves the month it was for owing forever, and a cycle on
+	// a transaction that pays no bill is a month with nothing to be a month of.
+	if (t.Recurring.ID == 0) != (t.Cycle == "") {
+		return errors.New("a payment names the bill it pays and the month it is for, or neither")
+	}
+	if t.Cycle != "" {
+		if _, err := time.Parse(CycleLayout, t.Cycle); err != nil {
+			return fmt.Errorf("a cycle is a month, written YYYY-MM, not %q", t.Cycle)
+		}
+	}
 	if t.PaysBillID != 0 {
 		// The money has to come from somewhere, and a card settling its own bill
 		// is a loop.
@@ -238,6 +262,27 @@ func ParseDate(s string) (string, error) {
 		return "", fmt.Errorf("date must be YYYY-MM-DD, like %s", Today())
 	}
 	return d.Format(DateLayout), nil
+}
+
+// ParseCycle accepts YYYY-MM and hands back the canonical form. A full date is
+// refused rather than trimmed: someone typing one means a day, and a cycle is a
+// month. The unpadded layout is what reads "2026-8" as well as "2026-08".
+func ParseCycle(s string) (string, error) {
+	d, err := time.Parse("2006-1", strings.TrimSpace(s))
+	if err != nil {
+		return "", fmt.Errorf("a cycle is a month, written YYYY-MM, like %s",
+			time.Now().Format(CycleLayout))
+	}
+	return d.Format(CycleLayout), nil
+}
+
+// CycleOf is the month a date falls in.
+func CycleOf(date string) string {
+	d, err := time.Parse(DateLayout, strings.TrimSpace(date))
+	if err != nil {
+		return ""
+	}
+	return d.Format(CycleLayout)
 }
 
 // Today is what a new transaction's date starts as.

@@ -1273,3 +1273,109 @@ func TestGoalAcrossASeries(t *testing.T) {
 		t.Errorf("a sibling moved to Goal.ID %d; want it left at %d", after[1].Goal.ID, id)
 	}
 }
+
+// recurringBill writes a recurring bill straight through SQL. This package
+// cannot import kakei/internal/recurring — that package imports this one,
+// because a payment names the bill it settles.
+func (w *world) recurringBill(t *testing.T, code string, account int64) int64 {
+	t.Helper()
+	var id int64
+	if err := w.conn.QueryRow(
+		`INSERT INTO recurring_bills (code, name, color, expected, account_id, open_day, due_day)
+		 VALUES (?, 'Energy', 'amber', 21490, ?, 5, 15) RETURNING id`, code, account).
+		Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestRecurringPayments(t *testing.T) {
+	t.Run("a payment carries its bill and its cycle back out", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.recurringBill(t, "ENERG", w.inter.ID)
+
+		tr := w.tx()
+		tr.Title, tr.Value = "Energy", 21490
+		tr.Recurring, tr.Cycle = Ref{ID: bill}, "2026-08"
+		got, err := w.store.Get(w.create(t, tr).ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Recurring.ID != bill {
+			t.Errorf("bill = %d, want %d", got.Recurring.ID, bill)
+		}
+		if got.Recurring.Code != "ENERG" {
+			t.Errorf("bill code = %q, want ENERG — the join has to carry it", got.Recurring.Code)
+		}
+		if got.Cycle != "2026-08" {
+			t.Errorf("cycle = %q, want 2026-08", got.Cycle)
+		}
+	})
+
+	t.Run("a payment still moves the balance it came out of", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.recurringBill(t, "ENERG", w.inter.ID)
+		before := w.accountBalance(t, w.inter.ID)
+
+		tr := w.tx()
+		tr.Value = 21490
+		tr.Recurring, tr.Cycle = Ref{ID: bill}, "2026-08"
+		w.create(t, tr)
+
+		if got := w.accountBalance(t, w.inter.ID); got != before-21490 {
+			t.Errorf("balance = %d, want %d — a bill payment is an ordinary outcome", got, before-21490)
+		}
+	})
+
+	t.Run("the filter narrows to one bill", func(t *testing.T) {
+		w := newWorld(t)
+		energy := w.recurringBill(t, "ENERG", w.inter.ID)
+		water := w.recurringBill(t, "WATER", w.inter.ID)
+
+		tr := w.tx()
+		tr.Recurring, tr.Cycle = Ref{ID: energy}, "2026-07"
+		july := w.create(t, tr)
+		tr.Cycle, tr.Date = "2026-08", "2026-08-08"
+		august := w.create(t, tr)
+		tr.Recurring, tr.Cycle = Ref{ID: water}, "2026-08"
+		w.create(t, tr)
+		w.create(t, w.tx()) // nothing to do with a bill at all
+
+		// Newest first, like every other list.
+		if got, want := listed(t, w.store, Filter{RecurringID: energy}), []int64{august.ID, july.ID}; !equal(got, want) {
+			t.Errorf("listed %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an edit can take the cycle off with the bill", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.recurringBill(t, "ENERG", w.inter.ID)
+		tr := w.tx()
+		tr.Recurring, tr.Cycle = Ref{ID: bill}, "2026-08"
+		made := w.create(t, tr)
+
+		made.Recurring, made.Cycle = Ref{}, ""
+		if err := w.store.Update(made, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		got, err := w.store.Get(made.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Recurring.ID != 0 || got.Cycle != "" {
+			t.Errorf("still linked to bill %d cycle %q after being unlinked", got.Recurring.ID, got.Cycle)
+		}
+	})
+}
+
+func equal(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

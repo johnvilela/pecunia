@@ -16,6 +16,7 @@ import (
 	"kakei/internal/categories"
 	"kakei/internal/db"
 	"kakei/internal/goals"
+	"kakei/internal/recurring"
 	"kakei/internal/transactions"
 )
 
@@ -142,6 +143,197 @@ func seedGoals(conn *sql.DB) (int, error) {
 			return n, fmt.Errorf("%s: %w", f.Name, err)
 		}
 		n++
+	}
+	return n, nil
+}
+
+// recurringFixture is one sample recurring bill, written against codes rather
+// than ids because the account, card and category it points at only get theirs
+// when they are seeded.
+type recurringFixture struct {
+	Bill     recurring.Bill
+	Account  string // exactly one of these two
+	Card     string
+	Category string // category code, empty for none
+	Archived bool
+	// PaidCycles is how many months back to file a payment for, newest first —
+	// 1 is last month only. The current month is deliberately left alone on most
+	// of them, so the board has something to owe.
+	PaidCycles int
+	// PaidNow settles the month the seeder runs in as well, so the board has a
+	// bill that is already done for this cycle.
+	PaidNow bool
+	// Vary is how much each seeded payment moves off the expected amount, in
+	// minor units, so an energy bill's average is not its expected amount.
+	Vary int64
+}
+
+// recurringFixtures cover every state the board renders: one overdue, one still
+// upcoming, one settled, one on a credit card and one archived.
+//
+// The two days are picked around the 1st and the 28th rather than today, so the
+// same fixtures land in different states depending on when the seeder is run —
+// which is the point of looking at a dev database.
+var recurringFixtures = []recurringFixture{
+	{
+		Bill: recurring.Bill{Code: "ENERG", Name: "Energia", Description: "Neoenergia",
+			Color: "amber", Expected: 21490, OpenDay: 5, DueDay: 15, Tags: []string{"casa", "fixo"}},
+		Account: "INTER", Category: "UTILS", PaidCycles: 3, Vary: 1830,
+	},
+	{
+		Bill: recurring.Bill{Code: "ALUGL", Name: "Aluguel", Color: "red",
+			Expected: 180000, OpenDay: 1, DueDay: 10, Tags: []string{"casa"}},
+		Account: "NUBON", Category: "HOME1", PaidCycles: 2,
+	},
+	{
+		// On the card, and cheap enough that it never troubles NUCRD's limit.
+		Bill: recurring.Bill{Code: "NFLIX", Name: "Netflix", Description: "plano família",
+			Color: "violet", Expected: 5590, OpenDay: 22, DueDay: 28, Tags: []string{"lazer"}},
+		Card: "NUCRD", Category: "ENTER", PaidCycles: 4,
+	},
+	{
+		// Already settled for the month the seeder runs in, so the board always
+		// has a paid row — and, with the ones above it, every state at once.
+		Bill: recurring.Bill{Code: "INTNT", Name: "Internet", Description: "Vivo Fibra",
+			Color: "blue", Expected: 12990, OpenDay: 1, DueDay: 10, Tags: []string{"casa", "fixo"}},
+		Account: "INTER", Category: "UTILS", PaidCycles: 5, PaidNow: true,
+	},
+	{
+		// No expected amount: a bill nobody has seen a number for yet.
+		Bill: recurring.Bill{Code: "WATER", Name: "Água", Color: "cyan",
+			OpenDay: 12, DueDay: 20},
+		Account: "INTER", Category: "UTILS",
+	},
+	{
+		Bill: recurring.Bill{Code: "GYMXX", Name: "Academia", Description: "cancelada",
+			Color: "lime", Expected: 12990, OpenDay: 5, DueDay: 10},
+		Account: "INTER", Category: "CARE1", Archived: true, PaidCycles: 2,
+	},
+}
+
+// seedRecurring inserts the bills that are not there yet, skipping on the code
+// so a reseed never clobbers one edited by hand.
+func seedRecurring(conn *sql.DB) (int, error) {
+	s := recurring.NewStore(conn)
+	n := 0
+	for _, f := range recurringFixtures {
+		taken, err := s.CodeTaken(f.Bill.Code)
+		if err != nil {
+			return n, err
+		}
+		if taken {
+			continue
+		}
+		b := f.Bill
+		if b.Account, b.Card, err = sourceRefs(conn, f.Account, f.Card); err != nil {
+			return n, fmt.Errorf("%s: %w", b.Code, err)
+		}
+		if f.Category != "" {
+			id, err := categoryID(conn, f.Category)
+			if err != nil {
+				return n, fmt.Errorf("%s: %w", b.Code, err)
+			}
+			b.Category = transactions.Ref{ID: id}
+		}
+		if err := s.Create(&b); err != nil {
+			return n, fmt.Errorf("%s: %w", b.Code, err)
+		}
+		if f.Archived {
+			if err := s.SetActive(b.ID, false); err != nil {
+				return n, err
+			}
+		}
+		n++
+	}
+	return n, nil
+}
+
+// sourceRefs resolves a fixture's account or card code into the ref a bill is
+// written with. Exactly one of the two codes is set, which is what the schema
+// asks for anyway.
+func sourceRefs(conn *sql.DB, account, card string) (transactions.Ref, transactions.Ref, error) {
+	if account != "" {
+		a, err := accounts.NewStore(conn).ByCode(account)
+		if err != nil {
+			return transactions.Ref{}, transactions.Ref{}, fmt.Errorf("account %s: %w", account, err)
+		}
+		return transactions.Ref{ID: a.ID}, transactions.Ref{}, nil
+	}
+	c, err := cards.NewStore(conn).ByCode(card)
+	if err != nil {
+		return transactions.Ref{}, transactions.Ref{}, fmt.Errorf("card %s: %w", card, err)
+	}
+	return transactions.Ref{}, transactions.Ref{ID: c.ID}, nil
+}
+
+func categoryID(conn *sql.DB, code string) (int64, error) {
+	c, err := categories.NewStore(conn).ByCode(code)
+	if err != nil {
+		return 0, fmt.Errorf("category %s: %w", code, err)
+	}
+	return c.ID, nil
+}
+
+// seedRecurringPayments files the past months each fixture asks for, so the dev
+// database has averages to show and a board that is not all one colour.
+//
+// The payment is dated a couple of days after its cycle opens, and carries the
+// cycle it was for — which is what the whole module turns on.
+func seedRecurringPayments(conn *sql.DB) (int, error) {
+	s := recurring.NewStore(conn)
+	ts := transactions.NewStore(conn)
+	now := time.Now()
+
+	n := 0
+	for _, f := range recurringFixtures {
+		if f.PaidCycles == 0 {
+			continue
+		}
+		b, err := s.ByCode(f.Bill.Code)
+		if err != nil {
+			return n, err
+		}
+		// From the current month when the fixture asks for it, from last month
+		// otherwise.
+		first := 1
+		if f.PaidNow {
+			first = 0
+		}
+		for i := first; i <= f.PaidCycles; i++ {
+			cycle := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).
+				AddDate(0, -i, 0)
+			occ := b.Occurrence(cycle.Format(recurring.CycleLayout), now)
+			if _, done := b.Payments[occ.Cycle]; done {
+				continue
+			}
+			paidOn, err := time.Parse(recurring.DateLayout, occ.OpenOn)
+			if err != nil {
+				return n, err
+			}
+			// Two days after it opened, or today if that has not come round yet:
+			// a bill can be paid the month it is still in, but no transaction in
+			// the dev database is ever dated into the future.
+			paidOn = paidOn.AddDate(0, 0, 2)
+			if paidOn.After(now) {
+				paidOn = now
+			}
+			// Alternating either side of the expected amount, so the average is a
+			// number nothing else on the card already shows.
+			value := b.Expected + f.Vary*int64(i%3-1)
+			if value <= 0 {
+				value = b.Expected
+			}
+			t := transactions.Transaction{
+				Title: b.Name, Value: value, Kind: transactions.KindOutcome,
+				Date:     paidOn.AddDate(0, 0, 2).Format(recurring.DateLayout),
+				Category: b.Category, Account: b.Account, Card: b.Card,
+				Tags: b.Tags, Recurring: transactions.Ref{ID: b.ID}, Cycle: occ.Cycle,
+			}
+			if err := ts.Create(&t); err != nil {
+				return n, fmt.Errorf("%s %s: %w", b.Code, occ.Cycle, err)
+			}
+			n++
+		}
 	}
 	return n, nil
 }
@@ -423,7 +615,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// The recurring bills come after the accounts, cards and categories they
+	// point at, and their payments after the bills themselves.
+	rb, err := seedRecurring(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
+	rp, err := seedRecurringPayments(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s) and %d bill payment(s) into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills and %d recurring payment(s) into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, path)
 }

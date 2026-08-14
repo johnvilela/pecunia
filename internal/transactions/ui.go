@@ -150,6 +150,13 @@ func Details(t Transaction) string {
 		lines = append(lines, core.DimStyle.Render("toward "+t.Goal.Name))
 	}
 
+	// Which recurring bill this settled, and the month it settled — the month is
+	// the point, since it is not always the one the payment is dated in.
+	if t.Recurring.ID != 0 {
+		lines = append(lines, tag(t.Recurring)+" "+
+			core.DimStyle.Render(t.Recurring.Name+" — "+t.Cycle))
+	}
+
 	// A payment moves two balances — the account it left and the card whose bill
 	// it settles — so the card says so rather than leaving the second a surprise.
 	if t.PaysBillID != 0 {
@@ -348,6 +355,22 @@ func Form(d FormData, t *Transaction, title string) error {
 			}, &source).Value(&goal),
 	}
 
+	// Only when this pays a recurring bill, and then always: the month a payment
+	// is *for* is not always the month it was made in, and February's energy
+	// bill paid on 3 March has to clear February rather than March.
+	cycle := t.Cycle
+	if t.Recurring.ID != 0 {
+		if cycle == "" {
+			cycle = CycleOf(date)
+		}
+		fields = append(fields, huh.NewInput().
+			Title("Cycle").Description("the month this pays — YYYY-MM").
+			Value(&cycle).Validate(func(v string) error {
+			_, err := ParseCycle(v)
+			return err
+		}))
+	}
+
 	// Only offered on a new transaction: an edit that re-split a live series
 	// would have to re-date and re-price rows that are already on closed bills.
 	// And only when there is a card to split against at all.
@@ -420,6 +443,14 @@ func Form(d FormData, t *Transaction, title string) error {
 	// rather than refused by the store.
 	if t.Goal.ID != 0 && t.GoalCurrency != t.Currency {
 		t.Goal, t.GoalCurrency = Ref{}, ""
+	}
+	// Same as the date: huh skips its validators when stdin ends mid-form, so an
+	// unreadable cycle is left as it was rather than written through — and the
+	// store refuses a payment that names a bill but no month.
+	if t.Recurring.ID != 0 {
+		if parsed, err := ParseCycle(cycle); err == nil {
+			t.Cycle = parsed
+		}
 	}
 	t.Tags = NormalizeTags(append(reused, ParseTags(fresh)...))
 	// Same as the date: huh skips its validators when stdin ends mid-form, so an

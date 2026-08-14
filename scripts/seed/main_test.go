@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"kakei/internal/accounts"
 	"kakei/internal/bills"
@@ -12,6 +13,7 @@ import (
 	"kakei/internal/core"
 	"kakei/internal/db"
 	"kakei/internal/goals"
+	"kakei/internal/recurring"
 	"kakei/internal/transactions"
 )
 
@@ -599,6 +601,146 @@ func TestSeedTargetChange(t *testing.T) {
 		}
 		if n != 0 {
 			t.Fatalf("made %d changes with no goals seeded; want 0", n)
+		}
+	})
+}
+
+func TestSeedRecurring(t *testing.T) {
+	// The bills point at accounts and cards by code, so those come first.
+	prepare := func(t *testing.T) *sql.DB {
+		t.Helper()
+		conn := newTestConn(t)
+		if _, err := seed(accounts.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedCards(cards.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := categories.Seed(categories.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		return conn
+	}
+
+	t.Run("inserts every fixture", func(t *testing.T) {
+		conn := prepare(t)
+		n, err := seedRecurring(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(recurringFixtures) {
+			t.Fatalf("seedRecurring inserted %d; want %d", n, len(recurringFixtures))
+		}
+		all, err := recurring.NewStore(conn).List(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(recurringFixtures) {
+			t.Fatalf("database holds %d bills; want %d", len(all), len(recurringFixtures))
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := prepare(t)
+		if _, err := seedRecurring(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedRecurring(conn)
+		if err != nil {
+			t.Fatalf("second seed: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second seed inserted %d; want 0", n)
+		}
+	})
+
+	t.Run("the fixtures cover the board's states", func(t *testing.T) {
+		conn := prepare(t)
+		if _, err := seedRecurring(conn); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedRecurringPayments(conn); err != nil {
+			t.Fatal(err)
+		}
+
+		all, err := recurring.NewStore(conn).List(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		states := map[string]bool{}
+		var archived, onCard bool
+		for _, b := range all {
+			states[b.Current(time.Now()).Status] = true
+			archived = archived || !b.Active
+			onCard = onCard || b.IsCard()
+		}
+		// A dev database whose board is all one colour is not worth looking at,
+		// and every state has its own row rendering to check.
+		for _, want := range []string{
+			recurring.StatusOverdue, recurring.StatusOpen,
+			recurring.StatusUpcoming, recurring.StatusPaid, recurring.StatusArchived,
+		} {
+			if !states[want] {
+				t.Errorf("no fixture renders %q; the board shows %v", want, states)
+			}
+		}
+		if !archived {
+			t.Error("no archived bill, so the --all branch renders nothing new")
+		}
+		if !onCard {
+			t.Error("no bill paid on a card, so that branch renders nothing")
+		}
+	})
+
+	t.Run("nothing is dated into the future", func(t *testing.T) {
+		conn := prepare(t)
+		if _, err := seedRecurring(conn); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedRecurringPayments(conn); err != nil {
+			t.Fatal(err)
+		}
+		today := time.Now().Format(recurring.DateLayout)
+		paid, err := transactions.NewStore(conn).List(transactions.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range paid {
+			// A bill paid for the month it is still in may open after today —
+			// the payment is real, its date cannot be.
+			if p.Date > today {
+				t.Errorf("%s is dated %s, which has not happened yet", p.Title, p.Date)
+			}
+		}
+	})
+
+	t.Run("a payment names the month it was for", func(t *testing.T) {
+		conn := prepare(t)
+		if _, err := seedRecurring(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedRecurringPayments(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n == 0 {
+			t.Fatal("no payments were seeded")
+		}
+		paid, err := transactions.NewStore(conn).List(transactions.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var linked int
+		for _, p := range paid {
+			if p.Recurring.ID != 0 {
+				linked++
+				if p.Cycle == "" {
+					t.Errorf("payment %q names a bill but no month", p.Title)
+				}
+			}
+		}
+		if linked != n {
+			t.Errorf("%d payments linked, %d reported", linked, n)
 		}
 	})
 }

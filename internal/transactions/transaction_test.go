@@ -366,3 +366,50 @@ func TestValidateGoal(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateRecurring(t *testing.T) {
+	pay := func() Transaction {
+		return Transaction{Title: "Energy", Value: 21490, Kind: KindOutcome,
+			Date: "2026-08-08", Account: Ref{ID: 1}, Recurring: Ref{ID: 3}, Cycle: "2026-08"}
+	}
+
+	t.Run("a payment naming its bill and its cycle is whole", func(t *testing.T) {
+		if err := pay().Validate(); err != nil {
+			t.Fatalf("a bill payment was refused: %v", err)
+		}
+	})
+
+	t.Run("refuses a bill payment with no cycle", func(t *testing.T) {
+		tr := pay()
+		tr.Cycle = ""
+		if err := tr.Validate(); err == nil {
+			t.Fatal("a payment was allowed to say which bill but not which month")
+		}
+	})
+
+	t.Run("refuses a cycle that is not a month", func(t *testing.T) {
+		tr := pay()
+		tr.Cycle = "2026-08-08"
+		if err := tr.Validate(); err == nil {
+			t.Fatal("a full date was accepted as a cycle")
+		}
+	})
+
+	t.Run("refuses a cycle on a transaction that pays no bill", func(t *testing.T) {
+		tr := pay()
+		tr.Recurring = Ref{}
+		if err := tr.Validate(); err == nil {
+			t.Fatal("a cycle was accepted without a bill for it to be a cycle of")
+		}
+	})
+
+	t.Run("a card pays a recurring bill, unlike a card statement", func(t *testing.T) {
+		// Netflix on the credit card is the ordinary case, and nothing here is
+		// the loop that a card settling its own statement would be.
+		tr := pay()
+		tr.Account, tr.Card = Ref{}, Ref{ID: 2}
+		if err := tr.Validate(); err != nil {
+			t.Fatalf("a subscription charged to a card was refused: %v", err)
+		}
+	})
+}

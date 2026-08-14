@@ -3,6 +3,8 @@ package core
 import (
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +24,40 @@ var (
 	HeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(DimColor))
 	DimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(DimColor))
 )
+
+// MoneyLine writes a set of amounts as one figure per currency, in code order
+// so two runs read the same. Nothing is ever added across currencies: centavos
+// and satoshis do not sum, and there is no rate anywhere in kakei to make them.
+//
+// The sign goes in front of the symbol, the way a transaction's amount reads —
+// "-R$360.00", not "R$-360.00", which is a riddle. Currencies at zero say
+// nothing at all rather than padding the line with figures worth reading past.
+func MoneyLine(by map[string]int64) string {
+	codes := make([]string, 0, len(by))
+	for c, v := range by {
+		if v != 0 {
+			codes = append(codes, c)
+		}
+	}
+	if len(codes) == 0 {
+		return ""
+	}
+	slices.Sort(codes)
+
+	parts := make([]string, len(codes))
+	for i, c := range codes {
+		cur := CurrencyByCode(c)
+		// FormatAmount already writes the minus, and it is the only thing here
+		// that takes math.MinInt64 without wrapping — so move its sign rather
+		// than negating the value first.
+		if f := FormatAmount(by[c], cur); strings.HasPrefix(f, "-") {
+			parts[i] = "-" + cur.Symbol + f[1:]
+		} else {
+			parts[i] = cur.Symbol + f
+		}
+	}
+	return strings.Join(parts, DimStyle.Render(" · "))
+}
 
 // ColorOptions is the palette as a huh select, each entry prefixed with a
 // swatch in its own color.

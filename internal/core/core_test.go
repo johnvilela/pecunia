@@ -311,3 +311,51 @@ func TestFKErr(t *testing.T) {
 		}
 	})
 }
+
+func TestMoneyLine(t *testing.T) {
+	t.Run("gives one figure per currency and never a sum", func(t *testing.T) {
+		got := MoneyLine(map[string]int64{"BRL": 120000, "USD": 4000})
+		for _, want := range []string{"R$1200.00", "$40.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("MoneyLine = %q; want it to carry %s", got, want)
+			}
+		}
+		if strings.Contains(got, "1240.00") {
+			t.Errorf("MoneyLine = %q; two currencies were added up as one", got)
+		}
+	})
+
+	t.Run("sorts the currencies so two runs read the same", func(t *testing.T) {
+		by := map[string]int64{"USD": 4000, "BRL": 120000, "EUR": 1000}
+		first := MoneyLine(by)
+		if brl, usd := strings.Index(first, "R$"), strings.Index(first, "$40"); brl > usd {
+			t.Errorf("MoneyLine = %q; want the currencies in code order", first)
+		}
+		if second := MoneyLine(by); first != second {
+			t.Errorf("MoneyLine is not stable:\n%q\n%q", first, second)
+		}
+	})
+
+	t.Run("says nothing when there is nothing", func(t *testing.T) {
+		if got := MoneyLine(nil); got != "" {
+			t.Errorf("MoneyLine(nil) = %q; want nothing at all", got)
+		}
+		if got := MoneyLine(map[string]int64{"BRL": 0}); got != "" {
+			t.Errorf("MoneyLine = %q; want a zero to say nothing", got)
+		}
+	})
+
+	t.Run("keeps bitcoin's eight places", func(t *testing.T) {
+		if got := MoneyLine(map[string]int64{"BTC": 42500000}); !strings.Contains(got, "0.42500000") {
+			t.Errorf("MoneyLine = %q; want bitcoin at eight places", got)
+		}
+	})
+
+	t.Run("puts the sign in front of the symbol", func(t *testing.T) {
+		// "R$-360.00" is a riddle; "-R$360.00" is not, and it is how a
+		// transaction's own amount already reads.
+		if got := MoneyLine(map[string]int64{"BRL": -36000}); !strings.Contains(got, "-R$360.00") {
+			t.Errorf("MoneyLine = %q; want the sign in front of the symbol", got)
+		}
+	})
+}

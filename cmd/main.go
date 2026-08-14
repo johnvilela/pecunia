@@ -33,6 +33,7 @@ Commands:
   category | ct     manage categories (new, edit, delete, details)
   transactions | t  record and review transactions (new, edit, delete)
   goals | g         track goals (new, edit, delete, details)
+  bill | b          recurring bills (new, pay, edit, delete, archive)
   help              show this message
 
 Environment:
@@ -75,6 +76,9 @@ func run() int {
 
 	case "goals", "g":
 		return report("goals", runGoals(os.Args[2:]))
+
+	case "bill", "b":
+		return report("bill", runRecurring(os.Args[2:]))
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])

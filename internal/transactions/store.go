@@ -30,13 +30,14 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 // Filter is every axis the list command can narrow by. A zero value is "all",
 // and each field set narrows further.
 type Filter struct {
-	From, To   string // YYYY-MM-DD, both inclusive
-	Tag        string
-	Search     string // substring of the title or the description
-	CategoryID int64
-	AccountID  int64
-	CardID     int64
-	GoalID     int64
+	From, To    string // YYYY-MM-DD, both inclusive
+	Tag         string
+	Search      string // substring of the title or the description
+	CategoryID  int64
+	AccountID   int64
+	CardID      int64
+	GoalID      int64
+	RecurringID int64
 }
 
 // columns joins in the three tables a transaction points at, so a row comes back
@@ -54,14 +55,17 @@ const columns = `
 	COALESCE(k.id, 0), COALESCE(k.code, ''), COALESCE(k.name, ''), COALESCE(k.color, ''), COALESCE(k.currency, ''),
 	COALESCE((SELECT group_concat(tag) FROM transaction_tags WHERE transaction_id = t.id), ''),
 	COALESCE(t.installment_group, 0), t.installment_seq, t.installment_count, COALESCE(t.pays_bill_id, 0),
-	COALESCE(g.id, 0), COALESCE(g.name, ''), COALESCE(g.currency, '')`
+	COALESCE(g.id, 0), COALESCE(g.name, ''), COALESCE(g.currency, ''),
+	COALESCE(r.id, 0), COALESCE(r.code, ''), COALESCE(r.name, ''), COALESCE(r.color, ''),
+	COALESCE(t.cycle, '')`
 
 const from = `
 	FROM transactions t
 	LEFT JOIN categories   c ON c.id = t.category_id
 	LEFT JOIN accounts     a ON a.id = t.account_id
 	LEFT JOIN credit_cards k ON k.id = t.card_id
-	LEFT JOIN goals        g ON g.id = t.goal_id`
+	LEFT JOIN goals        g ON g.id = t.goal_id
+	LEFT JOIN recurring_bills r ON r.id = t.recurring_id`
 
 func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 	var t Transaction
@@ -72,7 +76,8 @@ func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 		&t.Card.ID, &t.Card.Code, &t.Card.Name, &t.Card.Color, &cardCur,
 		&tags,
 		&t.Installment.Group, &t.Installment.Seq, &t.Installment.Count, &t.PaysBillID,
-		&t.Goal.ID, &t.Goal.Name, &t.GoalCurrency)
+		&t.Goal.ID, &t.Goal.Name, &t.GoalCurrency,
+		&t.Recurring.ID, &t.Recurring.Code, &t.Recurring.Name, &t.Recurring.Color, &t.Cycle)
 	if err != nil {
 		return t, err
 	}
@@ -123,6 +128,9 @@ func (s *Store) List(f Filter) ([]Transaction, error) {
 	}
 	if f.GoalID != 0 {
 		add(`t.goal_id = ?`, f.GoalID)
+	}
+	if f.RecurringID != 0 {
+		add(`t.recurring_id = ?`, f.RecurringID)
 	}
 
 	query := `SELECT ` + columns + from
@@ -419,12 +427,13 @@ func (s *Store) fillGoalCurrency(t *Transaction) error {
 func insertRow(tx *sql.Tx, t Transaction) (int64, error) {
 	res, err := tx.Exec(
 		`INSERT INTO transactions (title, description, category_id, account_id, card_id, value, kind, date,
-		   installment_group, installment_seq, installment_count, pays_bill_id, goal_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   installment_group, installment_seq, installment_count, pays_bill_id, goal_id,
+		   recurring_id, cycle)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
 		t.Value, t.Kind, t.Date,
 		nullID(t.Installment.Group), t.Installment.Seq, t.Installment.Count, nullID(t.PaysBillID),
-		nullID(t.Goal.ID))
+		nullID(t.Goal.ID), nullID(t.Recurring.ID), nullText(t.Cycle))
 	if err != nil {
 		return 0, err
 	}
@@ -435,10 +444,11 @@ func updateRow(tx *sql.Tx, t Transaction) error {
 	if _, err := tx.Exec(
 		`UPDATE transactions SET title = ?, description = ?, category_id = ?, account_id = ?,
 		 card_id = ?, value = ?, kind = ?, date = ?, pays_bill_id = ?, goal_id = ?,
-		 updated_at = datetime('now')
+		 recurring_id = ?, cycle = ?, updated_at = datetime('now')
 		 WHERE id = ?`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
-		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), nullID(t.Goal.ID), t.ID); err != nil {
+		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), nullID(t.Goal.ID),
+		nullID(t.Recurring.ID), nullText(t.Cycle), t.ID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM transaction_tags WHERE transaction_id = ?`, t.ID); err != nil {
@@ -487,6 +497,15 @@ func nullID(id int64) any {
 		return nil
 	}
 	return id
+}
+
+// nullText is nullID for a column whose empty value is a string. The cycle has
+// a CHECK on its shape, and "" is not a month.
+func nullText(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func writeTags(tx *sql.Tx, id int64, tags []string) error {
