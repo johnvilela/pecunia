@@ -587,3 +587,82 @@ func TestCollectBudgets(t *testing.T) {
 		}
 	})
 }
+
+// The whole point of transfers. Money moving between two accounts you own is
+// not income and not an expense — counting it as both is what made a month read
+// worse and better than it was.
+func TestTransfersAreNotTotalled(t *testing.T) {
+	// transfer moves R$500.00 from INTER to CASH1 on the given date.
+	transfer := func(t *testing.T, w *world, date string) {
+		t.Helper()
+		cash := accounts.Account{Code: "CASH1", Name: "Carteira", Color: "green",
+			Currency: "BRL", Balance: 15000}
+		if err := accounts.NewStore(w.conn).Create(&cash); err != nil {
+			t.Fatal(err)
+		}
+		tr := transactions.Transfer{
+			Title: "Transferência", Date: date,
+			From: transactions.Ref{ID: w.inter.ID}, To: transactions.Ref{ID: cash.ID},
+			FromValue: 50000, ToValue: 50000,
+		}
+		if err := transactions.NewStore(w.conn).Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("a transfer is in neither in nor out", func(t *testing.T) {
+		w := newWorld(t)
+		transfer(t, w, "2026-08-13")
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.In["BRL"] != 0 {
+			t.Errorf("in = %d; want the arriving leg not counted as income", s.In["BRL"])
+		}
+		if s.Out["BRL"] != 0 {
+			t.Errorf("out = %d; want the leaving leg not counted as spending", s.Out["BRL"])
+		}
+	})
+
+	t.Run("a transfer is not month-to-date spending either", func(t *testing.T) {
+		w := newWorld(t)
+		transfer(t, w, "2026-08-04")
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.MTD["BRL"] != 0 {
+			t.Errorf("month to date = %d; want a transfer left out of it", s.MTD["BRL"])
+		}
+	})
+
+	t.Run("both legs are still listed", func(t *testing.T) {
+		w := newWorld(t)
+		transfer(t, w, "2026-08-13")
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Ledger) != 2 {
+			t.Fatalf("ledger has %d rows; want both legs, since both are real movements", len(s.Ledger))
+		}
+	})
+
+	t.Run("real money either side of it still counts", func(t *testing.T) {
+		w := newWorld(t)
+		transfer(t, w, "2026-08-13")
+		w.spend(t, "2026-08-13", 8400)
+
+		s, err := Collect(w.conn, Period{From: "2026-08-13", To: "2026-08-13"}, on("2026-08-13"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Out["BRL"] != 8400 {
+			t.Fatalf("out = %d; want only the R$84.00 that really left", s.Out["BRL"])
+		}
+	})
+}

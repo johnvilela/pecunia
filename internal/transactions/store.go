@@ -38,6 +38,10 @@ type Filter struct {
 	CardID      int64
 	GoalID      int64
 	RecurringID int64
+	// Transfers narrows to the legs of transfers and nothing else. A zero value
+	// is every transaction, transfers included: they are real movements and the
+	// ledger lists them.
+	Transfers bool
 }
 
 // columns joins in the three tables a transaction points at, so a row comes back
@@ -57,7 +61,10 @@ const columns = `
 	COALESCE(t.installment_group, 0), t.installment_seq, t.installment_count, COALESCE(t.pays_bill_id, 0),
 	COALESCE(g.id, 0), COALESCE(g.name, ''), COALESCE(g.currency, ''),
 	COALESCE(r.id, 0), COALESCE(r.code, ''), COALESCE(r.name, ''), COALESCE(r.color, ''),
-	COALESCE(t.cycle, '')`
+	COALESCE(t.cycle, ''),
+	COALESCE(t.transfer_group, 0),
+	COALESCE(pa.id, 0), COALESCE(pa.code, ''), COALESCE(pa.name, ''), COALESCE(pa.color, ''),
+	COALESCE(p.value, 0), COALESCE(pa.currency, '')`
 
 const from = `
 	FROM transactions t
@@ -65,7 +72,12 @@ const from = `
 	LEFT JOIN accounts     a ON a.id = t.account_id
 	LEFT JOIN credit_cards k ON k.id = t.card_id
 	LEFT JOIN goals        g ON g.id = t.goal_id
-	LEFT JOIN recurring_bills r ON r.id = t.recurring_id`
+	LEFT JOIN recurring_bills r ON r.id = t.recurring_id
+	-- The other leg of a transfer, and the account it is on. NULL = NULL is
+	-- never true in SQL, so a row with no group joins nothing here, which is
+	-- nearly every row.
+	LEFT JOIN transactions p  ON p.transfer_group = t.transfer_group AND p.id <> t.id
+	LEFT JOIN accounts     pa ON pa.id = p.account_id`
 
 func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 	var t Transaction
@@ -77,7 +89,10 @@ func scan(row interface{ Scan(...any) error }) (Transaction, error) {
 		&tags,
 		&t.Installment.Group, &t.Installment.Seq, &t.Installment.Count, &t.PaysBillID,
 		&t.Goal.ID, &t.Goal.Name, &t.GoalCurrency,
-		&t.Recurring.ID, &t.Recurring.Code, &t.Recurring.Name, &t.Recurring.Color, &t.Cycle)
+		&t.Recurring.ID, &t.Recurring.Code, &t.Recurring.Name, &t.Recurring.Color, &t.Cycle,
+		&t.TransferGroup,
+		&t.Counterpart.Ref.ID, &t.Counterpart.Ref.Code, &t.Counterpart.Ref.Name,
+		&t.Counterpart.Ref.Color, &t.Counterpart.Value, &t.Counterpart.Currency)
 	if err != nil {
 		return t, err
 	}
@@ -131,6 +146,9 @@ func (s *Store) List(f Filter) ([]Transaction, error) {
 	}
 	if f.RecurringID != 0 {
 		add(`t.recurring_id = ?`, f.RecurringID)
+	}
+	if f.Transfers {
+		add(`t.transfer_group IS NOT NULL`)
 	}
 
 	query := `SELECT ` + columns + from
@@ -374,6 +392,11 @@ func scoped(tx *sql.Tx, id int64, scope Scope) ([]Transaction, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A transfer is inseparable whatever the scope: half of one is money
+	// vanishing from the ledger, so either leg brings the other.
+	if one.IsTransfer() {
+		return legsOfTx(tx, one.TransferGroup)
+	}
 	if scope == ScopeOne || !one.IsInstallment() {
 		return []Transaction{one}, nil
 	}
@@ -468,12 +491,12 @@ func insertRow(tx *sql.Tx, t Transaction) (int64, error) {
 	res, err := tx.Exec(
 		`INSERT INTO transactions (title, description, category_id, account_id, card_id, value, kind, date,
 		   installment_group, installment_seq, installment_count, pays_bill_id, goal_id,
-		   recurring_id, cycle)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   recurring_id, cycle, transfer_group)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
 		t.Value, t.Kind, t.Date,
 		nullID(t.Installment.Group), t.Installment.Seq, t.Installment.Count, nullID(t.PaysBillID),
-		nullID(t.Goal.ID), nullID(t.Recurring.ID), nullText(t.Cycle))
+		nullID(t.Goal.ID), nullID(t.Recurring.ID), nullText(t.Cycle), nullID(t.TransferGroup))
 	if err != nil {
 		return 0, err
 	}
@@ -484,11 +507,11 @@ func updateRow(tx *sql.Tx, t Transaction) error {
 	if _, err := tx.Exec(
 		`UPDATE transactions SET title = ?, description = ?, category_id = ?, account_id = ?,
 		 card_id = ?, value = ?, kind = ?, date = ?, pays_bill_id = ?, goal_id = ?,
-		 recurring_id = ?, cycle = ?, updated_at = datetime('now')
+		 recurring_id = ?, cycle = ?, transfer_group = ?, updated_at = datetime('now')
 		 WHERE id = ?`,
 		t.Title, t.Description, nullID(t.Category.ID), nullID(t.Account.ID), nullID(t.Card.ID),
 		t.Value, t.Kind, t.Date, nullID(t.PaysBillID), nullID(t.Goal.ID),
-		nullID(t.Recurring.ID), nullText(t.Cycle), t.ID); err != nil {
+		nullID(t.Recurring.ID), nullText(t.Cycle), nullID(t.TransferGroup), t.ID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM transaction_tags WHERE transaction_id = ?`, t.ID); err != nil {

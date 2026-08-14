@@ -90,14 +90,39 @@ type Transaction struct {
 	// the month it was made in: February's energy bill paid on 3 March carries
 	// the cycle 2026-02, and that is what clears February instead of leaving it
 	// overdue forever. Empty unless Recurring is set.
-	Cycle     string
-	CreatedAt string
-	UpdatedAt string
+	Cycle string
+	// TransferGroup ties the two legs of a transfer together — an outcome on the
+	// account the money left and an income on the one it reached. It is the id
+	// of the outcome leg, so the origin of a transfer is a fact of the data
+	// rather than a convention about which row was written first. 0 on
+	// everything that is not a transfer, which is nearly everything.
+	TransferGroup int64
+	// Counterpart is the other leg, filled in by the store's join. It is what
+	// lets either row on its own say where the money came from or went to,
+	// without a second query and without walking the group.
+	Counterpart Counterpart
+	CreatedAt   string
+	UpdatedAt   string
+}
+
+// Counterpart is the far end of a transfer. Value and Currency are the other
+// leg's own: they are not this leg's when the currencies differ, or when a fee
+// was taken on the way.
+type Counterpart struct {
+	Ref      Ref
+	Value    int64
+	Currency string
 }
 
 var ErrNotFound = errors.New("transaction not found")
 
 func (t Transaction) IsCard() bool { return t.Card.ID != 0 }
+
+// IsTransfer says whether this row is one leg of money moving between two
+// accounts you own. The rules below hang off this rather than off the kind:
+// each leg is an ordinary income or outcome, and it is the group that says the
+// pair is not really either.
+func (t Transaction) IsTransfer() bool { return t.TransferGroup != 0 }
 
 // Target is the account or credit card the money moved through.
 func (t Transaction) Target() Ref {
@@ -194,6 +219,37 @@ func (t Transaction) Validate() error {
 		if t.Kind != KindOutcome {
 			return errors.New("paying a bill is money going out")
 		}
+	}
+	if t.IsTransfer() {
+		return t.validateTransfer()
+	}
+	return nil
+}
+
+// validateTransfer is what one leg of a transfer may not claim. A transfer
+// counts toward nothing: nothing was earned, nothing was consumed, and the
+// money is still yours. Every rule here is that sentence applied to one field.
+func (t Transaction) validateTransfer() error {
+	// A category that never counts toward a budget is a lie — and it is also
+	// what keeps the budgets module out of this entirely, since its spend
+	// matches on category_id and a NULL matches nothing.
+	if t.Category.ID != 0 {
+		return errors.New("a transfer carries no category — it is not spending, so nothing should count it")
+	}
+	if t.IsCard() {
+		return errors.New("a transfer moves money between accounts — to pay a card, use its bill")
+	}
+	if t.PaysBillID != 0 || t.Recurring.ID != 0 {
+		return errors.New("settling a bill is not a transfer")
+	}
+	if t.IsInstallment() {
+		return errors.New("a transfer is not split into installments — there is nothing to spread")
+	}
+	// Money arriving somewhere is what counts toward a goal. The same movement
+	// must not also climb a goal for paying something down, which is what
+	// letting the outgoing leg carry one would do.
+	if t.Goal.ID != 0 && t.Kind != KindIncome {
+		return errors.New("a transfer feeds a goal on the leg the money arrives on, not the one it leaves")
 	}
 	return nil
 }

@@ -438,6 +438,49 @@ func seedRecurringPayments(conn *sql.DB) (int, error) {
 	return n, nil
 }
 
+// seedTransfer moves money between two of the seeded accounts, so the dev
+// database has both legs of one to look at -- and so the summary has a movement
+// it must leave out of its totals.
+//
+// Dated today, like the over-spend fixtures, so it always lands in the month
+// being looked at whatever day the seeder runs on.
+func seedTransfer(conn *sql.DB) (int, error) {
+	s := transactions.NewStore(conn)
+	existing, err := s.List(transactions.Filter{Transfers: true})
+	if err != nil {
+		return 0, err
+	}
+	if len(existing) > 0 {
+		return 0, nil
+	}
+
+	from, _, err := sourceRefs(conn, "NUBON", "")
+	if err != nil {
+		return 0, err
+	}
+	to, _, err := sourceRefs(conn, "INTER", "")
+	if err != nil {
+		return 0, err
+	}
+
+	t := transactions.Transfer{
+		Title:       "Para a reserva",
+		Description: "sobra do mês",
+		Date:        time.Now().Format(transactions.DateLayout),
+		From:        from,
+		To:          to,
+		// A R$5.00 TED on the way, so the fee branch of the renderer has
+		// something to render.
+		FromValue: 80000,
+		ToValue:   79500,
+		Tags:      []string{"fixo"},
+	}
+	if err := s.Transfer(&t); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
 // txFixture is one sample transaction, written against codes rather than ids
 // because the rows it points at only get their ids when they are seeded.
 //
@@ -729,6 +772,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	// After the accounts it moves between, and after the transactions so it is
+	// the newest thing in the ledger.
+	mv, err := seedTransfer(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	// After the categories, which is all a budget points at.
 	bg, err := seedBudgets(conn)
 	if err != nil {
@@ -748,6 +798,6 @@ func main() {
 		os.Exit(1)
 	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills, %d recurring payment(s) and %d of %d budgets into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, bg, len(budgetFixtures), path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills, %d recurring payment(s), %d of %d budgets and %d transfer(s) into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, bg, len(budgetFixtures), mv, path)
 }

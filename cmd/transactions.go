@@ -26,13 +26,15 @@ Usage:
 
 Commands:
   (none)              list this month
-  new     | n         record a transaction
+  new      | n        record a transaction
+  transfer | tr       move money between two of your accounts
   edit    | e  [ID]   edit a transaction
   delete  | d  [ID]   delete a transaction
   ID                  show one transaction in detail
 
 Filters (all combine, and any of them replaces the this-month default):
   --all               every transaction ever
+  --transfers         only money moved between your own accounts
   --date   DATE       one day, YYYY-MM-DD
   --month  YYYY-MM    one month
   --from   DATE       on or after DATE
@@ -74,6 +76,32 @@ bill, dated a month apart from the date given, with the amount divided between
 them and any odd cents on the first. The whole purchase hits the card's limit
 at once, the way a real issuer takes it. 1 is an ordinary charge, and an
 account purchase cannot be split — it has no bills to spread over.
+`,
+	"transfer": `Move money between two accounts you own.
+
+Usage:
+  kakei transactions transfer
+  kakei t tr
+
+Opens a form: title, description (optional), the account it leaves, the one it
+arrives in, both amounts, the date, an optional goal and tags.
+
+A transfer is not income and it is not an expense — nothing was earned and
+nothing was consumed — so it counts toward neither total on the summary and
+toward no budget. It carries no category for the same reason: a category that
+never counts is a lie.
+
+Both amounts are asked for, and they need not match. Different currencies is
+the obvious case: R$500.00 leaves and $92.00 arrives, and the rate is used once
+and stored nowhere. The same currency with the two differing is a fee, which is
+what a TED costs.
+
+It is stored as two rows, one on each account, so each side's balance moves by
+its own amount and each row says where the money came from or went. Editing or
+deleting either one reaches both — half a transfer is money vanishing.
+
+The arriving leg may name a goal: money arriving somewhere is what counts
+toward one, and only goals in that account's currency are offered.
 `,
 	"edit": `Edit a transaction.
 
@@ -121,6 +149,7 @@ func runTransactions(args []string) error {
 
 	name := map[string]string{
 		"new": "new", "n": "new",
+		"transfer": "transfer", "tr": "transfer",
 		"edit": "edit", "e": "edit",
 		"delete": "delete", "d": "delete",
 	}[sub]
@@ -147,6 +176,8 @@ func runTransactions(args []string) error {
 	switch name {
 	case "new":
 		return createTransaction()
+	case "transfer":
+		return createTransfer()
 	case "edit":
 		return editTransaction(rest)
 	default:
@@ -206,17 +237,18 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 	// prints. kakei t -h is the one that documents them.
 	fs.SetOutput(io.Discard)
 	var (
-		all      = fs.Bool("all", false, "every transaction ever")
-		date     = fs.String("date", "", "one day, YYYY-MM-DD")
-		month    = fs.String("month", "", "one month, YYYY-MM")
-		from     = fs.String("from", "", "on or after this date")
-		to       = fs.String("to", "", "on or before this date")
-		tag      = fs.String("tag", "", "transactions carrying this tag")
-		search   = fs.String("search", "", "text in the title or the description")
-		category = fs.String("category", "", "category CODE or ID")
-		account  = fs.String("account", "", "account CODE or ID")
-		card     = fs.String("card", "", "credit card CODE or ID")
-		goal     = fs.String("goal", "", "goal ID")
+		all       = fs.Bool("all", false, "every transaction ever")
+		transfers = fs.Bool("transfers", false, "only money moved between your own accounts")
+		date      = fs.String("date", "", "one day, YYYY-MM-DD")
+		month     = fs.String("month", "", "one month, YYYY-MM")
+		from      = fs.String("from", "", "on or after this date")
+		to        = fs.String("to", "", "on or before this date")
+		tag       = fs.String("tag", "", "transactions carrying this tag")
+		search    = fs.String("search", "", "text in the title or the description")
+		category  = fs.String("category", "", "category CODE or ID")
+		account   = fs.String("account", "", "account CODE or ID")
+		card      = fs.String("card", "", "credit card CODE or ID")
+		goal      = fs.String("goal", "", "goal ID")
 	)
 	if err := fs.Parse(args); err != nil {
 		return listFilter{}, fmt.Errorf("%w — see: kakei t -h", err)
@@ -225,8 +257,10 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 		return listFilter{}, fmt.Errorf("unexpected argument %q — filters are flags, and an id takes none", fs.Arg(0))
 	}
 
-	out := listFilter{filter: transactions.Filter{Tag: *tag, Search: *search}}
-	out.narrowed = *all || *tag != "" || *search != ""
+	out := listFilter{filter: transactions.Filter{Tag: *tag, Search: *search, Transfers: *transfers}}
+	// A transfer is not a monthly habit — narrowing to them without widening the
+	// window would show only the ones that happen to fall in this month.
+	out.narrowed = *all || *tag != "" || *search != "" || *transfers
 
 	for _, d := range []struct {
 		flag string
@@ -407,6 +441,11 @@ func editTransaction(args []string) error {
 		if err != nil {
 			return err
 		}
+		// A transfer is edited whole, from either leg: almost nothing on the
+		// ordinary form applies to one, and half an edit is half a transfer.
+		if t.IsTransfer() {
+			return editTransfer(conn, s, t.TransferGroup)
+		}
 		scope, err := transactions.AskScope(t, "Edit")
 		if err != nil {
 			return err
@@ -440,9 +479,16 @@ func deleteTransaction(args []string) error {
 		if err != nil {
 			return err
 		}
+		// Either leg takes the other with it, so the confirmation says so rather
+		// than leaving the second row a surprise.
+		note := "This cannot be undone. " + t.Target().Code + " gets the money back."
+		if t.IsTransfer() {
+			note = fmt.Sprintf("This cannot be undone. Both legs go: %s and %s go back to what they were.",
+				t.Target().Code, t.Counterpart.Ref.Code)
+		}
 		ok, err := core.Confirm(
 			fmt.Sprintf("Delete #%d %s (%s)?", t.ID, t.Title, transactions.Amount(t)),
-			"This cannot be undone. "+t.Target().Code+" gets the money back.")
+			note)
 		if err != nil {
 			return err
 		}
@@ -456,4 +502,57 @@ func deleteTransaction(args []string) error {
 		fmt.Fprintf(out, "deleted #%d %s\n", t.ID, t.Title)
 		return nil
 	})
+}
+
+// createTransfer records money moving between two of your own accounts. It is
+// its own command rather than a shape of `new` because almost nothing on the
+// ordinary form applies: there is no category, no card, no installments, and
+// two amounts instead of one.
+func createTransfer() error {
+	return withConn(func(conn *sql.DB) error {
+		d, err := formData(conn)
+		if err != nil {
+			return err
+		}
+		t := transactions.Transfer{Date: transactions.Today()}
+		if err := transactions.TransferForm(d, &t, "New transfer"); err != nil {
+			return err
+		}
+		s := transactions.NewStore(conn)
+		if err := s.Transfer(&t); err != nil {
+			return err
+		}
+		saved, err := s.Get(t.Group)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "moved %s from %s to %s\n",
+			transactions.Amount(saved), saved.Account.Code, saved.Counterpart.Ref.Code)
+		return nil
+	})
+}
+
+// editTransfer edits both legs together, from whichever one was named.
+func editTransfer(conn *sql.DB, s *transactions.Store, group int64) error {
+	t, err := s.GetTransfer(group)
+	if err != nil {
+		return err
+	}
+	d, err := formData(conn)
+	if err != nil {
+		return err
+	}
+	if err := transactions.TransferForm(d, &t, "Edit transfer"); err != nil {
+		return err
+	}
+	if err := s.UpdateTransfer(t); err != nil {
+		return err
+	}
+	saved, err := s.Get(t.Group)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "updated: %s from %s to %s\n",
+		transactions.Amount(saved), saved.Account.Code, saved.Counterpart.Ref.Code)
+	return nil
 }

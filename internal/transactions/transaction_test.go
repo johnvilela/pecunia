@@ -413,3 +413,80 @@ func TestValidateRecurring(t *testing.T) {
 		}
 	})
 }
+
+// leg is one side of a transfer as it comes back from the store: the group is
+// set, so the transfer rules apply to it.
+func leg(kind string) Transaction {
+	return Transaction{
+		Title: "Transferência", Value: 50000, Kind: kind, Date: "2026-08-14",
+		Account: Ref{ID: 1}, Currency: "BRL", TransferGroup: 42,
+	}
+}
+
+func TestIsTransfer(t *testing.T) {
+	if !leg(KindOutcome).IsTransfer() {
+		t.Error("a row carrying a group is not reading as a transfer")
+	}
+	if (Transaction{Title: "Feira"}).IsTransfer() {
+		t.Error("an ordinary transaction is reading as a transfer")
+	}
+}
+
+// A transfer counts toward nothing, and these are the ways a leg could claim
+// otherwise.
+func TestValidateTransferLeg(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*Transaction)
+		want string // a substring of the error, or empty for "accepted"
+	}{
+		{"the outcome leg is accepted", func(*Transaction) {}, ""},
+		{"the income leg is accepted", func(t *Transaction) { t.Kind = KindIncome }, ""},
+		{"a category is refused", func(t *Transaction) { t.Category = Ref{ID: 2} }, "category"},
+		{"a credit card is refused", func(t *Transaction) {
+			t.Account, t.Card = Ref{}, Ref{ID: 3}
+		}, "account"},
+		{"paying a card bill is refused", func(t *Transaction) { t.PaysBillID = 7 }, "transfer"},
+		{"paying a recurring bill is refused", func(t *Transaction) {
+			t.Recurring, t.Cycle = Ref{ID: 7}, "2026-08"
+		}, "transfer"},
+		// Caught by the rule that only a card purchase splits, which fires first
+		// and already says the right thing — a transfer leg is an account.
+		{"installments are refused", func(t *Transaction) {
+			t.Installment = Installment{Group: 1, Seq: 1, Count: 3}
+		}, "installments"},
+		{"a goal on the income leg is allowed", func(t *Transaction) {
+			t.Kind, t.Goal, t.GoalCurrency = KindIncome, Ref{ID: 4}, "BRL"
+		}, ""},
+		{"a goal on the outcome leg is refused", func(t *Transaction) {
+			t.Goal, t.GoalCurrency = Ref{ID: 4}, "BRL"
+		}, "arrives"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := leg(KindOutcome)
+			tc.edit(&tr)
+			err := tr.Validate()
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("Validate() = %v; want it accepted", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Validate() = %v; want an error mentioning %q", err, tc.want)
+			}
+		})
+	}
+
+	// An ordinary transaction keeps every one of those, which is the whole
+	// reason the rules hang off the group rather than off the kind.
+	t.Run("an ordinary transaction may still do all of it", func(t *testing.T) {
+		tr := leg(KindOutcome)
+		tr.TransferGroup = 0
+		tr.Category = Ref{ID: 2}
+		if err := tr.Validate(); err != nil {
+			t.Fatalf("a categorised ordinary transaction was refused: %v", err)
+		}
+	})
+}

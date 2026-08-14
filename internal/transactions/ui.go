@@ -74,6 +74,47 @@ func sourceKind(t Transaction) string {
 }
 
 // Table is the static list output — no alt screen, so `kakei t | grep` works.
+// arrow is which way the money went, from this leg's point of view: out of the
+// account this row is on, or into it.
+func arrow(t Transaction) string {
+	if t.Kind == KindOutcome {
+		return "→"
+	}
+	return "←"
+}
+
+// movement is a transfer's two ends on one line, in the column a category would
+// have used — a transfer never has one, so the column would otherwise be blank
+// on every transfer there is.
+func movement(t Transaction) string {
+	return tag(t.Account) + core.DimStyle.Render(" "+arrow(t)+" ") + tag(t.Counterpart.Ref)
+}
+
+// counterAmount is what the far end of a transfer moved by, in its own currency.
+func counterAmount(t Transaction) string {
+	cur := core.CurrencyByCode(t.Counterpart.Currency)
+	return cur.Symbol + core.FormatAmount(t.Counterpart.Value, cur)
+}
+
+// fee is what the transfer cost on the way, when it cost anything. Only in one
+// currency: across two there is no rate in kakei to subtract with, so the
+// difference is the rate rather than a fee and saying otherwise would be a
+// figure nobody could check.
+func fee(t Transaction) string {
+	if t.Currency != t.Counterpart.Currency {
+		return ""
+	}
+	out, in := t.Value, t.Counterpart.Value
+	if t.Kind == KindIncome {
+		out, in = in, out
+	}
+	if out <= in {
+		return ""
+	}
+	cur := t.Cur()
+	return cur.Symbol + core.FormatAmount(out-in, cur)
+}
+
 func Table(ts []Transaction) string {
 	tbl := table.New().
 		Border(lipgloss.RoundedBorder()).
@@ -91,7 +132,14 @@ func Table(ts []Transaction) string {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 	for _, t := range ts {
-		tbl.Row(core.DimStyle.Render(t.Date), title(t), tag(t.Category), tag(t.Target()), Amount(t))
+		// A transfer's two ends go in the source column, which is where the
+		// account it moved through already goes. Its category column stays
+		// empty, which is the truth: a transfer has none.
+		source := tag(t.Target())
+		if t.IsTransfer() {
+			source = movement(t)
+		}
+		tbl.Row(core.DimStyle.Render(t.Date), title(t), tag(t.Category), source, Amount(t))
 	}
 	return tbl.Render()
 }
@@ -139,6 +187,17 @@ func Details(t Transaction) string {
 
 	if t.Category.ID != 0 {
 		lines = append(lines, tag(t.Category)+" "+core.DimStyle.Render(t.Category.Name))
+	}
+	if t.IsTransfer() {
+		// Both ends, and what each of them moved by. The two amounts differ
+		// whenever the currencies do, and whenever something was taken on the
+		// way — so the far end says its own figure rather than borrowing this
+		// one.
+		lines = append(lines, movement(t)+" "+core.DimStyle.Render(t.Counterpart.Ref.Name))
+		lines = append(lines, core.DimStyle.Render(counterAmount(t)+" the other side"))
+		if f := fee(t); f != "" {
+			lines = append(lines, core.DimStyle.Render("fee ")+f)
+		}
 	}
 	lines = append(lines,
 		tag(t.Target())+" "+core.DimStyle.Render(t.Target().Name+" ("+sourceKind(t)+")"),
@@ -505,4 +564,124 @@ func pick(want, offered []string) []string {
 		}
 	}
 	return out
+}
+
+// TransferForm drives recording and editing a transfer. Only accounts are
+// offered, and only the ones still in play: a transfer into a frozen account is
+// money parked somewhere the app says is closed, and the store refuses it
+// anyway.
+//
+// The two ends come before either amount, so each amount's validator already
+// knows the currency to read it at — the ordering cards.Form and budgets.Form
+// both use. The arriving amount is pre-filled to match and stays editable,
+// which is what covers a fee and a cross-currency move without a conditional
+// field huh would have to redraw underfoot.
+func TransferForm(d FormData, t *Transfer, title string) error {
+	live := make([]huh.Option[int64], 0, len(d.Accounts))
+	for _, a := range d.Accounts {
+		if a.IsFrozen {
+			continue
+		}
+		live = append(live, huh.NewOption(a.Code+"  "+a.Name+"  ("+a.Currency+")", a.ID))
+	}
+	if len(live) < 2 {
+		return errors.New("a transfer needs two accounts — make another with: kakei ac n")
+	}
+	if t.From.ID == 0 {
+		t.From.ID = live[0].Value
+	}
+	if t.To.ID == 0 {
+		t.To.ID = live[1].Value
+	}
+
+	// The currency each side is read at, looked up as the form goes.
+	curOf := func(id int64) core.Currency {
+		for _, a := range d.Accounts {
+			if a.ID == id {
+				return core.CurrencyByCode(a.Currency)
+			}
+		}
+		return core.Currencies[0]
+	}
+
+	from, to := "", ""
+	if t.FromValue != 0 {
+		from = core.FormatAmount(t.FromValue, curOf(t.From.ID))
+	}
+	if t.ToValue != 0 {
+		to = core.FormatAmount(t.ToValue, curOf(t.To.ID))
+	}
+
+	// Only goals in the arriving account's currency are offered: a goal counts
+	// one currency, and this is the leg the money lands on.
+	goalOpts := []huh.Option[int64]{huh.NewOption("—", int64(0))}
+	for _, g := range d.Goals {
+		if g.Currency == curOf(t.To.ID).Code {
+			goalOpts = append(goalOpts, huh.NewOption(g.Name, g.ID))
+		}
+	}
+
+	tags := strings.Join(t.Tags, ", ")
+	amount := func(side *int64, id *int64) func(string) error {
+		return func(v string) error {
+			n, err := core.ParseAmount(v, curOf(*id))
+			if err != nil {
+				return err
+			}
+			if n <= 0 {
+				return errors.New("an amount must be more than zero")
+			}
+			*side = n
+			return nil
+		}
+	}
+
+	fields := []huh.Field{
+		huh.NewInput().Title("Title").Value(&t.Title).Validate(ValidateTitle),
+		huh.NewInput().Title("Description").Description("optional").Value(&t.Description),
+		huh.NewSelect[int64]().Title("From").Description("where the money leaves").
+			Options(live...).Value(&t.From.ID),
+		huh.NewSelect[int64]().Title("To").Description("where it arrives").
+			Options(live...).Value(&t.To.ID),
+		huh.NewInput().Title("Amount out").Value(&from).
+			Validate(amount(&t.FromValue, &t.From.ID)),
+		huh.NewInput().Title("Amount in").
+			Description("the same, unless a fee was taken or the currencies differ").
+			Value(&to).Validate(amount(&t.ToValue, &t.To.ID)),
+		huh.NewInput().Title("Date").Value(&t.Date).Validate(func(v string) error {
+			_, err := ParseDate(v)
+			return err
+		}),
+	}
+	if len(goalOpts) > 1 {
+		fields = append(fields, huh.NewSelect[int64]().Title("Goal").
+			Description("optional — what the arriving money is for").
+			Options(goalOpts...).Value(&t.Goal.ID))
+	}
+	fields = append(fields, huh.NewInput().Title("Tags").
+		Description("optional, comma separated").Value(&tags))
+
+	form := huh.NewForm(huh.NewGroup(fields...).Title(title)).WithTheme(huh.ThemeCharm())
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return core.ErrCancelled
+		}
+		return err
+	}
+
+	t.Title = strings.TrimSpace(t.Title)
+	t.Tags = ParseTags(tags)
+	// huh skips its validators when stdin ends mid-form, so an unreadable amount
+	// is left as it was rather than written through — and the store refuses the
+	// zero a new transfer started with.
+	if n, err := core.ParseAmount(from, curOf(t.From.ID)); err == nil && n > 0 {
+		t.FromValue = n
+	}
+	if n, err := core.ParseAmount(to, curOf(t.To.ID)); err == nil && n > 0 {
+		t.ToValue = n
+	}
+	if d, err := ParseDate(t.Date); err == nil {
+		t.Date = d
+	}
+	return nil
 }

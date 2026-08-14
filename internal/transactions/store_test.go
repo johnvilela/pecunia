@@ -1510,3 +1510,383 @@ func TestFrozenAccountsRefuseNewMoney(t *testing.T) {
 		}
 	})
 }
+
+// move is the transfer most cases start from: R$500.00 out of INTER and into
+// CASH1, both in reais.
+func (w *world) move() Transfer {
+	return Transfer{
+		Title: "Transferência", Date: "2026-08-14",
+		From: Ref{ID: w.inter.ID}, To: Ref{ID: w.cash.ID},
+		FromValue: 50000, ToValue: 50000,
+	}
+}
+
+func TestTransferWritesBothLegs(t *testing.T) {
+	t.Run("two rows, one group, and the group is the outgoing leg", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+		if n := w.count(t); n != 2 {
+			t.Fatalf("%d rows written; want 2", n)
+		}
+
+		out, err := w.store.Get(tr.Group)
+		if err != nil {
+			t.Fatalf("the group is not the id of a row: %v", err)
+		}
+		if out.Kind != KindOutcome {
+			t.Fatalf("the group names a %s row; want it to name the leg the money left", out.Kind)
+		}
+		if out.Account.ID != w.inter.ID {
+			t.Fatalf("the group's row is on account %d; want the source %d", out.Account.ID, w.inter.ID)
+		}
+	})
+
+	t.Run("each leg names the other end", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+
+		all, err := w.store.List(Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != 2 {
+			t.Fatalf("List = %d rows; want both legs", len(all))
+		}
+		for _, leg := range all {
+			if !leg.IsTransfer() {
+				t.Fatalf("leg #%d does not read as a transfer", leg.ID)
+			}
+			if leg.Counterpart.Ref.ID == 0 {
+				t.Fatalf("leg #%d names no counterpart", leg.ID)
+			}
+			if leg.Counterpart.Ref.ID == leg.Account.ID {
+				t.Fatalf("leg #%d names itself as its counterpart", leg.ID)
+			}
+			if leg.Counterpart.Value != 50000 {
+				t.Errorf("leg #%d counterpart value = %d; want 50000", leg.ID, leg.Counterpart.Value)
+			}
+		}
+	})
+
+	t.Run("the balances move both ways and net to nothing", func(t *testing.T) {
+		w := newWorld(t)
+		fromBefore := w.accountBalance(t, w.inter.ID)
+		toBefore := w.accountBalance(t, w.cash.ID)
+
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != fromBefore-50000 {
+			t.Errorf("source = %d; want %d", got, fromBefore-50000)
+		}
+		if got := w.accountBalance(t, w.cash.ID); got != toBefore+50000 {
+			t.Errorf("destination = %d; want %d", got, toBefore+50000)
+		}
+	})
+
+	t.Run("a fee is the two legs differing", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		tr.ToValue = 49500 // a R$5.00 TED
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.cash.ID); got != 15000+49500 {
+			t.Fatalf("destination = %d; want only what arrived", got)
+		}
+	})
+
+	t.Run("nothing is written when either leg is refused", func(t *testing.T) {
+		w := newWorld(t)
+		before := w.accountBalance(t, w.inter.ID)
+
+		tr := w.move()
+		tr.To = Ref{ID: 404} // no such account
+		if err := w.store.Transfer(&tr); err == nil {
+			t.Fatal("a transfer into a missing account succeeded; want it refused")
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d rows left behind; want none", n)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != before {
+			t.Fatalf("the source balance moved to %d; want %d", got, before)
+		}
+	})
+}
+
+func TestTransferIsRefused(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*Transfer, *world)
+		want string
+	}{
+		{"to and from the same account", func(tr *Transfer, w *world) {
+			tr.To = Ref{ID: w.inter.ID}
+		}, "same account"},
+		{"with no source", func(tr *Transfer, _ *world) { tr.From = Ref{} }, "account"},
+		{"with no destination", func(tr *Transfer, _ *world) { tr.To = Ref{} }, "account"},
+		{"with nothing leaving", func(tr *Transfer, _ *world) { tr.FromValue = 0 }, "more than zero"},
+		{"with nothing arriving", func(tr *Transfer, _ *world) { tr.ToValue = 0 }, "more than zero"},
+		{"with no title", func(tr *Transfer, _ *world) { tr.Title = "  " }, "title"},
+		{"on a date that is not one", func(tr *Transfer, _ *world) { tr.Date = "14/08/2026" }, "YYYY-MM-DD"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t)
+			tr := w.move()
+			tc.edit(&tr, w)
+			err := w.store.Transfer(&tr)
+			if err == nil {
+				t.Fatal("want it refused")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v; want an error mentioning %q", err, tc.want)
+			}
+			if n := w.count(t); n != 0 {
+				t.Fatalf("%d rows written by a refused transfer", n)
+			}
+		})
+	}
+
+	t.Run("out of a frozen account", func(t *testing.T) {
+		w := newWorld(t)
+		if _, err := w.accounts.ToggleFreeze(w.inter.ID); err != nil {
+			t.Fatal(err)
+		}
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err == nil {
+			t.Fatal("money left a frozen account; want it refused")
+		}
+	})
+
+	t.Run("into a frozen account", func(t *testing.T) {
+		w := newWorld(t)
+		if _, err := w.accounts.ToggleFreeze(w.cash.ID); err != nil {
+			t.Fatal(err)
+		}
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err == nil {
+			t.Fatal("money arrived in a frozen account; want it refused")
+		}
+	})
+}
+
+// A transfer between two currencies is two amounts and no rate: each side moves
+// by its own, and nothing anywhere converts one into the other.
+func TestCrossCurrencyTransfer(t *testing.T) {
+	w := newWorld(t)
+	usd := accounts.Account{Code: "PAYPL", Name: "PayPal", Color: "blue",
+		Currency: "USD", Balance: 20000}
+	if err := w.accounts.Create(&usd); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := w.move()
+	tr.To = Ref{ID: usd.ID}
+	tr.FromValue, tr.ToValue = 50000, 9200 // R$500.00 out, $92.00 in
+	if err := w.store.Transfer(&tr); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.accountBalance(t, w.inter.ID); got != 100000-50000 {
+		t.Errorf("source = %d; want it down by its own R$500.00", got)
+	}
+	if got := w.accountBalance(t, usd.ID); got != 20000+9200 {
+		t.Errorf("destination = %d; want it up by its own $92.00", got)
+	}
+}
+
+func TestTransferGoal(t *testing.T) {
+	t.Run("the arriving leg may feed a goal", func(t *testing.T) {
+		w := newWorld(t)
+		var goalID int64
+		res, err := w.conn.Exec(
+			`INSERT INTO goals (name, target, currency, kind) VALUES ('Reserva', 500000, 'BRL', 'saving')`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if goalID, err = res.LastInsertId(); err != nil {
+			t.Fatal(err)
+		}
+
+		tr := w.move()
+		tr.Goal = Ref{ID: goalID}
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+
+		var on string
+		if err := w.conn.QueryRow(
+			`SELECT kind FROM transactions WHERE goal_id = ?`, goalID).Scan(&on); err != nil {
+			t.Fatal(err)
+		}
+		if on != KindIncome {
+			t.Fatalf("the goal is on the %s leg; want the one the money arrives on", on)
+		}
+	})
+
+	t.Run("a goal in another currency is refused", func(t *testing.T) {
+		w := newWorld(t)
+		res, err := w.conn.Exec(
+			`INSERT INTO goals (name, target, currency, kind) VALUES ('Bitcoin', 100000000, 'BTC', 'saving')`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		goalID, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tr := w.move()
+		tr.Goal = Ref{ID: goalID}
+		if err := w.store.Transfer(&tr); err == nil {
+			t.Fatal("satoshis were counted against a reais transfer; want it refused")
+		}
+		if n := w.count(t); n != 0 {
+			t.Fatalf("%d rows written by a refused transfer", n)
+		}
+	})
+}
+
+func TestTransferEditAndDelete(t *testing.T) {
+	t.Run("editing reaches both legs", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+
+		tr.Title, tr.Description = "Para a reserva", "sobra do mês"
+		tr.FromValue, tr.ToValue = 60000, 60000
+		if err := w.store.UpdateTransfer(tr); err != nil {
+			t.Fatal(err)
+		}
+
+		all, err := w.store.List(Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, leg := range all {
+			if leg.Title != "Para a reserva" || leg.Description != "sobra do mês" {
+				t.Fatalf("leg #%d kept the old title: %+v", leg.ID, leg)
+			}
+			if leg.Value != 60000 {
+				t.Fatalf("leg #%d is worth %d; want the edited 60000", leg.ID, leg.Value)
+			}
+		}
+		// The balances have to follow the edit, both of them.
+		if got := w.accountBalance(t, w.inter.ID); got != 100000-60000 {
+			t.Errorf("source = %d; want it re-applied at the new amount", got)
+		}
+		if got := w.accountBalance(t, w.cash.ID); got != 15000+60000 {
+			t.Errorf("destination = %d; want it re-applied at the new amount", got)
+		}
+	})
+
+	t.Run("editing can move either end", func(t *testing.T) {
+		w := newWorld(t)
+		other := accounts.Account{Code: "NUBON", Name: "Nubank", Color: "violet",
+			Currency: "BRL", Balance: 0}
+		if err := w.accounts.Create(&other); err != nil {
+			t.Fatal(err)
+		}
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+
+		tr.To = Ref{ID: other.ID}
+		if err := w.store.UpdateTransfer(tr); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.cash.ID); got != 15000 {
+			t.Errorf("the old destination = %d; want the money given back", got)
+		}
+		if got := w.accountBalance(t, other.ID); got != 50000 {
+			t.Errorf("the new destination = %d; want it to have arrived", got)
+		}
+	})
+
+	t.Run("deleting either leg deletes both and reverses both balances", func(t *testing.T) {
+		for _, which := range []string{"the outgoing leg", "the arriving leg"} {
+			t.Run(which, func(t *testing.T) {
+				w := newWorld(t)
+				tr := w.move()
+				if err := w.store.Transfer(&tr); err != nil {
+					t.Fatal(err)
+				}
+				all, err := w.store.List(Filter{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				target := all[0]
+				for _, leg := range all {
+					if (which == "the outgoing leg") == (leg.Kind == KindOutcome) {
+						target = leg
+					}
+				}
+
+				if err := w.store.Delete(target.ID, ScopeOne); err != nil {
+					t.Fatal(err)
+				}
+				if n := w.count(t); n != 0 {
+					t.Fatalf("%d rows left; want half a transfer to be impossible", n)
+				}
+				if got := w.accountBalance(t, w.inter.ID); got != 100000 {
+					t.Errorf("source = %d; want it back where it started", got)
+				}
+				if got := w.accountBalance(t, w.cash.ID); got != 15000 {
+					t.Errorf("destination = %d; want it back where it started", got)
+				}
+			})
+		}
+	})
+
+	t.Run("a transfer comes back as one thing to edit", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		tr.ToValue = 49500
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := w.store.GetTransfer(tr.Group)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.From.ID != w.inter.ID || got.To.ID != w.cash.ID {
+			t.Fatalf("GetTransfer = %+v; want INTER → CASH1", got)
+		}
+		if got.FromValue != 50000 || got.ToValue != 49500 {
+			t.Fatalf("amounts = %d/%d; want 50000/49500", got.FromValue, got.ToValue)
+		}
+		if got.Title != "Transferência" {
+			t.Errorf("title = %q; want it kept", got.Title)
+		}
+	})
+}
+
+// An ordinary edit must not be able to turn one leg into something else and
+// leave the other pointing at it.
+func TestOrdinaryUpdateCannotBreakATransfer(t *testing.T) {
+	w := newWorld(t)
+	tr := w.move()
+	if err := w.store.Transfer(&tr); err != nil {
+		t.Fatal(err)
+	}
+	one, err := w.store.Get(tr.Group)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	one.Category = Ref{ID: w.food.ID}
+	if err := w.store.Update(one, ScopeOne); err == nil {
+		t.Fatal("a transfer leg took a category through the ordinary edit; want it refused")
+	}
+}

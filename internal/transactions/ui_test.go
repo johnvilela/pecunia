@@ -270,3 +270,98 @@ func TestTableHasNoGoalColumn(t *testing.T) {
 		t.Fatalf("the list table grew a goal column:\n%s", got)
 	}
 }
+
+// outLeg and inLeg are the two sides of one R$500.00 transfer, as the store
+// hands them back with the counterpart joined in.
+func outLeg() Transaction {
+	return Transaction{
+		ID: 42, Title: "Transferência", Value: 50000, Kind: KindOutcome,
+		Date: "2026-08-14", Currency: "BRL", TransferGroup: 42,
+		Account: Ref{ID: 1, Code: "NUBON", Name: "Nubank", Color: "violet"},
+		Counterpart: Counterpart{
+			Ref:   Ref{ID: 2, Code: "INTER", Name: "Inter", Color: "orange"},
+			Value: 50000, Currency: "BRL",
+		},
+	}
+}
+
+func inLeg() Transaction {
+	t := outLeg()
+	t.ID, t.Kind = 43, KindIncome
+	t.Account, t.Counterpart.Ref = t.Counterpart.Ref, t.Account
+	return t
+}
+
+func TestTransferRendering(t *testing.T) {
+	t.Run("the leaving leg points at where the money went", func(t *testing.T) {
+		got := Table([]Transaction{outLeg()})
+		for _, want := range []string{"NUBON", "INTER", "→", "R$500.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the table is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("the arriving leg points back at where it came from", func(t *testing.T) {
+		got := Table([]Transaction{inLeg()})
+		if !strings.Contains(got, "←") {
+			t.Errorf("the arriving leg does not point back at its origin:\n%s", got)
+		}
+	})
+
+	t.Run("a transfer has no category to show", func(t *testing.T) {
+		// The category column is where the arrow goes instead: a transfer never
+		// has one, so the column would otherwise be blank on every transfer.
+		got := Table([]Transaction{outLeg()})
+		if strings.Contains(got, "FOOD1") {
+			t.Errorf("a transfer rendered a category:\n%s", got)
+		}
+	})
+
+	t.Run("the details card names both ends", func(t *testing.T) {
+		got := Details(outLeg())
+		for _, want := range []string{"NUBON", "INTER", "R$500.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("details is missing %q:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("a fee is the two legs differing in one currency", func(t *testing.T) {
+		leg := outLeg()
+		leg.Counterpart.Value = 49500 // R$5.00 taken on the way
+		got := Details(leg)
+		for _, want := range []string{"R$495.00", "fee", "R$5.00"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("details does not explain the fee (%q):\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("a cross-currency transfer shows both amounts and calls it no fee", func(t *testing.T) {
+		leg := outLeg()
+		leg.Counterpart.Value, leg.Counterpart.Currency = 9200, "USD"
+		got := Details(leg)
+		if !strings.Contains(got, "$92.00") {
+			t.Errorf("details does not show what arrived:\n%s", got)
+		}
+		// Two currencies cannot be subtracted, so the difference is not a fee
+		// and must not be printed as one.
+		if strings.Contains(got, "fee") {
+			t.Errorf("details called a rate a fee:\n%s", got)
+		}
+	})
+
+	t.Run("an ordinary transaction is untouched", func(t *testing.T) {
+		got := Table([]Transaction{{ID: 1, Title: "Feira", Value: 8400,
+			Kind: KindOutcome, Date: "2026-08-14", Currency: "BRL",
+			Account:  Ref{ID: 1, Code: "NUBON", Name: "Nubank", Color: "violet"},
+			Category: Ref{ID: 1, Code: "FOOD1", Name: "Food", Color: "lime"}}})
+		if strings.Contains(got, "→") {
+			t.Errorf("an ordinary transaction grew an arrow:\n%s", got)
+		}
+		if !strings.Contains(got, "FOOD1") {
+			t.Errorf("an ordinary transaction lost its category:\n%s", got)
+		}
+	})
+}

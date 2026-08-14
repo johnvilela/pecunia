@@ -782,3 +782,33 @@ func TestCountForCategory(t *testing.T) {
 		}
 	})
 }
+
+// A transfer carries no category, and a NULL category matches no budget ever.
+// That is the whole reason this module needed no change for transfers — so it
+// is worth a guard, because the rule lives in another package.
+func TestTransfersNeverLandInABudget(t *testing.T) {
+	s, conn := newTestStore(t)
+	b, cat := seed(t, s, conn)
+
+	from := account(t, conn, "NUBON", "BRL")
+	to := account(t, conn, "INTER", "BRL")
+	tr := transactions.Transfer{
+		Title: "Transferência", Date: "2026-08-14",
+		From: transactions.Ref{ID: from}, To: transactions.Ref{ID: to},
+		FromValue: 50000, ToValue: 50000,
+	}
+	if err := transactions.NewStore(conn).Transfer(&tr); err != nil {
+		t.Fatal(err)
+	}
+	// And one real expense under the budget's category, so the case proves the
+	// budget is reading at all.
+	fileOn(t, conn, from, cat, "outcome", 12000, "2026-08-14")
+
+	got, err := s.Get(b.ID, "2026-08")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Spent != 12000 {
+		t.Fatalf("Spent = %d; want only the R$120.00 really spent, with the transfer ignored", got.Spent)
+	}
+}

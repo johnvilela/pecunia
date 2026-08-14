@@ -394,3 +394,118 @@ func TestTransactionsFilterByGoal(t *testing.T) {
 		}
 	})
 }
+
+// seedTransfer records one transfer in the database at path and hands back the
+// group, which is the id of the leg the money left.
+func seedTransfer(t *testing.T, path string) int64 {
+	t.Helper()
+	t.Setenv("KAKEI_DB", path)
+	conn, err := db.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	as := accounts.NewStore(conn)
+	from := accounts.Account{Code: "NUBON", Name: "Nubank", Color: "violet",
+		Currency: "BRL", Balance: 100000}
+	to := accounts.Account{Code: "INTER", Name: "Inter", Color: "orange",
+		Currency: "BRL", Balance: 0}
+	for _, a := range []*accounts.Account{&from, &to} {
+		if err := as.Create(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tr := transactions.Transfer{
+		Title: "Transferência", Date: "2026-08-14",
+		From: transactions.Ref{ID: from.ID}, To: transactions.Ref{ID: to.ID},
+		FromValue: 50000, ToValue: 50000,
+	}
+	ts := transactions.NewStore(conn)
+	if err := ts.Transfer(&tr); err != nil {
+		t.Fatal(err)
+	}
+	// One ordinary transaction beside it, so a case can tell the two apart.
+	feira := transactions.Transaction{Title: "Feira", Value: 8400,
+		Kind: transactions.KindOutcome, Date: "2026-08-14",
+		Account: transactions.Ref{ID: from.ID}}
+	if err := ts.Create(&feira); err != nil {
+		t.Fatal(err)
+	}
+	return tr.Group
+}
+
+func TestTransactionsTransferHelp(t *testing.T) {
+	for _, args := range [][]string{{"transfer", "-h"}, {"tr", "--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "nope", "unused.db")
+			got, err := runTransactionsIn(t, path, args...)
+			if err != nil {
+				t.Fatalf("help returned %v", err)
+			}
+			if !strings.Contains(got, "Move money between two accounts") {
+				t.Fatalf("help = %q; want the transfer help", got)
+			}
+		})
+	}
+}
+
+func TestTransactionsTransferList(t *testing.T) {
+	t.Run("--transfers shows only the transfers", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedTransfer(t, path)
+
+		got, err := runTransactionsIn(t, path, "--transfers")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Transferência") {
+			t.Errorf("--transfers left the transfer out:\n%s", got)
+		}
+		if strings.Contains(got, "Feira") {
+			t.Errorf("--transfers listed an ordinary transaction:\n%s", got)
+		}
+	})
+
+	t.Run("both legs are listed, pointing opposite ways", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedTransfer(t, path)
+
+		got, err := runTransactionsIn(t, path, "--transfers")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "→") || !strings.Contains(got, "←") {
+			t.Errorf("want both legs and both arrows:\n%s", got)
+		}
+	})
+
+	t.Run("the ordinary list shows them too", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "kakei.db")
+		seedTransfer(t, path)
+
+		got, err := runTransactionsIn(t, path, "--all")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Transferência") {
+			t.Errorf("the ledger hid a real movement:\n%s", got)
+		}
+	})
+}
+
+func TestTransactionsTransferDetails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kakei.db")
+	group := seedTransfer(t, path)
+
+	got, err := runTransactionsIn(t, path, strconv.FormatInt(group, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"NUBON", "INTER", "R$500.00", "the other side"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("details is missing %q:\n%s", want, got)
+		}
+	}
+}
