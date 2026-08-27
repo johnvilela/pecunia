@@ -309,6 +309,14 @@ var recurringFixtures = []recurringFixture{
 			Color: "lime", Expected: 12990, OpenDay: 5, DueDay: 10},
 		Account: "INTER", Category: "CARE1", Archived: true, PaidCycles: 2,
 	},
+	{
+		// Opens on the month's last day (31 clamps into short months), so
+		// whenever the seeder runs before that day, the board has an upcoming
+		// row. The last day itself is the one date no bill can be upcoming on.
+		Bill: recurring.Bill{Code: "SEGUR", Name: "Seguro", Description: "seguro do carro",
+			Color: "teal", Expected: 18790, OpenDay: 31, DueDay: 31},
+		Account: "INTER", Category: "TRANS",
+	},
 }
 
 // seedRecurring inserts the bills that are not there yet, skipping on the code

@@ -271,8 +271,9 @@ func TestBillCommand(t *testing.T) {
 		c := seedCard(t, path, nubank())
 		seedCharge(t, path, c, "Groceries", 12000)
 
-		// The month of the charge, which is the cycle it falls in.
-		month := time.Now().Format("2006-01")
+		// The cycle a charge falls in is the one closing on or after it — past
+		// the closing day that is next month, not the charge's own.
+		month := cards.NextDate(time.Now(), nubank().ClosingDay).Format("2006-01")
 		got, err := runCardsIn(t, path, "bill", "NUCRD", month)
 		if err != nil {
 			t.Fatal(err)

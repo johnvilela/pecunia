@@ -677,12 +677,23 @@ func TestSeedRecurring(t *testing.T) {
 		}
 		// A dev database whose board is all one colour is not worth looking at,
 		// and every state has its own row rendering to check.
-		for _, want := range []string{
+		want := []string{
 			recurring.StatusOverdue, recurring.StatusOpen,
 			recurring.StatusUpcoming, recurring.StatusPaid, recurring.StatusArchived,
-		} {
-			if !states[want] {
-				t.Errorf("no fixture renders %q; the board shows %v", want, states)
+		}
+		// Except on the month's last day: a cycle opening today is open, not
+		// upcoming, and no open day lands later than the last day — so that one
+		// date cannot render upcoming for any bill whatsoever.
+		today := time.Now()
+		if today.Month() != today.AddDate(0, 0, 1).Month() {
+			want = []string{
+				recurring.StatusOverdue, recurring.StatusOpen,
+				recurring.StatusPaid, recurring.StatusArchived,
+			}
+		}
+		for _, w := range want {
+			if !states[w] {
+				t.Errorf("no fixture renders %q; the board shows %v", w, states)
 			}
 		}
 		if !archived {
