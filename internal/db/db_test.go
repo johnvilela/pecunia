@@ -373,3 +373,115 @@ func TestOpenPermissions(t *testing.T) {
 		}
 	})
 }
+
+// TestOpenRestoresForeignKeys pins that migrate's foreign_keys toggle is undone:
+// the handle Open hands back must enforce references again.
+func TestOpenRestoresForeignKeys(t *testing.T) {
+	setDevDB(t, "")
+	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	conn, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var on int
+	if err := conn.QueryRow(`PRAGMA foreign_keys`).Scan(&on); err != nil {
+		t.Fatal(err)
+	}
+	if on != 1 {
+		t.Fatalf("foreign_keys = %d after Open; want it back on", on)
+	}
+}
+
+// TestAdjustmentRebuildPreservesData builds a database as it stood before 013 —
+// by running the embedded migrations below it by hand — fills it, and lets Open
+// apply only the rebuild. What was written must come through whole: same ids
+// (installment_group, transfer_group and transaction_tags all point at them),
+// tags still attached, nothing dangling.
+func TestAdjustmentRebuildPreservesData(t *testing.T) {
+	setDevDB(t, "")
+	path := filepath.Join(t.TempDir(), "kakei.db")
+
+	pre, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pre.Exec(`CREATE TABLE schema_migrations (
+		version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := fs.ReadDir(migrations, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() >= "013" {
+			continue
+		}
+		stmts, err := migrations.ReadFile("migrations/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pre.Exec(string(stmts)); err != nil {
+			t.Fatalf("replaying %s: %v", e.Name(), err)
+		}
+		if _, err := pre.Exec(`INSERT INTO schema_migrations (version) VALUES (?)`, e.Name()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, stmt := range []string{
+		`INSERT INTO accounts (id, code, name, color, balance, currency) VALUES (1, 'INTER', 'Inter', 'orange', 100000, 'BRL')`,
+		`INSERT INTO accounts (id, code, name, color, balance, currency) VALUES (2, 'CASH1', 'Cash', 'green', 15000, 'BRL')`,
+		`INSERT INTO transactions (id, title, account_id, value, kind, date) VALUES (7, 'Groceries', 1, 12000, 'outcome', '2026-08-08')`,
+		`INSERT INTO transaction_tags (transaction_id, tag) VALUES (7, 'mercado')`,
+		`INSERT INTO transactions (id, title, account_id, value, kind, date, transfer_group) VALUES (8, 'Move', 1, 5000, 'outcome', '2026-08-09', 8)`,
+		`INSERT INTO transactions (id, title, account_id, value, kind, date, transfer_group) VALUES (9, 'Move', 2, 5000, 'income', '2026-08-09', 8)`,
+	} {
+		if _, err := pre.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pre.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("KAKEI_DB", path)
+	conn, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	count := func(query string) int {
+		t.Helper()
+		var n int
+		if err := conn.QueryRow(query).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT count(*) FROM transactions`); n != 3 {
+		t.Fatalf("%d transactions after the rebuild; want 3", n)
+	}
+	if n := count(`SELECT count(*) FROM transaction_tags t
+		JOIN transactions tr ON tr.id = t.transaction_id WHERE tr.id = 7`); n != 1 {
+		t.Fatalf("tag join finds %d rows; want the tag still attached to id 7", n)
+	}
+	if n := count(`SELECT count(*) FROM transactions WHERE transfer_group = 8`); n != 2 {
+		t.Fatalf("%d transfer legs under group 8; want both", n)
+	}
+	rows, err := conn.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("foreign_key_check found dangling references after the rebuild")
+	}
+	// And the rebuilt table takes what the rebuild was for.
+	if _, err := conn.Exec(
+		`INSERT INTO transactions (title, account_id, value, kind, date) VALUES ('Balance adjustment', 1, -2500, 'adjustment', '2026-08-27')`,
+	); err != nil {
+		t.Fatalf("a signed adjustment on the rebuilt table = %v", err)
+	}
+}

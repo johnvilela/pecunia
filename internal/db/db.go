@@ -4,6 +4,7 @@ package db
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -135,6 +136,15 @@ func migrate(conn *sql.DB) error {
 		return err
 	}
 
+	// A rebuild migration drops and renames a table other tables reference, and
+	// PRAGMA foreign_keys is a no-op inside a transaction — so it is turned off
+	// out here around the whole batch, and the check at the end stands in for
+	// it. Open re-runs its pragma loop on every start, but nothing after this
+	// call does, which is why ON is restored before returning.
+	if _, err := conn.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+		return err
+	}
+
 	// ReadDir returns entries sorted by filename, which is why they are numbered.
 	entries, err := fs.ReadDir(migrations, "migrations")
 	if err != nil {
@@ -164,5 +174,18 @@ func migrate(conn *sql.DB) error {
 			return err
 		}
 	}
-	return nil
+
+	check, err := conn.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer check.Close()
+	if check.Next() {
+		return errors.New("migrations left a dangling reference behind")
+	}
+	if err := check.Err(); err != nil {
+		return err
+	}
+	_, err = conn.Exec("PRAGMA foreign_keys = ON")
+	return err
 }

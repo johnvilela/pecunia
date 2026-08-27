@@ -239,3 +239,54 @@ func TestSchemaReferences(t *testing.T) {
 		}
 	})
 }
+
+func TestSchemaAdjustmentKind(t *testing.T) {
+	t.Run("an adjustment is accepted", func(t *testing.T) {
+		conn := newTestDB(t)
+		acc, _, _ := fixtures(t, conn)
+		if err := insert(conn, `title, account_id, value, kind, date`,
+			"Balance adjustment", acc, 5000, "adjustment", "2026-08-27"); err != nil {
+			t.Fatalf("insert an adjustment = %v", err)
+		}
+	})
+
+	t.Run("an adjustment may be negative", func(t *testing.T) {
+		conn := newTestDB(t)
+		acc, _, _ := fixtures(t, conn)
+		if err := insert(conn, `title, account_id, value, kind, date`,
+			"Balance adjustment", acc, -5000, "adjustment", "2026-08-27"); err != nil {
+			t.Fatalf("insert a negative adjustment = %v", err)
+		}
+	})
+
+	t.Run("an adjustment of zero is rejected", func(t *testing.T) {
+		conn := newTestDB(t)
+		acc, _, _ := fixtures(t, conn)
+		if err := insert(conn, `title, account_id, value, kind, date`,
+			"Balance adjustment", acc, 0, "adjustment", "2026-08-27"); err == nil {
+			t.Fatal("an adjustment of zero was written; want the CHECK to refuse it")
+		}
+	})
+
+	t.Run("income and outcome still refuse zero and negative", func(t *testing.T) {
+		conn := newTestDB(t)
+		acc, _, _ := fixtures(t, conn)
+		for _, kind := range []string{"income", "outcome"} {
+			for _, value := range []int64{0, -5000} {
+				if err := insert(conn, `title, account_id, value, kind, date`,
+					"Groceries", acc, value, kind, "2026-08-27"); err == nil {
+					t.Fatalf("a %s of %d was written; want the CHECK to refuse it", kind, value)
+				}
+			}
+		}
+	})
+
+	t.Run("an unknown kind is still refused", func(t *testing.T) {
+		conn := newTestDB(t)
+		acc, _, _ := fixtures(t, conn)
+		if err := insert(conn, `title, account_id, value, kind, date`,
+			"Groceries", acc, 5000, "refund", "2026-08-27"); err == nil {
+			t.Fatal("an unknown kind was written; want the CHECK to refuse it")
+		}
+	})
+}
