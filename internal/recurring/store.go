@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"kakei/internal/core"
+	"kakei/internal/logs"
 	"kakei/internal/transactions"
 )
 
@@ -189,7 +190,10 @@ func (s *Store) Create(b *Bill) error {
 			return err
 		}
 		b.Active = true
-		return writeTags(tx, b.ID, b.Tags)
+		if err := writeTags(tx, b.ID, b.Tags); err != nil {
+			return err
+		}
+		return logs.Record(tx, logs.User, "created", "recurring", b.ID)
 	})
 }
 
@@ -197,6 +201,10 @@ func (s *Store) Update(b Bill) error {
 	b.Code = core.NormalizeCode(b.Code)
 	b.Tags = transactions.NormalizeTags(b.Tags)
 	if err := b.Validate(); err != nil {
+		return err
+	}
+	old, err := s.Get(b.ID)
+	if err != nil {
 		return err
 	}
 
@@ -218,13 +226,32 @@ func (s *Store) Update(b Bill) error {
 		if _, err := tx.Exec(`DELETE FROM recurring_bill_tags WHERE bill_id = ?`, b.ID); err != nil {
 			return err
 		}
-		return writeTags(tx, b.ID, b.Tags)
+		if err := writeTags(tx, b.ID, b.Tags); err != nil {
+			return err
+		}
+		return logs.RecordEdit(tx, logs.User, "recurring", b.ID, logs.Diff(
+			logs.F("code", old.Code, b.Code),
+			logs.F("name", old.Name, strings.TrimSpace(b.Name)),
+			logs.F("description", old.Description, b.Description),
+			logs.F("color", old.Color, b.Color),
+			logs.F("expected", old.Expected, b.Expected),
+			logs.F("category_id", old.Category.ID, b.Category.ID),
+			logs.F("account_id", old.Account.ID, b.Account.ID),
+			logs.F("card_id", old.Card.ID, b.Card.ID),
+			logs.F("open_day", old.OpenDay, b.OpenDay),
+			logs.F("due_day", old.DueDay, b.DueDay),
+			logs.F("tags", old.Tags, b.Tags),
+		))
 	})
 }
 
 // SetActive archives a bill or brings it back. An archived bill stops counting
 // as due and keeps every payment it ever took.
 func (s *Store) SetActive(id int64, active bool) error {
+	old, err := s.Get(id)
+	if err != nil {
+		return err
+	}
 	res, err := s.db.Exec(
 		`UPDATE recurring_bills SET active = ?, updated_at = datetime('now') WHERE id = ?`,
 		active, id)
@@ -234,7 +261,9 @@ func (s *Store) SetActive(id int64, active bool) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	// Diff drops an equal pair, so archiving the archived records nothing.
+	return logs.RecordEdit(s.db, logs.User, "recurring", id,
+		logs.Diff(logs.F("active", old.Active, active)))
 }
 
 // Delete is never refused. A bill is a label on the payments made against it,
@@ -257,7 +286,7 @@ func (s *Store) Delete(id int64) error {
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrNotFound
 		}
-		return nil
+		return logs.Record(tx, logs.User, "deleted", "recurring", id)
 	})
 }
 

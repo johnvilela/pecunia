@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"kakei/internal/core"
+	"kakei/internal/logs"
 )
 
 type Store struct{ db *sql.DB }
@@ -142,7 +143,7 @@ func (s *Store) Create(b *Budget) error {
 		return err
 	}
 	b.Active = true
-	return nil
+	return logs.Record(s.db, logs.User, "created", "budget", b.ID)
 }
 
 // Update refuses to move a budget to another currency while transactions it
@@ -203,12 +204,28 @@ func (s *Store) Update(b Budget, note string) error {
 			return err
 		}
 	}
+	if err := logs.RecordEdit(tx, logs.User, "budget", b.ID, logs.Diff(
+		logs.F("code", old.Code, b.Code),
+		logs.F("name", old.Name, b.Name),
+		logs.F("description", old.Description, b.Description),
+		logs.F("color", old.Color, b.Color),
+		logs.F("amount", old.Amount, b.Amount),
+		logs.F("currency", old.Currency, b.Currency),
+		logs.F("category_id", old.Category.ID, b.Category.ID),
+	)); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
 // SetActive puts a budget away or brings it back. An archived cap stops being
 // tracked and keeps its history readable, which is not the same as deleting it.
 func (s *Store) SetActive(id int64, active bool) error {
+	// Any valid cycle will do: only Active is read off the old row.
+	old, err := s.Get(id, "2000-01")
+	if err != nil {
+		return err
+	}
 	res, err := s.db.Exec(
 		`UPDATE budgets SET active = ?, updated_at = datetime('now') WHERE id = ?`, active, id)
 	if err != nil {
@@ -217,7 +234,9 @@ func (s *Store) SetActive(id int64, active bool) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	// Diff drops an equal pair, so archiving the archived records nothing.
+	return logs.RecordEdit(s.db, logs.User, "budget", id,
+		logs.Diff(logs.F("active", old.Active, active)))
 }
 
 // Delete is never refused, and takes nothing with it but its own history.
@@ -231,7 +250,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.Record(s.db, logs.User, "deleted", "budget", id)
 }
 
 // AmountLog is everything this budget's cap has been, newest first. An empty

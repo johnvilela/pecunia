@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"kakei/internal/logs"
 )
 
 func newTestStore(t *testing.T) (*Store, *sql.DB) {
@@ -597,6 +599,44 @@ func TestTargetLog(t *testing.T) {
 		}
 		if len(log) != 0 {
 			t.Fatalf("log = %+v; want it empty", log)
+		}
+	})
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("create, edit and delete each leave one row", func(t *testing.T) {
+		s, conn := newTestStore(t)
+		g := mustCreate(t, s, Goal{Name: "Trip", Target: 500000, Currency: "BRL", Kind: KindSaving})
+		g.Target = 600000
+		if err := s.Update(g, "flights went up"); err != nil {
+			t.Fatal(err)
+		}
+		// The trail is beside the target history, not instead of it. Counted
+		// before the delete: the cascade takes the target log with the goal.
+		var n int
+		if err := conn.QueryRow(`SELECT count(*) FROM goal_target_log`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("goal_target_log has %d rows; want its own record kept", n)
+		}
+		if err := s.Delete(g.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		es, err := logs.List(conn, logs.Filter{Entity: "goal"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(es) != 3 {
+			t.Fatalf("trail has %d rows; want 3", len(es))
+		}
+		// Newest first: deleted, edited, created.
+		if es[0].Action != "deleted" || es[1].Action != "edited" || es[2].Action != "created" {
+			t.Fatalf("trail = %+v; want deleted, edited, created", es)
+		}
+		if !strings.Contains(es[1].Changes, `"target"`) || strings.Contains(es[1].Changes, `"name"`) {
+			t.Errorf("changes = %s; want the target move and nothing else", es[1].Changes)
 		}
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"kakei/internal/logs"
 	"kakei/internal/transactions"
 )
 
@@ -383,4 +384,64 @@ func TestCodeTaken(t *testing.T) {
 	if err != nil || taken {
 		t.Errorf("WATER taken = %v, %v — want false", taken, err)
 	}
+}
+
+// audit is every trail row for recurring bills so far, oldest first.
+func (w *world) audit(t *testing.T) []logs.Entry {
+	t.Helper()
+	es, err := logs.List(w.conn, logs.Filter{Entity: "recurring", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(es)-1; i < j; i, j = i+1, j-1 {
+		es[i], es[j] = es[j], es[i]
+	}
+	return es
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("create, edit, archive and delete each leave one row", func(t *testing.T) {
+		w := newWorld(t)
+		b := w.create(t, w.bill())
+		b.Expected = 23990
+		if err := w.store.Update(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.store.SetActive(b.ID, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.store.Delete(b.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		es := w.audit(t)
+		if len(es) != 4 {
+			t.Fatalf("trail has %d rows; want 4", len(es))
+		}
+		for i, want := range []string{"created", "edited", "edited", "deleted"} {
+			if es[i].Action != want {
+				t.Fatalf("row %d = %+v; want %s", i, es[i], want)
+			}
+		}
+		if !strings.Contains(es[1].Changes, `"expected"`) || strings.Contains(es[1].Changes, `"name"`) {
+			t.Errorf("edit changes = %s; want the expected move alone", es[1].Changes)
+		}
+		if !strings.Contains(es[2].Changes, `"active":{"old":true,"new":false}`) {
+			t.Errorf("archive changes = %s; want the active flip", es[2].Changes)
+		}
+	})
+
+	t.Run("archiving an archived bill records nothing", func(t *testing.T) {
+		w := newWorld(t)
+		b := w.create(t, w.bill())
+		if err := w.store.SetActive(b.ID, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.store.SetActive(b.ID, false); err != nil {
+			t.Fatal(err)
+		}
+		if es := w.audit(t); len(es) != 2 {
+			t.Fatalf("trail has %d rows after a no-op archive; want 2", len(es))
+		}
+	})
 }

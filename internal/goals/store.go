@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"kakei/internal/logs"
 )
 
 type Store struct{ db *sql.DB }
@@ -71,8 +73,10 @@ func (s *Store) Create(g *Goal) error {
 	if err != nil {
 		return err
 	}
-	g.ID, err = res.LastInsertId()
-	return err
+	if g.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	return logs.Record(s.db, logs.User, "created", "goal", g.ID)
 }
 
 // Update refuses to move a goal to another currency while transactions are
@@ -130,6 +134,15 @@ func (s *Store) Update(g Goal, note string) error {
 			return err
 		}
 	}
+	if err := logs.RecordEdit(tx, logs.User, "goal", g.ID, logs.Diff(
+		logs.F("name", old.Name, g.Name),
+		logs.F("description", old.Description, g.Description),
+		logs.F("target", old.Target, g.Target),
+		logs.F("currency", old.Currency, g.Currency),
+		logs.F("kind", old.Kind, g.Kind),
+	)); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -166,7 +179,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.Record(s.db, logs.User, "deleted", "goal", id)
 }
 
 // Linked is how many transactions name this goal. It is what the delete

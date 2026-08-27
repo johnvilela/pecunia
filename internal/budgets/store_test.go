@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"kakei/internal/logs"
 	"kakei/internal/transactions"
 )
 
@@ -811,4 +812,45 @@ func TestTransfersNeverLandInABudget(t *testing.T) {
 	if got.Spent != 12000 {
 		t.Fatalf("Spent = %d; want only the R$120.00 really spent, with the transfer ignored", got.Spent)
 	}
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("create, edit, archive and delete each leave one row", func(t *testing.T) {
+		s, conn := newTestStore(t)
+		b, _ := seed(t, s, conn)
+		b.Amount = 95000
+		if err := s.Update(b, "rice went up"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetActive(b.ID, false); err != nil {
+			t.Fatal(err)
+		}
+		// The trail is beside the amount history, not instead of it. Counted
+		// before the delete: the cascade takes the amount log with the budget.
+		var n int
+		if err := conn.QueryRow(`SELECT count(*) FROM budget_amount_log`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("budget_amount_log has %d rows; want its own record kept", n)
+		}
+		if err := s.Delete(b.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		es, err := logs.List(conn, logs.Filter{Entity: "budget"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(es) != 4 {
+			t.Fatalf("trail has %d rows; want 4", len(es))
+		}
+		// Newest first: deleted, archived, edited, created.
+		if !strings.Contains(es[1].Changes, `"active"`) {
+			t.Errorf("archive changes = %s; want the active flip", es[1].Changes)
+		}
+		if !strings.Contains(es[2].Changes, `"amount"`) || strings.Contains(es[2].Changes, `"name"`) {
+			t.Errorf("edit changes = %s; want the amount move alone", es[2].Changes)
+		}
+	})
 }
