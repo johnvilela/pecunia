@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"kakei/internal/core"
+	"kakei/internal/logs"
 )
 
 type Store struct{ db *sql.DB }
@@ -86,8 +87,10 @@ func (s *Store) Create(c *Card) error {
 	if err != nil {
 		return core.CodeErr(err, c.Code)
 	}
-	c.ID, err = res.LastInsertId()
-	return err
+	if c.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	return logs.Record(s.db, logs.User, "created", "card", c.ID)
 }
 
 // Update refuses to move a card to another currency while charges are recorded
@@ -130,7 +133,18 @@ func (s *Store) Update(c Card) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.RecordEdit(s.db, logs.User, "card", c.ID, logs.Diff(
+		logs.F("code", old.Code, c.Code),
+		logs.F("name", old.Name, c.Name),
+		logs.F("description", old.Description, c.Description),
+		logs.F("color", old.Color, c.Color),
+		logs.F("limit", old.Limit, c.Limit),
+		logs.F("balance", old.Balance, c.Balance),
+		logs.F("currency", old.Currency, c.Currency),
+		logs.F("closing_day", old.ClosingDay, c.ClosingDay),
+		logs.F("due_day", old.DueDay, c.DueDay),
+		logs.F("over_limit_allowed", old.OverLimitAllowed, c.OverLimitAllowed),
+	))
 }
 
 func (s *Store) Delete(id int64) error {
@@ -143,7 +157,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.Record(s.db, logs.User, "deleted", "card", id)
 }
 
 func (s *Store) CodeTaken(code string) (bool, error) {

@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/core"
 	"kakei/internal/db"
+	"kakei/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file in its own temp dir, so no
@@ -623,4 +624,44 @@ func TestLinked(t *testing.T) {
 	if n, err := s.Linked(c.ID); err != nil || n != 1 {
 		t.Fatalf("Linked = %d, %v; want 1", n, err)
 	}
+}
+
+// trail is every audit row so far, oldest first.
+func trail(t *testing.T, s *Store) []logs.Entry {
+	t.Helper()
+	es, err := logs.List(s.db, logs.Filter{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(es)-1; i < j; i, j = i+1, j-1 {
+		es[i], es[j] = es[j], es[i]
+	}
+	return es
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("create, edit and delete each leave one row", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, nubank())
+		c.Limit = 600000
+		if err := s.Update(c); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(c.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		es := trail(t, s)
+		if len(es) != 3 {
+			t.Fatalf("trail has %d rows; want 3", len(es))
+		}
+		for i, want := range []string{"created", "edited", "deleted"} {
+			if es[i].Action != want || es[i].Entity != "card" || es[i].EntityID != c.ID {
+				t.Errorf("row %d = %+v; want %s/card/%d", i, es[i], want, c.ID)
+			}
+		}
+		if !strings.Contains(es[1].Changes, `"limit"`) || strings.Contains(es[1].Changes, `"name"`) {
+			t.Errorf("changes = %s; want the limit move and nothing else", es[1].Changes)
+		}
+	})
 }

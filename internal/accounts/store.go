@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"kakei/internal/core"
+	"kakei/internal/logs"
 )
 
 type Store struct{ db *sql.DB }
@@ -80,8 +81,13 @@ func (s *Store) Create(a *Account) error {
 	if err != nil {
 		return core.CodeErr(err, a.Code)
 	}
-	a.ID, err = res.LastInsertId()
-	return err
+	if a.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	// ponytail: the trail is a second Exec on the same handle, not a tx around
+	// both — one connection and a CLI lifetime keep the gap negligible; wrap
+	// the write and its log in a tx if that ever stops being true.
+	return logs.Record(s.db, logs.User, "created", "account", a.ID)
 }
 
 // Update refuses to move an account to another currency while transactions are
@@ -123,7 +129,15 @@ func (s *Store) Update(a Account) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.RecordEdit(s.db, logs.User, "account", a.ID, logs.Diff(
+		logs.F("code", old.Code, a.Code),
+		logs.F("name", old.Name, a.Name),
+		logs.F("description", old.Description, a.Description),
+		logs.F("color", old.Color, a.Color),
+		logs.F("balance", old.Balance, a.Balance),
+		logs.F("currency", old.Currency, a.Currency),
+		logs.F("frozen", old.IsFrozen, a.IsFrozen),
+	))
 }
 
 func (s *Store) Delete(id int64) error {
@@ -136,7 +150,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.Record(s.db, logs.User, "deleted", "account", id)
 }
 
 // ToggleFreeze flips is_frozen and reports the new state.
@@ -150,7 +164,8 @@ func (s *Store) ToggleFreeze(id int64) (bool, error) {
 		!a.IsFrozen, id); err != nil {
 		return false, err
 	}
-	return !a.IsFrozen, nil
+	return !a.IsFrozen, logs.RecordEdit(s.db, logs.User, "account", id,
+		logs.Diff(logs.F("frozen", a.IsFrozen, !a.IsFrozen)))
 }
 
 func (s *Store) CodeTaken(code string) (bool, error) {

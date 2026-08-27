@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/core"
 	"kakei/internal/db"
+	"kakei/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file in its own temp dir, so no
@@ -575,4 +576,105 @@ func TestLinked(t *testing.T) {
 	if n, err := s.Linked(a.ID); err != nil || n != 2 {
 		t.Fatalf("Linked = %d, %v; want 2", n, err)
 	}
+}
+
+// trail is every audit row so far, oldest first.
+func trail(t *testing.T, s *Store) []logs.Entry {
+	t.Helper()
+	es, err := logs.List(s.db, logs.Filter{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(es)-1; i < j; i, j = i+1, j-1 {
+		es[i], es[j] = es[j], es[i]
+	}
+	return es
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("a create leaves one row", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		es := trail(t, s)
+		if len(es) != 1 {
+			t.Fatalf("trail has %d rows; want 1", len(es))
+		}
+		e := es[0]
+		if e.Source != logs.User || e.Action != "created" || e.Entity != "account" || e.EntityID != a.ID {
+			t.Fatalf("trail row = %+v; want user/created/account/%d", e, a.ID)
+		}
+	})
+
+	t.Run("an edit records only what moved", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		a.Name, a.Balance = "Cold wallet", 160000000
+		if err := s.Update(a); err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != 2 || es[1].Action != "edited" {
+			t.Fatalf("trail = %+v; want a created then an edited row", es)
+		}
+		c := es[1].Changes
+		if !strings.Contains(c, `"name":{"old":"Wallet","new":"Cold wallet"}`) {
+			t.Errorf("changes are missing the name move: %s", c)
+		}
+		if !strings.Contains(c, `"balance"`) {
+			t.Errorf("changes are missing the balance move: %s", c)
+		}
+		if strings.Contains(c, `"color"`) {
+			t.Errorf("changes carry a field that never moved: %s", c)
+		}
+	})
+
+	t.Run("an edit that moves nothing records nothing", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		if err := s.Update(a); err != nil {
+			t.Fatal(err)
+		}
+		if es := trail(t, s); len(es) != 1 {
+			t.Fatalf("trail has %d rows after a no-op edit; want just the create", len(es))
+		}
+	})
+
+	t.Run("a delete leaves one row", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		if err := s.Delete(a.ID); err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != 2 || es[1].Action != "deleted" || es[1].EntityID != a.ID {
+			t.Fatalf("trail = %+v; want the delete on record", es)
+		}
+	})
+
+	t.Run("a freeze records the flip", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		if _, err := s.ToggleFreeze(a.ID); err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != 2 {
+			t.Fatalf("trail has %d rows; want 2", len(es))
+		}
+		if !strings.Contains(es[1].Changes, `"frozen":{"old":false,"new":true}`) {
+			t.Errorf("changes = %s; want the frozen flip", es[1].Changes)
+		}
+	})
+
+	t.Run("a refused write records nothing", func(t *testing.T) {
+		s := newTestStore(t)
+		mustCreate(t, s, wallet())
+		dup := wallet()
+		if err := s.Create(&dup); err == nil {
+			t.Fatal("a duplicate code was accepted")
+		}
+		if es := trail(t, s); len(es) != 1 {
+			t.Fatalf("trail has %d rows after a refused create; want 1", len(es))
+		}
+	})
 }
