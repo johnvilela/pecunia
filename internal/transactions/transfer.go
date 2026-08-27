@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"kakei/internal/logs"
 )
 
 // Transfer is money moving between two accounts you own, as one thing. It is
@@ -120,7 +122,9 @@ func (s *Store) Transfer(t *Transfer) error {
 				return err
 			}
 		}
-		return nil
+		// One action, however the legs fell — the legs themselves stay
+		// unlogged, or every transfer would read as two things happening.
+		return logs.Record(tx, logs.User, "created", "transfer", t.Group)
 	})
 }
 
@@ -155,6 +159,12 @@ func (s *Store) UpdateTransfer(t Transfer) error {
 	}
 	if t.Group == 0 {
 		return ErrNotFound
+	}
+	// Read back as the one thing it is, so the trail diffs a transfer against a
+	// transfer rather than leg against leg.
+	was, err := s.GetTransfer(t.Group)
+	if err != nil {
+		return err
 	}
 
 	old, err := s.legsOf(t.Group)
@@ -199,7 +209,17 @@ func (s *Store) UpdateTransfer(t Transfer) error {
 				return err
 			}
 		}
-		return nil
+		return logs.RecordEdit(tx, logs.User, "transfer", t.Group, logs.Diff(
+			logs.F("title", was.Title, t.Title),
+			logs.F("description", was.Description, t.Description),
+			logs.F("date", was.Date, t.Date),
+			logs.F("from", was.From.ID, t.From.ID),
+			logs.F("to", was.To.ID, t.To.ID),
+			logs.F("from_value", was.FromValue, t.FromValue),
+			logs.F("to_value", was.ToValue, t.ToValue),
+			logs.F("goal", was.Goal.ID, t.Goal.ID),
+			logs.F("tags", was.Tags, t.Tags),
+		))
 	})
 }
 

@@ -1891,3 +1891,160 @@ func TestOrdinaryUpdateCannotBreakATransfer(t *testing.T) {
 		t.Fatal("a transfer leg took a category through the ordinary edit; want it refused")
 	}
 }
+
+// audit is every trail row for one entity so far, oldest first.
+func (w *world) audit(t *testing.T, entity string) []logs.Entry {
+	t.Helper()
+	es, err := logs.List(w.conn, logs.Filter{Entity: entity, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(es)-1; i < j; i, j = i+1, j-1 {
+		es[i], es[j] = es[j], es[i]
+	}
+	return es
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("a create leaves one row", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		es := w.audit(t, "transaction")
+		if len(es) != 1 || es[0].Action != "created" || es[0].EntityID != tr.ID {
+			t.Fatalf("trail = %+v; want one created row for %d", es, tr.ID)
+		}
+	})
+
+	t.Run("an installment series is one action", func(t *testing.T) {
+		w := newWorld(t)
+		w.create(t, w.phone())
+		if es := w.audit(t, "transaction"); len(es) != 1 {
+			t.Fatalf("trail has %d rows for a 6-installment purchase; want 1", len(es))
+		}
+	})
+
+	t.Run("an edit across a series is one action, carrying only what moved", func(t *testing.T) {
+		w := newWorld(t)
+		created := w.create(t, w.phone())
+		// The stored row, not the pre-split purchase — an edit starts from what
+		// the form loads.
+		tr, err := w.store.Get(created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr.Title = "iPhone"
+		if err := w.store.Update(tr, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+		es := w.audit(t, "transaction")
+		if len(es) != 2 || es[1].Action != "edited" {
+			t.Fatalf("trail = %+v; want a created then one edited row", es)
+		}
+		if !strings.Contains(es[1].Changes, `"title"`) || strings.Contains(es[1].Changes, `"value"`) {
+			t.Errorf("changes = %s; want the title move and nothing else", es[1].Changes)
+		}
+	})
+
+	t.Run("a delete across a series is one action", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.phone())
+		if err := w.store.Delete(tr.ID, ScopeAll); err != nil {
+			t.Fatal(err)
+		}
+		es := w.audit(t, "transaction")
+		if len(es) != 2 || es[1].Action != "deleted" || es[1].EntityID != tr.ID {
+			t.Fatalf("trail = %+v; want one deleted row", es)
+		}
+	})
+
+	t.Run("a transfer is one transfer row, not two transaction rows", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+		es := w.audit(t, "transfer")
+		if len(es) != 1 || es[0].Action != "created" || es[0].EntityID != tr.Group {
+			t.Fatalf("transfer trail = %+v; want one created row under group %d", es, tr.Group)
+		}
+		if es := w.audit(t, "transaction"); len(es) != 0 {
+			t.Fatalf("transaction trail = %+v; want the legs unlogged", es)
+		}
+	})
+
+	t.Run("editing a transfer is one action", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.move()
+		if err := w.store.Transfer(&tr); err != nil {
+			t.Fatal(err)
+		}
+		tr.FromValue, tr.ToValue = 60000, 60000
+		if err := w.store.UpdateTransfer(tr); err != nil {
+			t.Fatal(err)
+		}
+		es := w.audit(t, "transfer")
+		if len(es) != 2 || es[1].Action != "edited" {
+			t.Fatalf("trail = %+v; want a created then one edited row", es)
+		}
+		if !strings.Contains(es[1].Changes, `"from_value"`) || strings.Contains(es[1].Changes, `"title"`) {
+			t.Errorf("changes = %s; want the amount move and nothing else", es[1].Changes)
+		}
+	})
+
+	t.Run("deleting a transfer from either leg is one transfer row", func(t *testing.T) {
+		for _, leg := range []string{"outgoing", "incoming"} {
+			w := newWorld(t)
+			tr := w.move()
+			if err := w.store.Transfer(&tr); err != nil {
+				t.Fatal(err)
+			}
+			id := tr.Group
+			if leg == "incoming" {
+				legs, err := w.store.legsOf(tr.Group)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, l := range legs {
+					if l.ID != tr.Group {
+						id = l.ID
+					}
+				}
+			}
+			if err := w.store.Delete(id, ScopeOne); err != nil {
+				t.Fatal(err)
+			}
+			es := w.audit(t, "transfer")
+			if len(es) != 2 || es[1].Action != "deleted" || es[1].EntityID != tr.Group {
+				t.Fatalf("%s leg: trail = %+v; want one transfer deleted row", leg, es)
+			}
+			if es := w.audit(t, "transaction"); len(es) != 0 {
+				t.Fatalf("%s leg: transaction trail = %+v; want none", leg, es)
+			}
+		}
+	})
+
+	t.Run("paying a bill is one action", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.bill(t, w.nucrd, "2026-08-15", "2026-08-22", 20000)
+		if err := w.store.PayBill(bill, w.inter.ID, 20000, "2026-08-16"); err != nil {
+			t.Fatal(err)
+		}
+		if es := w.audit(t, "transaction"); len(es) != 1 {
+			t.Fatalf("trail has %d transaction rows for a payment; want 1", len(es))
+		}
+	})
+
+	t.Run("a refused write records nothing", func(t *testing.T) {
+		w := newWorld(t)
+		if _, err := w.accounts.ToggleFreeze(w.inter.ID); err != nil {
+			t.Fatal(err)
+		}
+		tr := w.tx()
+		if err := w.store.Create(&tr); err == nil {
+			t.Fatal("a transaction onto a frozen account was accepted")
+		}
+		if es := w.audit(t, "transaction"); len(es) != 0 {
+			t.Fatalf("trail = %+v; want nothing for a refused write", es)
+		}
+	})
+}

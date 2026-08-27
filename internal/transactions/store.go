@@ -10,6 +10,7 @@ import (
 
 	"kakei/internal/bills"
 	"kakei/internal/cards"
+	"kakei/internal/logs"
 )
 
 // Scope is how far an edit or a delete reaches through an installment series.
@@ -269,7 +270,12 @@ func (s *Store) Create(t *Transaction) error {
 				return err
 			}
 		}
-		return refreshBills(tx, t.PaysBillID)
+		if err := refreshBills(tx, t.PaysBillID); err != nil {
+			return err
+		}
+		// One action however many rows the series took, logged inside the same
+		// tx so a refused purchase leaves no trail.
+		return logs.Record(tx, logs.User, "created", "transaction", t.ID)
 	})
 }
 
@@ -314,7 +320,11 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 			return err
 		}
 		var touched []int64
+		var was Transaction
 		for _, old := range targets {
+			if old.ID == t.ID {
+				was = old
+			}
 			row := t
 			if old.ID != t.ID {
 				// A sibling keeps everything that is its own.
@@ -332,7 +342,25 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 			}
 			touched = append(touched, old.PaysBillID, row.PaysBillID)
 		}
-		return refreshBills(tx, touched...)
+		if err := refreshBills(tx, touched...); err != nil {
+			return err
+		}
+		// One action however far the scope reached, diffed against the row that
+		// was actually edited.
+		return logs.RecordEdit(tx, logs.User, "transaction", t.ID, logs.Diff(
+			logs.F("title", was.Title, t.Title),
+			logs.F("description", was.Description, t.Description),
+			logs.F("value", was.Value, t.Value),
+			logs.F("kind", was.Kind, t.Kind),
+			logs.F("date", was.Date, t.Date),
+			logs.F("category_id", was.Category.ID, t.Category.ID),
+			logs.F("account_id", was.Account.ID, t.Account.ID),
+			logs.F("card_id", was.Card.ID, t.Card.ID),
+			logs.F("goal_id", was.Goal.ID, t.Goal.ID),
+			logs.F("recurring_id", was.Recurring.ID, t.Recurring.ID),
+			logs.F("cycle", was.Cycle, t.Cycle),
+			logs.F("tags", was.Tags, t.Tags),
+		))
 	})
 }
 
@@ -355,7 +383,15 @@ func (s *Store) Delete(id int64, scope Scope) error {
 			}
 			touched = append(touched, old.PaysBillID)
 		}
-		return refreshBills(tx, touched...)
+		if err := refreshBills(tx, touched...); err != nil {
+			return err
+		}
+		// A transfer is inseparable, so deleting either leg is deleting the
+		// transfer — logged as the one thing it is, under the group.
+		if targets[0].IsTransfer() {
+			return logs.Record(tx, logs.User, "deleted", "transfer", targets[0].TransferGroup)
+		}
+		return logs.Record(tx, logs.User, "deleted", "transaction", id)
 	})
 }
 
