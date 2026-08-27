@@ -2122,3 +2122,113 @@ func TestAdjustments(t *testing.T) {
 		}
 	})
 }
+
+// openBill plants a still-open bill row, the shape Ensure would have made.
+func (w *world) openBill(t *testing.T, card cards.Card, closesOn, dueOn string) int64 {
+	t.Helper()
+	res, err := w.conn.Exec(
+		`INSERT INTO card_bills (card_id, closes_on, due_on) VALUES (?, ?, ?)`,
+		card.ID, closesOn, dueOn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func (w *world) billTotal(t *testing.T, id int64) int64 {
+	t.Helper()
+	var total int64
+	if err := w.conn.QueryRow(`SELECT total FROM card_bills WHERE id = ?`, id).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	return total
+}
+
+func TestChargesRefreshTheirBill(t *testing.T) {
+	// NUCRD closes on the 15th: the 2026-09-15 bill covers 08-16 through 09-15.
+	t.Run("a charge lands on its bill at write time", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.openBill(t, w.nucrd, "2026-09-15", "2026-09-22")
+
+		tr := w.tx()
+		tr.Account, tr.Card, tr.Date = Ref{}, Ref{ID: w.nucrd.ID}, "2026-08-20"
+		tr = w.create(t, tr)
+		if got := w.billTotal(t, bill); got != tr.Value {
+			t.Fatalf("bill total = %d after the charge, before any read; want %d", got, tr.Value)
+		}
+
+		if err := w.store.Delete(tr.ID, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.billTotal(t, bill); got != 0 {
+			t.Fatalf("bill total = %d after the delete; want it given back", got)
+		}
+	})
+
+	t.Run("an edit moving the date moves the totals with it", func(t *testing.T) {
+		w := newWorld(t)
+		aug := w.openBill(t, w.nucrd, "2026-08-15", "2026-08-22")
+		sep := w.openBill(t, w.nucrd, "2026-09-15", "2026-09-22")
+
+		tr := w.tx()
+		tr.Account, tr.Card, tr.Date = Ref{}, Ref{ID: w.nucrd.ID}, "2026-08-10"
+		tr = w.create(t, tr)
+		if got := w.billTotal(t, aug); got != tr.Value {
+			t.Fatalf("august total = %d; want the charge on it", got)
+		}
+
+		loaded, err := w.store.Get(tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loaded.Date = "2026-08-20"
+		if err := w.store.Update(loaded, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.billTotal(t, aug); got != 0 {
+			t.Fatalf("august total = %d after the move; want 0", got)
+		}
+		if got := w.billTotal(t, sep); got != tr.Value {
+			t.Fatalf("september total = %d after the move; want the charge", got)
+		}
+	})
+
+	t.Run("a charge on the closing day belongs to that bill", func(t *testing.T) {
+		w := newWorld(t)
+		bill := w.openBill(t, w.nucrd, "2026-09-15", "2026-09-22")
+		tr := w.tx()
+		tr.Account, tr.Card, tr.Date = Ref{}, Ref{ID: w.nucrd.ID}, "2026-09-15"
+		tr = w.create(t, tr)
+		if got := w.billTotal(t, bill); got != tr.Value {
+			t.Fatalf("bill total = %d for a closing-day charge; want %d", got, tr.Value)
+		}
+	})
+
+	t.Run("a bill that does not exist is not created", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.phone() // 6 installments on the card, reaching months ahead
+		w.create(t, tr)
+		var n int
+		if err := w.conn.QueryRow(`SELECT count(*) FROM card_bills`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("%d bill rows appeared from a write; want generation left to Ensure", n)
+		}
+	})
+
+	t.Run("a closed bill's total stays frozen", func(t *testing.T) {
+		w := newWorld(t)
+		frozen := w.bill(t, w.nucrd, "2026-08-15", "2026-08-22", 20000)
+		tr := w.tx()
+		tr.Account, tr.Card, tr.Date = Ref{}, Ref{ID: w.nucrd.ID}, "2026-08-10"
+		w.create(t, tr)
+		if got := w.billTotal(t, frozen); got != 20000 {
+			t.Fatalf("closed total = %d after a backdated charge; want it frozen at 20000", got)
+		}
+	})
+}

@@ -172,14 +172,62 @@ func (s *Store) refreshOpen(c cards.Card, today time.Time) error {
 // LiveTotal is what the bill's period sums to right now. It is what an open
 // bill's total is set from — and, on a closed one, what the detail view compares
 // the frozen total against so the drift is visible rather than silent.
-func (s *Store) LiveTotal(b Bill) (int64, error) {
+func (s *Store) LiveTotal(b Bill) (int64, error) { return liveTotal(s.db, b) }
+
+func liveTotal(db DB, b Bill) (int64, error) {
 	from, to := b.Period()
 	var total int64
-	err := s.db.QueryRow(
+	err := db.QueryRow(
 		`SELECT COALESCE(SUM(CASE kind WHEN 'outcome' THEN value ELSE -value END), 0)
 		 FROM transactions WHERE card_id = ? AND date >= ? AND date <= ?`,
 		b.Card.ID, from, to).Scan(&total)
 	return total, err
+}
+
+// Charged brings the open bill covering one card charge up to date, inside the
+// caller's transaction — the charges' counterpart to Refresh, which follows
+// payments. A bill that does not exist yet is not created: an installment can
+// land five years out, and a future row would break everything that treats the
+// newest open bill as the current one. The row appears when Ensure reaches its
+// cycle, and its total is computed then. A closed bill is left alone — its
+// total froze when it closed.
+func Charged(db DB, cardID int64, date string) error {
+	d, err := time.Parse(dateLayout, date)
+	if err != nil {
+		return err
+	}
+	var closingDay int
+	if err := db.QueryRow(
+		`SELECT closing_day FROM credit_cards WHERE id = ?`, cardID).Scan(&closingDay); err != nil {
+		return err
+	}
+	closes := cards.NextDate(d, closingDay).Format(dateLayout)
+
+	var id, total int64
+	var status string
+	err = db.QueryRow(
+		`SELECT id, total, status FROM card_bills WHERE card_id = ? AND closes_on = ?`,
+		cardID, closes).Scan(&id, &total, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if status != StatusOpen {
+		return nil
+	}
+
+	live, err := liveTotal(db, Bill{ClosesOn: closes, Card: cards.Card{ID: cardID, ClosingDay: closingDay}})
+	if err != nil {
+		return err
+	}
+	if live == total {
+		return nil
+	}
+	_, err = db.Exec(
+		`UPDATE card_bills SET total = ?, updated_at = datetime('now') WHERE id = ?`, live, id)
+	return err
 }
 
 // paidOn is what has been paid against the bill. A payment is an account

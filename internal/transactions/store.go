@@ -236,6 +236,7 @@ func (s *Store) Create(t *Transaction) error {
 
 	return s.inTx(func(tx *sql.Tx) error {
 		var group int64
+		var written []Transaction
 		for i, value := range SplitInstallments(t.Value, n) {
 			row := *t
 			row.Value = value
@@ -269,8 +270,12 @@ func (s *Store) Create(t *Transaction) error {
 			if err := applyBalance(tx, row, 1); err != nil {
 				return err
 			}
+			written = append(written, row)
 		}
 		if err := refreshBills(tx, t.PaysBillID); err != nil {
+			return err
+		}
+		if err := chargedBills(tx, written...); err != nil {
 			return err
 		}
 		// One action however many rows the series took, logged inside the same
@@ -325,6 +330,7 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 			return errors.New("an adjustment is not edited — delete it and the balance reverts, or file another")
 		}
 		var touched []int64
+		var moved []Transaction
 		var was Transaction
 		for _, old := range targets {
 			if old.ID == t.ID {
@@ -346,8 +352,14 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 				return err
 			}
 			touched = append(touched, old.PaysBillID, row.PaysBillID)
+			// Both sides: a charge moved off a bill and onto another leaves two
+			// totals to put right.
+			moved = append(moved, old, row)
 		}
 		if err := refreshBills(tx, touched...); err != nil {
+			return err
+		}
+		if err := chargedBills(tx, moved...); err != nil {
 			return err
 		}
 		// One action however far the scope reached, diffed against the row that
@@ -389,6 +401,9 @@ func (s *Store) Delete(id int64, scope Scope) error {
 			touched = append(touched, old.PaysBillID)
 		}
 		if err := refreshBills(tx, touched...); err != nil {
+			return err
+		}
+		if err := chargedBills(tx, targets...); err != nil {
 			return err
 		}
 		// A transfer is inseparable, so deleting either leg is deleting the
@@ -565,6 +580,28 @@ func updateRow(tx *sql.Tx, t Transaction) error {
 // because the status is read back out of the transactions table, so it has to
 // see the rows as they finally are — not halfway through an edit that has
 // reversed the old row but not yet written the new one.
+// chargedBills brings each card row's own bill up to date, once per card and
+// date — the charges' mirror of refreshBills below, which follows payments.
+// Account rows (payments, adjustments, transfer legs) have no bill to touch.
+func chargedBills(tx *sql.Tx, rows ...Transaction) error {
+	type key struct {
+		card int64
+		date string
+	}
+	seen := map[key]bool{}
+	for _, r := range rows {
+		k := key{r.Card.ID, r.Date}
+		if r.Card.ID == 0 || seen[k] {
+			continue
+		}
+		seen[k] = true
+		if err := bills.Charged(tx, r.Card.ID, r.Date); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func refreshBills(tx *sql.Tx, ids ...int64) error {
 	seen := map[int64]bool{}
 	for _, id := range ids {
