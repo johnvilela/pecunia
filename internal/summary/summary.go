@@ -150,8 +150,10 @@ func (s *Summary) collectLedger(conn *sql.DB) error {
 		// A transfer is money moving between two accounts you own: nothing was
 		// earned and nothing was consumed, and counting its legs would inflate
 		// both directions at once. It is still listed — both legs really moved —
-		// but it totals to nothing, because that is what it is.
-		if tr.IsTransfer() {
+		// but it totals to nothing, because that is what it is. An adjustment
+		// gets the same treatment for the same reason: it is the record
+		// catching up with reality, not money earned or spent.
+		if tr.IsTransfer() || tr.Kind == transactions.KindAdjustment {
 			if s.Period.Contains(tr.Date) {
 				s.Ledger = append(s.Ledger, tr)
 			}

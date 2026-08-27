@@ -666,3 +666,26 @@ func TestTransfersAreNotTotalled(t *testing.T) {
 		}
 	})
 }
+
+func TestCollectSkipsAdjustments(t *testing.T) {
+	w := newWorld(t)
+	w.file(t, transactions.Transaction{
+		Title: "Balance adjustment", Value: -5000, Kind: transactions.KindAdjustment,
+		Date: "2026-08-13", Account: transactions.Ref{ID: w.inter.ID},
+	})
+	w.spend(t, "2026-08-13", 12000)
+
+	s := w.collect(t, aug13(), "2026-08-13")
+	if !slices.Contains(titles(s.Ledger), "Balance adjustment") {
+		t.Fatalf("ledger = %v; want the adjustment listed — it really moved", titles(s.Ledger))
+	}
+	if s.In["BRL"] != 0 {
+		t.Fatalf("In = %d; want an adjustment counted as no income", s.In["BRL"])
+	}
+	if s.Out["BRL"] != 12000 {
+		t.Fatalf("Out = %d; want only the real spend", s.Out["BRL"])
+	}
+	if s.MTD["BRL"] != 12000 {
+		t.Fatalf("MTD = %d; want the adjustment kept out of it", s.MTD["BRL"])
+	}
+}
