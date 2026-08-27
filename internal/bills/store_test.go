@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/cards"
 	"kakei/internal/db"
+	"kakei/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file, its own card, and a clock
@@ -456,6 +457,63 @@ func TestNewStoreAt(t *testing.T) {
 				t.Errorf("a bill closing on %s exists; want nothing past the clock it was given",
 					b.ClosesOn)
 			}
+		}
+	})
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("a generated bill is logged as the system's doing, once", func(t *testing.T) {
+		s, c := newTestStore(t, "2026-08-20", 15, 22)
+		charge(t, s, c, "2026-06-10", "Groceries", 12000, "outcome")
+
+		all, err := s.List(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		es, err := logs.List(s.db, logs.Filter{Entity: "card_bill", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(es) != len(all) {
+			t.Fatalf("trail has %d card_bill rows for %d bills; want one each", len(es), len(all))
+		}
+		for _, e := range es {
+			if e.Source != logs.System || e.Action != "created" {
+				t.Fatalf("row = %+v; want system/created", e)
+			}
+		}
+
+		// A second read generates nothing, so it logs nothing.
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		again, err := logs.List(s.db, logs.Filter{Entity: "card_bill", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(again) != len(es) {
+			t.Fatalf("trail grew from %d to %d rows on a plain read; want no change", len(es), len(again))
+		}
+	})
+
+	t.Run("a payment refreshing totals logs nothing", func(t *testing.T) {
+		s, c := newTestStore(t, "2026-08-20", 15, 22)
+		charge(t, s, c, "2026-07-10", "Groceries", 12000, "outcome")
+		bill, err := s.OldestUnpaid(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before, err := logs.List(s.db, logs.Filter{Entity: "card_bill", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		payment(t, s, bill.ID, 12000, "2026-08-16")
+		after, err := logs.List(s.db, logs.Filter{Entity: "card_bill", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(after) != len(before) {
+			t.Fatalf("trail grew from %d to %d rows on a payment; want no change", len(before), len(after))
 		}
 	})
 }

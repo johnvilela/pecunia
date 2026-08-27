@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"kakei/internal/cards"
+	"kakei/internal/logs"
 )
 
 // DB is the slice of *sql.DB and *sql.Tx this package needs. Refresh takes one
@@ -55,11 +56,23 @@ func (s *Store) Ensure(c cards.Card) error {
 	}
 	last := cards.NextDate(today, c.ClosingDay) // the cycle still taking charges
 	for closes := cards.NextDate(from, c.ClosingDay); !closes.After(last); closes = next(closes, c.ClosingDay) {
-		if _, err := s.db.Exec(
+		res, err := s.db.Exec(
 			`INSERT INTO card_bills (card_id, closes_on, due_on) VALUES (?, ?, ?)
 			 ON CONFLICT (card_id, closes_on) DO NOTHING`,
-			c.ID, closes.Format(dateLayout), DueDate(closes, c.DueDay).Format(dateLayout)); err != nil {
+			c.ID, closes.Format(dateLayout), DueDate(closes, c.DueDay).Format(dateLayout))
+		if err != nil {
 			return err
+		}
+		// Only a bill that actually appeared is an event — the conflict path is
+		// this running again, which is every read after the first.
+		if n, _ := res.RowsAffected(); n == 1 {
+			id, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			if err := logs.Record(s.db, logs.System, "created", "card_bill", id); err != nil {
+				return err
+			}
 		}
 	}
 	return s.refreshOpen(c, today)
