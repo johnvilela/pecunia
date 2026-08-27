@@ -143,7 +143,7 @@ func (s *Store) Create(b *Budget) error {
 		return err
 	}
 	b.Active = true
-	return logs.Record(s.db, logs.User, "created", "budget", b.ID)
+	return logs.Record(s.db, logs.Actor, "created", "budget", b.ID)
 }
 
 // Update refuses to move a budget to another currency while transactions it
@@ -204,7 +204,7 @@ func (s *Store) Update(b Budget, note string) error {
 			return err
 		}
 	}
-	if err := logs.RecordEdit(tx, logs.User, "budget", b.ID, logs.Diff(
+	if err := logs.RecordEdit(tx, logs.Actor, "budget", b.ID, logs.Diff(
 		logs.F("code", old.Code, b.Code),
 		logs.F("name", old.Name, b.Name),
 		logs.F("description", old.Description, b.Description),
@@ -235,7 +235,7 @@ func (s *Store) SetActive(id int64, active bool) error {
 		return ErrNotFound
 	}
 	// Diff drops an equal pair, so archiving the archived records nothing.
-	return logs.RecordEdit(s.db, logs.User, "budget", id,
+	return logs.RecordEdit(s.db, logs.Actor, "budget", id,
 		logs.Diff(logs.F("active", old.Active, active)))
 }
 
@@ -250,7 +250,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.Record(s.db, logs.User, "deleted", "budget", id)
+	return logs.Record(s.db, logs.Actor, "deleted", "budget", id)
 }
 
 // AmountLog is everything this budget's cap has been, newest first. An empty

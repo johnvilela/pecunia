@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"kakei/internal/categories"
+	"kakei/internal/core"
 	"kakei/internal/db"
 )
 
@@ -49,6 +50,12 @@ func runSetup(force bool) error {
 	}
 	if n > 0 {
 		fmt.Printf("seeded %d categories\n", n)
+	}
+	// A declined or TTY-less prompt (a script, a test) is a no either way,
+	// which is why the error is dropped. "kakei mcp install" re-offers it.
+	if ok, _ := core.Confirm("Hook kakei up to an AI agent?",
+		"Registers this binary's MCP server. Re-run anytime: kakei mcp install"); ok {
+		return runMCPInstall(nil)
 	}
 	return nil
 }

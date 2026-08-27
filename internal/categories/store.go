@@ -104,7 +104,7 @@ func (s *Store) Update(c Category) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.RecordEdit(s.db, logs.User, "category", c.ID, logs.Diff(
+	return logs.RecordEdit(s.db, logs.Actor, "category", c.ID, logs.Diff(
 		logs.F("code", old.Code, c.Code),
 		logs.F("name", old.Name, c.Name),
 		logs.F("description", old.Description, c.Description),
@@ -120,7 +120,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.Record(s.db, logs.User, "deleted", "category", id)
+	return logs.Record(s.db, logs.Actor, "deleted", "category", id)
 }
 
 func (s *Store) CodeTaken(code string) (bool, error) {

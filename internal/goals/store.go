@@ -76,7 +76,7 @@ func (s *Store) Create(g *Goal) error {
 	if g.ID, err = res.LastInsertId(); err != nil {
 		return err
 	}
-	return logs.Record(s.db, logs.User, "created", "goal", g.ID)
+	return logs.Record(s.db, logs.Actor, "created", "goal", g.ID)
 }
 
 // Update refuses to move a goal to another currency while transactions are
@@ -134,7 +134,7 @@ func (s *Store) Update(g Goal, note string) error {
 			return err
 		}
 	}
-	if err := logs.RecordEdit(tx, logs.User, "goal", g.ID, logs.Diff(
+	if err := logs.RecordEdit(tx, logs.Actor, "goal", g.ID, logs.Diff(
 		logs.F("name", old.Name, g.Name),
 		logs.F("description", old.Description, g.Description),
 		logs.F("target", old.Target, g.Target),
@@ -179,7 +179,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.Record(s.db, logs.User, "deleted", "goal", id)
+	return logs.Record(s.db, logs.Actor, "deleted", "goal", id)
 }
 
 // Linked is how many transactions name this goal. It is what the delete

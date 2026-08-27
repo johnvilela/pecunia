@@ -280,7 +280,7 @@ func (s *Store) Create(t *Transaction) error {
 		}
 		// One action however many rows the series took, logged inside the same
 		// tx so a refused purchase leaves no trail.
-		return logs.Record(tx, logs.User, "created", "transaction", t.ID)
+		return logs.Record(tx, logs.Actor, "created", "transaction", t.ID)
 	})
 }
 
@@ -364,7 +364,7 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 		}
 		// One action however far the scope reached, diffed against the row that
 		// was actually edited.
-		return logs.RecordEdit(tx, logs.User, "transaction", t.ID, logs.Diff(
+		return logs.RecordEdit(tx, logs.Actor, "transaction", t.ID, logs.Diff(
 			logs.F("title", was.Title, t.Title),
 			logs.F("description", was.Description, t.Description),
 			logs.F("value", was.Value, t.Value),
@@ -409,9 +409,9 @@ func (s *Store) Delete(id int64, scope Scope) error {
 		// A transfer is inseparable, so deleting either leg is deleting the
 		// transfer — logged as the one thing it is, under the group.
 		if targets[0].IsTransfer() {
-			return logs.Record(tx, logs.User, "deleted", "transfer", targets[0].TransferGroup)
+			return logs.Record(tx, logs.Actor, "deleted", "transfer", targets[0].TransferGroup)
 		}
-		return logs.Record(tx, logs.User, "deleted", "transaction", id)
+		return logs.Record(tx, logs.Actor, "deleted", "transaction", id)
 	})
 }
 

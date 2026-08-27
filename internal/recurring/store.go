@@ -193,7 +193,7 @@ func (s *Store) Create(b *Bill) error {
 		if err := writeTags(tx, b.ID, b.Tags); err != nil {
 			return err
 		}
-		return logs.Record(tx, logs.User, "created", "recurring", b.ID)
+		return logs.Record(tx, logs.Actor, "created", "recurring", b.ID)
 	})
 }
 
@@ -229,7 +229,7 @@ func (s *Store) Update(b Bill) error {
 		if err := writeTags(tx, b.ID, b.Tags); err != nil {
 			return err
 		}
-		return logs.RecordEdit(tx, logs.User, "recurring", b.ID, logs.Diff(
+		return logs.RecordEdit(tx, logs.Actor, "recurring", b.ID, logs.Diff(
 			logs.F("code", old.Code, b.Code),
 			logs.F("name", old.Name, strings.TrimSpace(b.Name)),
 			logs.F("description", old.Description, b.Description),
@@ -262,7 +262,7 @@ func (s *Store) SetActive(id int64, active bool) error {
 		return ErrNotFound
 	}
 	// Diff drops an equal pair, so archiving the archived records nothing.
-	return logs.RecordEdit(s.db, logs.User, "recurring", id,
+	return logs.RecordEdit(s.db, logs.Actor, "recurring", id,
 		logs.Diff(logs.F("active", old.Active, active)))
 }
 
@@ -286,7 +286,7 @@ func (s *Store) Delete(id int64) error {
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrNotFound
 		}
-		return logs.Record(tx, logs.User, "deleted", "recurring", id)
+		return logs.Record(tx, logs.Actor, "deleted", "recurring", id)
 	})
 }
 

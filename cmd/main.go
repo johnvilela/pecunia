@@ -38,6 +38,9 @@ Commands:
   budget | bg       monthly caps per category (new, edit, delete, archive)
   logs | l          what happened, newest first (--entity, --id, --action,
                     --source, --from, --to)
+  mcp               serve every module to an AI agent over MCP, on stdio
+                    (mcp install [AGENT] hooks it up to claude-code, codex,
+                    gemini or opencode)
   help              show this message
 
 Environment:
@@ -92,6 +95,9 @@ func run() int {
 
 	case "logs", "l":
 		return report("logs", runLogs(os.Args[2:]))
+
+	case "mcp":
+		return report("mcp", runMCP(os.Args[2:]))
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])

@@ -87,7 +87,7 @@ func (s *Store) Create(a *Account) error {
 	// ponytail: the trail is a second Exec on the same handle, not a tx around
 	// both — one connection and a CLI lifetime keep the gap negligible; wrap
 	// the write and its log in a tx if that ever stops being true.
-	return logs.Record(s.db, logs.User, "created", "account", a.ID)
+	return logs.Record(s.db, logs.Actor, "created", "account", a.ID)
 }
 
 // Update refuses to move an account to another currency while transactions are
@@ -132,7 +132,7 @@ func (s *Store) Update(a Account) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.RecordEdit(s.db, logs.User, "account", a.ID, logs.Diff(
+	return logs.RecordEdit(s.db, logs.Actor, "account", a.ID, logs.Diff(
 		logs.F("code", old.Code, a.Code),
 		logs.F("name", old.Name, a.Name),
 		logs.F("description", old.Description, a.Description),
@@ -152,7 +152,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return logs.Record(s.db, logs.User, "deleted", "account", id)
+	return logs.Record(s.db, logs.Actor, "deleted", "account", id)
 }
 
 // ToggleFreeze flips is_frozen and reports the new state.
@@ -166,7 +166,7 @@ func (s *Store) ToggleFreeze(id int64) (bool, error) {
 		!a.IsFrozen, id); err != nil {
 		return false, err
 	}
-	return !a.IsFrozen, logs.RecordEdit(s.db, logs.User, "account", id,
+	return !a.IsFrozen, logs.RecordEdit(s.db, logs.Actor, "account", id,
 		logs.Diff(logs.F("frozen", a.IsFrozen, !a.IsFrozen)))
 }
 

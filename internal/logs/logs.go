@@ -9,12 +9,19 @@ import (
 	"strings"
 )
 
-// Who caused an action. AI is reserved: nothing writes it yet.
+// Who caused an action.
 const (
 	User   = "user"
 	System = "system"
 	AI     = "ai"
 )
+
+// Actor is who this process acts as: the source every store stamps on the
+// rows it writes, except the ones that are always System. The CLI is the
+// user's hands, so User is the default; `kakei mcp` sets it to AI at startup.
+// A process-wide variable and not a parameter, because a whole process is
+// only ever one of them.
+var Actor = User
 
 // DB is the writing half of a handle — *sql.DB and *sql.Tx both satisfy it, so
 // a log can join the transaction of the action it describes and roll back with

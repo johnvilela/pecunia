@@ -124,7 +124,7 @@ func (s *Store) Transfer(t *Transfer) error {
 		}
 		// One action, however the legs fell — the legs themselves stay
 		// unlogged, or every transfer would read as two things happening.
-		return logs.Record(tx, logs.User, "created", "transfer", t.Group)
+		return logs.Record(tx, logs.Actor, "created", "transfer", t.Group)
 	})
 }
 
@@ -209,7 +209,7 @@ func (s *Store) UpdateTransfer(t Transfer) error {
 				return err
 			}
 		}
-		return logs.RecordEdit(tx, logs.User, "transfer", t.Group, logs.Diff(
+		return logs.RecordEdit(tx, logs.Actor, "transfer", t.Group, logs.Diff(
 			logs.F("title", was.Title, t.Title),
 			logs.F("description", was.Description, t.Description),
 			logs.F("date", was.Date, t.Date),
