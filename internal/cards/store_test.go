@@ -260,7 +260,6 @@ func TestUpdate(t *testing.T) {
 		c.Color = "teal"
 		c.Currency = "USD"
 		c.Limit = 900000
-		c.Balance = 1
 		c.ClosingDay = 3
 		c.DueDay = 28
 		c.OverLimitAllowed = true
@@ -274,9 +273,35 @@ func TestUpdate(t *testing.T) {
 		}
 		if got.Name != "Nubank Ultravioleta" || got.Description != "principal" ||
 			got.Code != "NUVIO" || got.Color != "teal" || got.Currency != "USD" ||
-			got.Limit != 900000 || got.Balance != 1 || got.ClosingDay != 3 || got.DueDay != 28 ||
+			got.Limit != 900000 || got.ClosingDay != 3 || got.DueDay != 28 ||
 			!got.OverLimitAllowed {
 			t.Fatalf("update did not stick: %+v", got)
+		}
+	})
+
+	t.Run("an edit never touches the balance", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, nubank())
+		c.Balance = 1
+		if err := s.Update(c); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.Get(c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Balance != nubank().Balance {
+			t.Fatalf("balance = %d after an edit; want the ledger to be the only thing that moves it", got.Balance)
+		}
+	})
+
+	t.Run("lowering the limit under the held balance is still refused", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, nubank()) // owes 123850
+		c.Limit = 100000
+		c.Balance = c.Limit // what a stale caller might pass; the stored balance is what counts
+		if err := s.Update(c); err == nil {
+			t.Fatal("a limit below the held balance was accepted")
 		}
 	})
 

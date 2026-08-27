@@ -151,20 +151,26 @@ func Form(s *Store, c *Card, title string) error {
 		// Currency comes first so the two validators below know the scale.
 		huh.NewInput().Title("Limit").Value(&limit).Validate(amount),
 		huh.NewConfirm().Title("May it be used over the limit?").
-			Affirmative("Yes").Negative("No").Value(&c.OverLimitAllowed),
-		// Limit and the allowance both come first, so this validator can refuse
-		// a balance the card would have declined.
-		huh.NewInput().Title("Balance").Description("already used on the open invoice").
-			Value(&balance).Validate(func(v string) error {
-			if err := amount(v); err != nil {
-				return err
-			}
-			cur := core.CurrencyByCode(c.Currency)
-			b, _ := core.ParseAmount(v, cur)
-			l, _ := core.ParseAmount(limit, cur)
-			return Card{Currency: c.Currency, Balance: b, Limit: l,
-				OverLimitAllowed: c.OverLimitAllowed}.ValidateBalance()
-		}),
+			Affirmative("Yes").Negative("No").Value(&c.OverLimitAllowed))
+	if c.ID == 0 {
+		// Only on create. After that the balance is the ledger's alone: what
+		// the card holds is what its transactions say it holds.
+		fields = append(fields,
+			// Limit and the allowance both come first, so this validator can
+			// refuse a balance the card would have declined.
+			huh.NewInput().Title("Balance").Description("already used on the open invoice").
+				Value(&balance).Validate(func(v string) error {
+				if err := amount(v); err != nil {
+					return err
+				}
+				cur := core.CurrencyByCode(c.Currency)
+				b, _ := core.ParseAmount(v, cur)
+				l, _ := core.ParseAmount(limit, cur)
+				return Card{Currency: c.Currency, Balance: b, Limit: l,
+					OverLimitAllowed: c.OverLimitAllowed}.ValidateBalance()
+			}))
+	}
+	fields = append(fields,
 		huh.NewInput().Title("Closing day").Description("day of the month, 1-31").
 			Value(&closing).Validate(day),
 		huh.NewInput().Title("Due day").Description("day of the month, 1-31").

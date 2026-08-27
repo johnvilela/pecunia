@@ -58,6 +58,9 @@ Usage:
   kakei cc e [CODE|ID]
 
 Opens the create form pre-filled. Without CODE|ID, pick from a list first.
+
+The balance is not on the form: after creation it moves only through the
+ledger — charges, payments and nothing else.
 `,
 	"delete": `Delete a credit card for good.
 

@@ -102,11 +102,15 @@ func (s *Store) Update(c Card) error {
 	if err := core.ValidateName(c.Name); err != nil {
 		return err
 	}
-	if err := c.ValidateBalance(); err != nil {
-		return err
-	}
 	old, err := s.Get(c.ID)
 	if err != nil {
+		return err
+	}
+	// The stored balance, not the caller's: an edit never writes one, so the
+	// limit is judged against what the card actually holds.
+	check := c
+	check.Balance = old.Balance
+	if err := check.ValidateBalance(); err != nil {
 		return err
 	}
 	if old.Currency != c.Currency {
@@ -121,11 +125,12 @@ func (s *Store) Update(c Card) error {
 		}
 	}
 	c.Code = core.NormalizeCode(c.Code)
+	// No balance: after creation only the ledger moves it.
 	res, err := s.db.Exec(
 		`UPDATE credit_cards SET code = ?, name = ?, description = ?, color = ?,
-		 credit_limit = ?, balance = ?, currency = ?, closing_day = ?, due_day = ?,
+		 credit_limit = ?, currency = ?, closing_day = ?, due_day = ?,
 		 over_limit_allowed = ?, updated_at = datetime('now') WHERE id = ?`,
-		c.Code, c.Name, c.Description, c.Color, c.Limit, c.Balance, c.Currency,
+		c.Code, c.Name, c.Description, c.Color, c.Limit, c.Currency,
 		c.ClosingDay, c.DueDay, c.OverLimitAllowed, c.ID)
 	if err != nil {
 		return core.CodeErr(err, c.Code)
@@ -139,7 +144,6 @@ func (s *Store) Update(c Card) error {
 		logs.F("description", old.Description, c.Description),
 		logs.F("color", old.Color, c.Color),
 		logs.F("limit", old.Limit, c.Limit),
-		logs.F("balance", old.Balance, c.Balance),
 		logs.F("currency", old.Currency, c.Currency),
 		logs.F("closing_day", old.ClosingDay, c.ClosingDay),
 		logs.F("due_day", old.DueDay, c.DueDay),
