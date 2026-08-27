@@ -510,3 +510,23 @@ func TestTransactionsTransferDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestEditRefusesAdjustments(t *testing.T) {
+	l := newLedger(t)
+	var id int64
+	l.with(t, func(conn *sql.DB) {
+		adj := transactions.Transaction{
+			Title: "Balance adjustment", Value: -5000, Kind: transactions.KindAdjustment,
+			Date: "2026-08-27", Account: transactions.Ref{ID: l.account.ID},
+		}
+		if err := transactions.NewStore(conn).Create(&adj); err != nil {
+			t.Fatal(err)
+		}
+		id = adj.ID
+	})
+
+	_, err := runTransactionsIn(t, l.path, "edit", strconv.FormatInt(id, 10))
+	if err == nil || !strings.Contains(err.Error(), "balance adjustment") {
+		t.Fatalf("edit on an adjustment = %v; want the refusal naming it", err)
+	}
+}

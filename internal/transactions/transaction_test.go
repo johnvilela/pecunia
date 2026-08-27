@@ -490,3 +490,74 @@ func TestValidateTransferLeg(t *testing.T) {
 		}
 	})
 }
+
+func TestSignedAdjustment(t *testing.T) {
+	cases := []struct {
+		kind  string
+		value int64
+		want  int64
+	}{
+		{KindIncome, 5000, 5000},
+		{KindOutcome, 5000, -5000},
+		{KindAdjustment, 5000, 5000},
+		{KindAdjustment, -5000, -5000},
+	}
+	for _, c := range cases {
+		got := Transaction{Kind: c.kind, Value: c.value}.Signed()
+		if got != c.want {
+			t.Errorf("Signed(%s, %d) = %d; want %d", c.kind, c.value, got, c.want)
+		}
+	}
+}
+
+func TestValidateAdjustment(t *testing.T) {
+	valid := func() Transaction {
+		return Transaction{
+			Title: "Balance adjustment", Value: -5000, Kind: KindAdjustment,
+			Date: "2026-08-27", Account: Ref{ID: 1},
+		}
+	}
+
+	t.Run("a signed adjustment on an account passes", func(t *testing.T) {
+		for _, v := range []int64{5000, -5000} {
+			tr := valid()
+			tr.Value = v
+			if err := tr.Validate(); err != nil {
+				t.Fatalf("Validate(value %d) = %v; want ok", v, err)
+			}
+		}
+	})
+
+	cases := []struct {
+		name   string
+		break_ func(*Transaction)
+	}{
+		{"zero moves nothing", func(tr *Transaction) { tr.Value = 0 }},
+		{"a card is refused", func(tr *Transaction) { tr.Account = Ref{}; tr.Card = Ref{ID: 1} }},
+		{"a category is refused", func(tr *Transaction) { tr.Category = Ref{ID: 1} }},
+		{"a goal is refused", func(tr *Transaction) { tr.Goal = Ref{ID: 1}; tr.GoalCurrency = "BRL" }},
+		{"a bill payment is refused", func(tr *Transaction) { tr.PaysBillID = 1 }},
+		{"a recurring bill is refused", func(tr *Transaction) { tr.Recurring = Ref{ID: 1}; tr.Cycle = "2026-08" }},
+		{"installments are refused", func(tr *Transaction) { tr.Installment = Installment{Count: 3} }},
+		{"a transfer group is refused", func(tr *Transaction) { tr.TransferGroup = 1 }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := valid()
+			c.break_(&tr)
+			if err := tr.Validate(); err == nil {
+				t.Fatal("Validate = nil; want a refusal")
+			}
+		})
+	}
+
+	t.Run("income and outcome still refuse zero and negative", func(t *testing.T) {
+		for _, kind := range []string{KindIncome, KindOutcome} {
+			tr := valid()
+			tr.Kind, tr.Value = kind, -5000
+			if err := tr.Validate(); err == nil {
+				t.Fatalf("Validate(%s, -5000) = nil; want a refusal", kind)
+			}
+		}
+	})
+}

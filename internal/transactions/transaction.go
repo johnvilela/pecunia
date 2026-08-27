@@ -17,9 +17,14 @@ import (
 
 // The two directions money goes. value is always positive, so this is what
 // carries the sign — nothing has to agree on what a negative number meant.
+//
+// KindAdjustment is the exception on both counts: no form ever offers it —
+// only `kakei ac edit` files one, when a recorded balance is put right — and
+// its value is signed, because an adjustment is its own direction.
 const (
-	KindIncome  = "income"
-	KindOutcome = "outcome"
+	KindIncome     = "income"
+	KindOutcome    = "outcome"
+	KindAdjustment = "adjustment"
 )
 
 // MaxTags is how many tags one transaction may carry.
@@ -138,6 +143,10 @@ func (t Transaction) Amount() string     { return core.FormatAmount(t.Value, t.C
 // Signed is how much an account's balance moves: an account holds money, so
 // spending lowers it.
 func (t Transaction) Signed() int64 {
+	if t.Kind == KindAdjustment {
+		// Already signed: the value is the move.
+		return t.Value
+	}
 	if t.Kind == KindOutcome {
 		return -t.Value
 	}
@@ -169,10 +178,16 @@ func (t Transaction) Validate() error {
 	if err := ValidateTitle(t.Title); err != nil {
 		return err
 	}
-	if t.Value <= 0 {
-		return errors.New("amount must be more than zero")
-	}
-	if t.Kind != KindIncome && t.Kind != KindOutcome {
+	switch t.Kind {
+	case KindIncome, KindOutcome:
+		if t.Value <= 0 {
+			return errors.New("amount must be more than zero")
+		}
+	case KindAdjustment:
+		if t.Value == 0 {
+			return errors.New("an adjustment moves the balance by something, not nothing")
+		}
+	default:
 		return fmt.Errorf("kind must be income or outcome, not %q", t.Kind)
 	}
 	if _, err := ParseDate(t.Date); err != nil {
@@ -220,8 +235,29 @@ func (t Transaction) Validate() error {
 			return errors.New("paying a bill is money going out")
 		}
 	}
+	if t.Kind == KindAdjustment {
+		return t.validateAdjustment()
+	}
 	if t.IsTransfer() {
 		return t.validateTransfer()
+	}
+	return nil
+}
+
+// validateAdjustment is what a balance correction may not claim. It counts
+// toward nothing — it is the record catching up with reality, not money earned
+// or spent — and keeping every countable column empty is what leaves the
+// budgets, goals and bills queries untouched: they all match on columns an
+// adjustment never carries.
+func (t Transaction) validateAdjustment() error {
+	if t.IsCard() {
+		return errors.New("an adjustment corrects an account balance — a card's moves only through its ledger")
+	}
+	if t.Category.ID != 0 || t.Goal.ID != 0 || t.PaysBillID != 0 || t.Recurring.ID != 0 {
+		return errors.New("an adjustment counts toward nothing — no category, goal, bill or recurring bill")
+	}
+	if t.IsInstallment() || t.IsTransfer() {
+		return errors.New("an adjustment is one row on one account")
 	}
 	return nil
 }

@@ -365,3 +365,18 @@ func TestTransferRendering(t *testing.T) {
 		}
 	})
 }
+
+func TestAmountRenderAdjustment(t *testing.T) {
+	t.Run("a negative adjustment carries one minus, before the symbol", func(t *testing.T) {
+		got := Amount(Transaction{Kind: KindAdjustment, Value: -5000, Currency: "BRL"})
+		contains(t, "Amount", got, "-", "R$", "50.00")
+		if strings.Contains(got, "R$-") {
+			t.Fatalf("Amount = %q; the sign leaked into the figure", got)
+		}
+	})
+
+	t.Run("a positive adjustment reads as money in", func(t *testing.T) {
+		contains(t, "Amount", Amount(Transaction{Kind: KindAdjustment, Value: 5000, Currency: "BRL"}),
+			"+", "R$", "50.00")
+	})
+}

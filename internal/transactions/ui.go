@@ -21,12 +21,17 @@ import (
 // Unlike a card's balance, a transaction's direction is the whole point of it,
 // so it is always coloured.
 func Amount(t Transaction) string {
+	// Off the signed move rather than the kind, so an adjustment — the one
+	// kind whose value carries its own sign — reads the same way as everything
+	// else instead of printing the minus twice.
+	v := t.Signed()
 	sign, color := "+", core.ColorByName("green").Hex
-	if t.Kind == KindOutcome {
+	if v < 0 {
 		sign, color = "-", core.ColorByName("red").Hex
+		v = -v
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).
-		Render(sign + t.Cur().Symbol + t.Amount())
+		Render(sign + t.Cur().Symbol + core.FormatAmount(v, t.Cur()))
 }
 
 // tag is how one reference — a category, an account, a card — reads inline: its

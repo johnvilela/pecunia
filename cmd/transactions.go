@@ -446,6 +446,9 @@ func editTransaction(args []string) error {
 		if t.IsTransfer() {
 			return editTransfer(conn, s, t.TransferGroup)
 		}
+		if t.Kind == transactions.KindAdjustment {
+			return fmt.Errorf("#%d is a balance adjustment — it is not edited; delete it (kakei t d %d) and the balance reverts", t.ID, t.ID)
+		}
 		scope, err := transactions.AskScope(t, "Edit")
 		if err != nil {
 			return err

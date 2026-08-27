@@ -2048,3 +2048,77 @@ func TestAuditTrail(t *testing.T) {
 		}
 	})
 }
+
+func TestAdjustments(t *testing.T) {
+	adj := func(w *world, value int64) Transaction {
+		return Transaction{
+			Title: "Balance adjustment", Value: value, Kind: KindAdjustment,
+			Date: "2026-08-27", Account: Ref{ID: w.inter.ID},
+		}
+	}
+
+	t.Run("a signed adjustment moves the balance either way", func(t *testing.T) {
+		w := newWorld(t)
+		down := adj(w, -5000)
+		if err := w.store.Create(&down); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != 95000 {
+			t.Fatalf("balance = %d after a -5000 adjustment; want 95000", got)
+		}
+		up := adj(w, 30000)
+		if err := w.store.Create(&up); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != 125000 {
+			t.Fatalf("balance = %d after a +30000 adjustment; want 125000", got)
+		}
+	})
+
+	t.Run("deleting an adjustment reverts it", func(t *testing.T) {
+		w := newWorld(t)
+		a := adj(w, -5000)
+		if err := w.store.Create(&a); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.store.Delete(a.ID, ScopeOne); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.accountBalance(t, w.inter.ID); got != 100000 {
+			t.Fatalf("balance = %d after deleting the adjustment; want back at 100000", got)
+		}
+	})
+
+	t.Run("an adjustment is not edited", func(t *testing.T) {
+		w := newWorld(t)
+		a := adj(w, -5000)
+		if err := w.store.Create(&a); err != nil {
+			t.Fatal(err)
+		}
+		a.Value = -6000
+		err := w.store.Update(a, ScopeOne)
+		if err == nil || !strings.Contains(err.Error(), "delete it") {
+			t.Fatalf("Update on an adjustment = %v; want the refusal", err)
+		}
+	})
+
+	t.Run("nothing is turned into an adjustment", func(t *testing.T) {
+		w := newWorld(t)
+		tr := w.create(t, w.tx())
+		tr.Kind, tr.Value, tr.Category = KindAdjustment, -5000, Ref{}
+		if err := w.store.Update(tr, ScopeOne); err == nil {
+			t.Fatal("Update turned a transaction into an adjustment; want a refusal")
+		}
+	})
+
+	t.Run("a frozen account refuses an adjustment", func(t *testing.T) {
+		w := newWorld(t)
+		if _, err := w.accounts.ToggleFreeze(w.inter.ID); err != nil {
+			t.Fatal(err)
+		}
+		a := adj(w, -5000)
+		if err := w.store.Create(&a); err == nil {
+			t.Fatal("an adjustment landed on a frozen account; want the freeze to refuse it")
+		}
+	})
+}

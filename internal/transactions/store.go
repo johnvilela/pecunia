@@ -319,6 +319,11 @@ func (s *Store) Update(t Transaction, scope Scope) error {
 		if err != nil {
 			return err
 		}
+		// Neither direction: the two-option kind form would silently rewrite a
+		// stored adjustment, and nothing should become one after the fact.
+		if targets[0].Kind == KindAdjustment || t.Kind == KindAdjustment {
+			return errors.New("an adjustment is not edited — delete it and the balance reverts, or file another")
+		}
 		var touched []int64
 		var was Transaction
 		for _, old := range targets {
