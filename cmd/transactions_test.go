@@ -14,6 +14,7 @@ import (
 	"kakei/internal/categories"
 	"kakei/internal/db"
 	"kakei/internal/goals"
+	"kakei/internal/logs"
 	"kakei/internal/transactions"
 )
 
@@ -60,7 +61,7 @@ func newLedger(t *testing.T) *ledger {
 			t.Fatal(err)
 		}
 		l.category = categories.Category{Code: "FOOD1", Name: "Food", Color: "lime"}
-		if err := categories.NewStore(conn).Create(&l.category); err != nil {
+		if err := categories.NewStore(conn).Create(&l.category, logs.User); err != nil {
 			t.Fatal(err)
 		}
 	})

@@ -9,6 +9,7 @@ import (
 	"kakei/internal/accounts"
 	"kakei/internal/cards"
 	"kakei/internal/categories"
+	"kakei/internal/logs"
 )
 
 // world is a database with something of everything to file a transaction
@@ -55,7 +56,7 @@ func newWorld(t *testing.T) *world {
 	w.work = categories.Category{Code: "WORK1", Name: "Work", Color: "indigo"}
 	cs := categories.NewStore(conn)
 	for _, c := range []*categories.Category{&w.food, &w.work} {
-		if err := cs.Create(c); err != nil {
+		if err := cs.Create(c, logs.User); err != nil {
 			t.Fatal(err)
 		}
 	}

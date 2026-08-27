@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/core"
 	"kakei/internal/db"
+	"kakei/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file in its own temp dir, so no
@@ -30,7 +31,7 @@ func newTestStore(t *testing.T) *Store {
 
 func mustCreate(t *testing.T, s *Store, c Category) Category {
 	t.Helper()
-	if err := s.Create(&c); err != nil {
+	if err := s.Create(&c, logs.User); err != nil {
 		t.Fatalf("create %s: %v", c.Code, err)
 	}
 	return c
@@ -46,7 +47,7 @@ func TestSchema(t *testing.T) {
 		mustCreate(t, s, home())
 		dup := home()
 		dup.Name = "House"
-		err := s.Create(&dup)
+		err := s.Create(&dup, logs.User)
 		if err == nil || !strings.Contains(err.Error(), "already in use") {
 			t.Fatalf("create duplicate = %v; want a readable code clash", err)
 		}
@@ -56,7 +57,7 @@ func TestSchema(t *testing.T) {
 		s := newTestStore(t)
 		c := home()
 		c.Code = "ABC"
-		if err := s.Create(&c); err == nil {
+		if err := s.Create(&c, logs.User); err == nil {
 			t.Fatal("create with a 3-character code succeeded; want the CHECK to reject it")
 		}
 	})
@@ -252,7 +253,7 @@ func TestNameIsRequired(t *testing.T) {
 			s := newTestStore(t)
 			c := home()
 			c.Name = blank
-			if err := s.Create(&c); err == nil {
+			if err := s.Create(&c, logs.User); err == nil {
 				t.Fatal("Create accepted a blank name")
 			}
 		})
@@ -416,6 +417,78 @@ func TestSeed(t *testing.T) {
 		}
 		if n != 1 {
 			t.Fatalf("Seed = %d; want it to top up the one that is missing", n)
+		}
+	})
+}
+
+// trail is every audit row so far, oldest first.
+func trail(t *testing.T, s *Store) []logs.Entry {
+	t.Helper()
+	es, err := logs.List(s.db, logs.Filter{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(es)-1; i < j; i, j = i+1, j-1 {
+		es[i], es[j] = es[j], es[i]
+	}
+	return es
+}
+
+func TestAuditTrail(t *testing.T) {
+	t.Run("a create logs the source it was given", func(t *testing.T) {
+		s := newTestStore(t)
+		c := home()
+		if err := s.Create(&c, logs.System); err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != 1 || es[0].Source != logs.System || es[0].Entity != "category" {
+			t.Fatalf("trail = %+v; want one system category create", es)
+		}
+	})
+
+	t.Run("edit and delete each leave one user row", func(t *testing.T) {
+		s := newTestStore(t)
+		c := mustCreate(t, s, home())
+		c.Name = "House"
+		if err := s.Update(c); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(c.ID); err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != 3 {
+			t.Fatalf("trail has %d rows; want 3", len(es))
+		}
+		if es[1].Action != "edited" || !strings.Contains(es[1].Changes, `"name"`) {
+			t.Errorf("edit row = %+v; want the name move", es[1])
+		}
+		if es[2].Action != "deleted" || es[2].Source != logs.User {
+			t.Errorf("delete row = %+v; want user/deleted", es[2])
+		}
+	})
+
+	t.Run("the starter seed logs as the system, once", func(t *testing.T) {
+		s := newTestStore(t)
+		n, err := Seed(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		es := trail(t, s)
+		if len(es) != n {
+			t.Fatalf("trail has %d rows after seeding %d starters; want one each", len(es), n)
+		}
+		for _, e := range es {
+			if e.Source != logs.System || e.Action != "created" || e.Entity != "category" {
+				t.Fatalf("seed row = %+v; want system/created/category", e)
+			}
+		}
+		if _, err := Seed(s); err != nil {
+			t.Fatal(err)
+		}
+		if again := trail(t, s); len(again) != n {
+			t.Fatalf("trail has %d rows after a second seed; want still %d", len(again), n)
 		}
 	})
 }

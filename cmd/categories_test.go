@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/categories"
 	"kakei/internal/db"
+	"kakei/internal/logs"
 )
 
 // runCategoriesIn points KAKEI_DB at a database of this case's own, captures
@@ -39,7 +40,7 @@ func seedCategory(t *testing.T, path string, c categories.Category) categories.C
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := categories.NewStore(conn).Create(&c); err != nil {
+	if err := categories.NewStore(conn).Create(&c, logs.User); err != nil {
 		t.Fatal(err)
 	}
 	return c

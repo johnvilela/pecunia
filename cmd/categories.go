@@ -8,6 +8,7 @@ import (
 	"kakei/internal/budgets"
 	"kakei/internal/categories"
 	"kakei/internal/core"
+	"kakei/internal/logs"
 )
 
 const categoriesHelp = `Manage categories.
@@ -155,7 +156,7 @@ func createCategory(s *categories.Store) error {
 	if err := categories.Form(s, &c, "New category"); err != nil {
 		return err
 	}
-	if err := s.Create(&c); err != nil {
+	if err := s.Create(&c, logs.User); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "created category %s (%s)\n", c.Code, c.Name)

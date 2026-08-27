@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"kakei/internal/core"
+	"kakei/internal/logs"
 )
 
 type Store struct{ db *sql.DB }
@@ -65,7 +66,9 @@ func (s *Store) Resolve(ref string) (Category, error) {
 	return s.ByCode(ref)
 }
 
-func (s *Store) Create(c *Category) error {
+// Create takes who is creating — the only write with two authors: the user at
+// their form, and Seed laying down the starter set.
+func (s *Store) Create(c *Category, source string) error {
 	if err := core.ValidateName(c.Name); err != nil {
 		return err
 	}
@@ -76,12 +79,18 @@ func (s *Store) Create(c *Category) error {
 	if err != nil {
 		return core.CodeErr(err, c.Code)
 	}
-	c.ID, err = res.LastInsertId()
-	return err
+	if c.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	return logs.Record(s.db, source, "created", "category", c.ID)
 }
 
 func (s *Store) Update(c Category) error {
 	if err := core.ValidateName(c.Name); err != nil {
+		return err
+	}
+	old, err := s.Get(c.ID)
+	if err != nil {
 		return err
 	}
 	c.Code = core.NormalizeCode(c.Code)
@@ -95,7 +104,12 @@ func (s *Store) Update(c Category) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.RecordEdit(s.db, logs.User, "category", c.ID, logs.Diff(
+		logs.F("code", old.Code, c.Code),
+		logs.F("name", old.Name, c.Name),
+		logs.F("description", old.Description, c.Description),
+		logs.F("color", old.Color, c.Color),
+	))
 }
 
 func (s *Store) Delete(id int64) error {
@@ -106,7 +120,7 @@ func (s *Store) Delete(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return logs.Record(s.db, logs.User, "deleted", "category", id)
 }
 
 func (s *Store) CodeTaken(code string) (bool, error) {
@@ -157,7 +171,7 @@ func Seed(s *Store) (int, error) {
 		if taken {
 			continue
 		}
-		if err := s.Create(&c); err != nil {
+		if err := s.Create(&c, logs.System); err != nil {
 			return n, err
 		}
 		n++
