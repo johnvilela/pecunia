@@ -49,12 +49,27 @@ func scan(row interface{ Scan(...any) error }, c cards.Card) (Bill, error) {
 // single point where its total stops moving.
 func (s *Store) Ensure(c cards.Card) error {
 	today := s.now()
+	last := cards.NextDate(today, c.ClosingDay) // the cycle still taking charges
+
+	// The current cycle's row standing means every earlier one stands too —
+	// this loop is the only thing that creates bills, and it fills forward —
+	// so the whole generation pass is one SELECT on every read after the
+	// first of a cycle.
+	var have int64
+	err := s.db.QueryRow(
+		`SELECT id FROM card_bills WHERE card_id = ? AND closes_on = ?`,
+		c.ID, last.Format(dateLayout)).Scan(&have)
+	if err == nil {
+		return s.refreshOpen(c, today)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 
 	from, err := s.start(c)
 	if err != nil {
 		return err
 	}
-	last := cards.NextDate(today, c.ClosingDay) // the cycle still taking charges
 	for closes := cards.NextDate(from, c.ClosingDay); !closes.After(last); closes = next(closes, c.ClosingDay) {
 		res, err := s.db.Exec(
 			`INSERT INTO card_bills (card_id, closes_on, due_on) VALUES (?, ?, ?)
@@ -139,9 +154,15 @@ func (s *Store) refreshOpen(c cards.Card, today time.Time) error {
 			return err
 		}
 		closed := b.ClosesOn < today.Format(dateLayout)
+		status := StatusFor(total, paid, closed)
+		// Nothing moved, nothing written — this runs on every read, and a read
+		// that finds the record already right should leave no mark on it.
+		if total == b.Total && status == b.Status {
+			continue
+		}
 		if _, err := s.db.Exec(
 			`UPDATE card_bills SET total = ?, status = ?, updated_at = datetime('now') WHERE id = ?`,
-			total, StatusFor(total, paid, closed), b.ID); err != nil {
+			total, status, b.ID); err != nil {
 			return err
 		}
 	}

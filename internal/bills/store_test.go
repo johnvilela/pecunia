@@ -517,3 +517,108 @@ func TestAuditTrail(t *testing.T) {
 		}
 	})
 }
+
+// stamp marks every bill's updated_at with a sentinel, so any later write —
+// datetime('now') — stands out regardless of clock granularity.
+func stamp(t *testing.T, s *Store) {
+	t.Helper()
+	if _, err := s.db.Exec(`UPDATE card_bills SET updated_at = '2000-01-01'`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stamped returns how many bills still carry the sentinel.
+func stamped(t *testing.T, s *Store) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(
+		`SELECT count(*) FROM card_bills WHERE updated_at = '2000-01-01'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestReadsWriteOnlyWhenStale(t *testing.T) {
+	t.Run("a read that finds nothing stale writes nothing", func(t *testing.T) {
+		s, c := newTestStore(t, "2026-08-20", 15, 22)
+		charge(t, s, c, "2026-06-10", "Groceries", 12000, "outcome")
+
+		all, err := s.List(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stamp(t, s)
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		if n := stamped(t, s); n != len(all) {
+			t.Fatalf("%d of %d bills kept the sentinel; want a clean read to write nothing", n, len(all))
+		}
+	})
+
+	t.Run("a stale total is written once, and only that bill", func(t *testing.T) {
+		s, c := newTestStore(t, "2026-08-20", 15, 22)
+		charge(t, s, c, "2026-06-10", "Groceries", 12000, "outcome")
+		all, err := s.List(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stamp(t, s)
+
+		// Straight past the store, the way a bug or another writer would.
+		charge(t, s, c, "2026-08-18", "Padaria", 3000, "outcome")
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		if n := stamped(t, s); n != len(all)-1 {
+			t.Fatalf("%d of %d bills kept the sentinel; want only the stale one rewritten", n, len(all))
+		}
+		open, err := s.Open(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if open.Total != 3000 {
+			t.Fatalf("open total = %d; want the catch-up to have happened", open.Total)
+		}
+
+		stamp(t, s)
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		if n := stamped(t, s); n != len(all) {
+			t.Fatalf("%d of %d bills kept the sentinel; want the second read to write nothing", n, len(all))
+		}
+	})
+
+	t.Run("time passing writes the flip once", func(t *testing.T) {
+		s, c := newTestStore(t, "2026-08-20", 15, 22)
+		charge(t, s, c, "2026-08-10", "Groceries", 12000, "outcome")
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		stamp(t, s)
+
+		s.now = func() time.Time { return mustDate(t, "2026-09-16") }
+		all, err := s.List(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var flipped Bill
+		for _, b := range all {
+			if b.ClosesOn == "2026-09-15" {
+				flipped = b
+			}
+		}
+		if flipped.Status == StatusOpen || flipped.Status == "" {
+			t.Fatalf("the passed cycle is %q; want it closed by the read", flipped.Status)
+		}
+
+		stamp(t, s)
+		if _, err := s.List(c); err != nil {
+			t.Fatal(err)
+		}
+		if n := stamped(t, s); n != len(all) {
+			t.Fatalf("%d of %d bills kept the sentinel; want the read after the flip to write nothing", n, len(all))
+		}
+	})
+}
