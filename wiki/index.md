@@ -24,6 +24,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0012-summary-composes-existing-stores](decisions/0012-summary-composes-existing-stores.md) — `kakei s` composes existing stores, no new tables
 - [0013-data-integrity-fixes-and-known-gaps](decisions/0013-data-integrity-fixes-and-known-gaps.md) — WAL + busy timeout, 0600 files, currency freeze, frozen-account guard — **and the list of still-open gaps**
 - [0014-logs-as-a-single-audit-table](decisions/0014-logs-as-a-single-audit-table.md) — one audit row per logical action, source user/system/ai, JSON diffs, no FK
+- [0015-balance-adjustments-as-a-hidden-kind](decisions/0015-balance-adjustments-as-a-hidden-kind.md) — balance edits file signed adjustment transactions; card balances ledger-only; first table-rebuild migration
 
 ## Gotchas — bugs that already bit once
 
