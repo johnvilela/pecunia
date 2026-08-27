@@ -22,7 +22,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0010-goal-progress-summed-from-the-ledger](decisions/0010-goal-progress-summed-from-the-ledger.md) — goal progress computed from transactions, never stored
 - [0011-recurring-bills-derived-from-payments](decisions/0011-recurring-bills-derived-from-payments.md) — recurring bills are templates; paid/due state derived from payments
 - [0012-summary-composes-existing-stores](decisions/0012-summary-composes-existing-stores.md) — `kakei s` composes existing stores, no new tables
-- [0013-data-integrity-fixes-and-known-gaps](decisions/0013-data-integrity-fixes-and-known-gaps.md) — WAL + busy timeout, 0600 files, currency freeze, frozen-account guard — **and the list of still-open gaps**
+- [0013-data-integrity-fixes-and-known-gaps](decisions/0013-data-integrity-fixes-and-known-gaps.md) — WAL + busy timeout, 0600 files, currency freeze, frozen-account guard — **and the list of gaps, now all closed or scoped**
 - [0014-logs-as-a-single-audit-table](decisions/0014-logs-as-a-single-audit-table.md) — one audit row per logical action, source user/system/ai, JSON diffs, no FK
 - [0015-balance-adjustments-as-a-hidden-kind](decisions/0015-balance-adjustments-as-a-hidden-kind.md) — balance edits file signed adjustment transactions; card balances ledger-only; first table-rebuild migration
 - [0016-bill-reads-stop-writing](decisions/0016-bill-reads-stop-writing.md) — reads write only when a cycle turns; charges refresh their bill at write time; write-time never creates bill rows
@@ -59,3 +59,4 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [5321cd80](sessions/5321cd80-4dd0-4dea-85c3-391b008334d2.md) — recurring bills module, spec settled via Q&A
 - [b4318b40](sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc.md) — summary command (`kakei s`), rendering fixes
 - [c2b6cbbe](sessions/c2b6cbbe-5735-4790-abac-4c4b5a60aca7.md) — full-CLI evaluation, budgets module, data-integrity fixes, transfers
+- [55542fff](sessions/55542fff-857b-4326-bc93-9554a745c41b.md) — logs module, GitHub metadata, wiki index, balance-adjustment fix, bill-reads-stop-writing fix — closes the last of decision 0013's gaps

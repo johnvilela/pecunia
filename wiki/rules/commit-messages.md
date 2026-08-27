@@ -38,5 +38,11 @@ what/why, not the file list.
 
 Two modules built back to back in the same uncommitted working tree ([[tasks/07-recurring-bills-module]] and [[tasks/08-summary-module]]) had both edited `cmd/main.go`'s dispatch switch. User request: "/git-commit separate the bill form the summary". Handled by editing `cmd/main.go` down to just the first module's `case`, staging and committing that module's code, then its own `docs(wiki)` commit, then restoring the second module's `case` and repeating for it. A helper one module needs that the other introduced (`core.MoneyLine`, added while fixing the recurring-bills board but required by `internal/recurring/ui.go` to compile) rides in with whichever module can't build without it, not with the module that happened to add it.
 
+## Splitting docs commits by prior ownership
+
+A later `/git-commit` request — "/git-commit but divide different features into their own commit" — found three different things staged at once: six `wiki/` files that had been modified by an earlier session (retagging, cross-links, "Update: committed" notes) and this session's own two new task docs (budgets, transfers). Handled as three commits: the six pre-existing files first (not this session's work, so not folded into either feature), then the budgets doc, then the transfers doc — each `docs(wiki)`. Same rule as the section above, applied to documentation instead of code: a commit's contents are one concern, and who touched the file and why is what decides the boundary, not which command happened to stage it.
+
+A related instance from the same session ([[sessions/c2b6cbbe-5735-4790-abac-4c4b5a60aca7]]): four data-integrity fixes ([[decisions/0013-data-integrity-fixes-and-known-gaps]]) landed as four separate commits by request ("one commit per fix") even though they were built in the same sitting and touch overlapping files (`internal/db/db.go` twice, `internal/accounts` and `internal/cards` together) — the split follows the fix, not the file.
+
 See also: the pre-commit hook at `.githooks/pre-commit` (gofmt + go vet) that
 gates every commit.
