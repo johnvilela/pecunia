@@ -36,6 +36,8 @@ Commands:
   goals | g         track goals (new, edit, delete, details)
   bill | b          recurring bills (new, pay, edit, delete, archive)
   budget | bg       monthly caps per category (new, edit, delete, archive)
+  logs | l          what happened, newest first (--entity, --id, --action,
+                    --source, --from, --to)
   help              show this message
 
 Environment:
@@ -87,6 +89,9 @@ func run() int {
 
 	case "budget", "bg":
 		return report("budget", runBudgets(os.Args[2:]))
+
+	case "logs", "l":
+		return report("logs", runLogs(os.Args[2:]))
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])
