@@ -23,6 +23,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0011-recurring-bills-derived-from-payments](decisions/0011-recurring-bills-derived-from-payments.md) — recurring bills are templates; paid/due state derived from payments
 - [0012-summary-composes-existing-stores](decisions/0012-summary-composes-existing-stores.md) — `kakei s` composes existing stores, no new tables
 - [0013-data-integrity-fixes-and-known-gaps](decisions/0013-data-integrity-fixes-and-known-gaps.md) — WAL + busy timeout, 0600 files, currency freeze, frozen-account guard — **and the list of still-open gaps**
+- [0014-logs-as-a-single-audit-table](decisions/0014-logs-as-a-single-audit-table.md) — one audit row per logical action, source user/system/ai, JSON diffs, no FK
 
 ## Gotchas — bugs that already bit once
 
@@ -41,6 +42,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [08-summary-module](tasks/08-summary-module.md)
 - [09-budgets-module](tasks/09-budgets-module.md)
 - [10-transfers](tasks/10-transfers.md)
+- [11-logs-module](tasks/11-logs-module.md)
 
 ## Sessions — what each past session did
 
