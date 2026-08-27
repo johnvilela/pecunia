@@ -532,6 +532,9 @@ var txFixtures = []txFixture{
 	// No category, so the table's blank-category branch has something to render.
 	{Title: "Transferência recebida", Kind: transactions.KindIncome,
 		Value: 30000, Days: 2, Account: "NUBON"},
+	// A signed adjustment, so the third kind's row rendering is on the board.
+	{Title: "Balance adjustment", Description: "acerto com o extrato", Kind: transactions.KindAdjustment,
+		Value: -1500, Days: 4, Account: "CASH1"},
 	// On the USD card, so a listed amount is not always in reais.
 	{Title: "Domain renewal", Description: "annual", Kind: transactions.KindOutcome,
 		Value: 4800, Days: 3, Category: "WORK1", Card: "AMEX2", Tags: []string{"extra"}},
