@@ -12,5 +12,5 @@ jobs:
           go-version-file: go.mod
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
-      - run: go build ./cmd
+      - run: go build -o /dev/null ./cmd
       - run: go test ./...
