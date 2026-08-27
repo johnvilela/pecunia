@@ -66,7 +66,7 @@ func runMCP(args []string) error {
 const moneyNote = "Amounts are integers in minor units (cents; satoshis for BTC)."
 
 func mcpServer(conn *sql.DB) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "kakei", Title: "kakei — personal finance", Version: "1.0.0"}, nil)
+	s := mcp.NewServer(&mcp.Implementation{Name: "kakei", Title: "kakei — personal finance", Version: version}, nil)
 	tool(s, conn, "kakei_accounts",
 		"Manage money accounts: list, get, create, update, delete, toggle_freeze. Changing the balance on update files a balance-adjustment transaction on the ledger. "+moneyNote,
 		accountsDo)

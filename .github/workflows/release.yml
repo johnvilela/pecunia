@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    branches: [master]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Release if version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -oP 'var version = "\K[^"]+' cmd/main.go)
+          git fetch --tags --quiet
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "v$version already released, skipping"; exit 0
+          fi
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 \
+              go build -trimpath -ldflags="-s -w" -o kakei ./cmd
+            tar czf "kakei_${version}_${target%/*}_${target#*/}.tar.gz" kakei
+            rm kakei
+          done
+          gh release create "v$version" --generate-notes kakei_*.tar.gz

@@ -11,6 +11,10 @@ import (
 	"kakei/internal/db"
 )
 
+// version is the single source of truth for releases: bumping it on master
+// makes CI tag and publish v<version>.
+var version = "0.1.0"
+
 const banner = `
  ___  __    ________  ___  __    _______   ___
 |\  \|\  \ |\   __  \|\  \|\  \ |\  ___ \ |\  \
@@ -41,6 +45,7 @@ Commands:
   mcp               serve every module to an AI agent over MCP, on stdio
                     (mcp install [AGENT] hooks it up to claude-code, codex,
                     gemini or opencode)
+  version           show the version
   help              show this message
 
 Environment:
@@ -61,6 +66,10 @@ func run() int {
 	switch os.Args[1] {
 	case "help", "-h", "--help":
 		fmt.Print(banner, "\n", help)
+		return 0
+
+	case "version", "-v", "--version":
+		fmt.Println(version)
 		return 0
 
 	case "setup":
