@@ -237,7 +237,6 @@ func TestUpdate(t *testing.T) {
 		a.Name = "Cold Wallet"
 		a.Description = "hardware"
 		a.Code = "cold9"
-		a.Balance = 1
 		a.Currency = "USD"
 		a.IsFrozen = true
 		if err := s.Update(a); err != nil {
@@ -249,7 +248,7 @@ func TestUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got.Name != "Cold Wallet" || got.Description != "hardware" || got.Code != "COLD9" ||
-			got.Balance != 1 || got.Currency != "USD" || !got.IsFrozen {
+			got.Currency != "USD" || !got.IsFrozen {
 			t.Fatalf("update did not stick: %+v", got)
 		}
 	})
@@ -608,7 +607,7 @@ func TestAuditTrail(t *testing.T) {
 	t.Run("an edit records only what moved", func(t *testing.T) {
 		s := newTestStore(t)
 		a := mustCreate(t, s, wallet())
-		a.Name, a.Balance = "Cold wallet", 160000000
+		a.Name = "Cold wallet"
 		if err := s.Update(a); err != nil {
 			t.Fatal(err)
 		}
@@ -620,11 +619,28 @@ func TestAuditTrail(t *testing.T) {
 		if !strings.Contains(c, `"name":{"old":"Wallet","new":"Cold wallet"}`) {
 			t.Errorf("changes are missing the name move: %s", c)
 		}
-		if !strings.Contains(c, `"balance"`) {
-			t.Errorf("changes are missing the balance move: %s", c)
-		}
 		if strings.Contains(c, `"color"`) {
 			t.Errorf("changes carry a field that never moved: %s", c)
+		}
+	})
+
+	t.Run("an edit never touches the balance", func(t *testing.T) {
+		s := newTestStore(t)
+		a := mustCreate(t, s, wallet())
+		a.Balance = 999
+		if err := s.Update(a); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.Get(a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Balance != wallet().Balance {
+			t.Fatalf("balance = %d after an edit; want the ledger to be the only thing that moves it", got.Balance)
+		}
+		es := trail(t, s)
+		if len(es) != 1 {
+			t.Fatalf("trail = %+v; want no edit row — nothing the store writes moved", es)
 		}
 	})
 

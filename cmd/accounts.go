@@ -9,6 +9,7 @@ import (
 
 	"kakei/internal/accounts"
 	"kakei/internal/core"
+	"kakei/internal/transactions"
 )
 
 // out is where every command writes; tests swap it for a buffer.
@@ -53,6 +54,11 @@ Usage:
   kakei ac e [CODE|ID]
 
 Opens the create form pre-filled. Without CODE|ID, pick from a list first.
+
+Changing the balance does not overwrite it: the difference is filed as an
+adjustment transaction on the ledger, with an optional note for why. That way
+the transactions always explain the balance — delete the adjustment
+(kakei t d ID) and the balance goes back.
 `,
 	"delete": `Delete an account for good.
 
@@ -113,12 +119,13 @@ func runAccounts(args []string) error {
 		return nil
 	}
 
-	return withStore(func(s *accounts.Store) error {
+	return withConn(func(conn *sql.DB) error {
+		s := accounts.NewStore(conn)
 		switch name {
 		case "new":
 			return createAccount(s)
 		case "edit":
-			return editAccount(s, rest)
+			return editAccount(conn, s, rest)
 		case "delete":
 			return deleteAccount(s, rest)
 		default:
@@ -205,13 +212,33 @@ func createAccount(s *accounts.Store) error {
 	return nil
 }
 
-func editAccount(s *accounts.Store, args []string) error {
+func editAccount(conn *sql.DB, s *accounts.Store, args []string) error {
 	a, err := resolveOrPick(s, args, "Edit which account?")
 	if err != nil {
 		return err
 	}
+	old := a.Balance
 	if err := accounts.Form(s, &a, "Edit account"); err != nil {
 		return err
+	}
+	// A changed balance is not written — it is filed, as an adjustment on the
+	// ledger, so the ledger keeps explaining the balance. Filed before the rest
+	// of the edit so a frozen account's refusal aborts with nothing written.
+	if delta := a.Balance - old; delta != 0 {
+		note, err := accounts.AdjustmentNote()
+		if err != nil {
+			return err
+		}
+		adj := transactions.Transaction{
+			Title: "Balance adjustment", Description: note,
+			Value: delta, Kind: transactions.KindAdjustment,
+			Date:    transactions.Today(),
+			Account: transactions.Ref{ID: a.ID}, Currency: a.Currency,
+		}
+		if err := transactions.NewStore(conn).Create(&adj); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "filed adjustment #%d (%s)\n", adj.ID, transactions.Amount(adj))
 	}
 	if err := s.Update(a); err != nil {
 		return err

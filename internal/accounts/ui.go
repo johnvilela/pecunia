@@ -127,6 +127,20 @@ func Form(s *Store, a *Account, title string) error {
 	return nil
 }
 
+// AdjustmentNote asks why the balance moved, for the adjustment transaction a
+// balance edit files. Enter on the empty field skips it.
+func AdjustmentNote() (string, error) {
+	var note string
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewInput().Title("Balance changed — note for the adjustment").
+			Description("optional — why the recorded balance was off").Value(&note),
+	)).WithTheme(huh.ThemeCharm()).Run()
+	if errors.Is(err, huh.ErrUserAborted) {
+		return "", core.ErrCancelled
+	}
+	return strings.TrimSpace(note), err
+}
+
 // pickerRow is how one account reads in the picker list.
 func pickerRow(a Account) core.Choice {
 	c := a.Cur()

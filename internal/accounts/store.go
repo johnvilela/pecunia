@@ -119,10 +119,13 @@ func (s *Store) Update(a Account) error {
 		}
 	}
 	a.Code = core.NormalizeCode(a.Code)
+	// No balance: after creation only the ledger moves it. A balance change in
+	// the edit form is filed as an adjustment transaction by the command layer,
+	// which is also what puts it on the trail.
 	res, err := s.db.Exec(
-		`UPDATE accounts SET code = ?, name = ?, description = ?, color = ?, balance = ?,
+		`UPDATE accounts SET code = ?, name = ?, description = ?, color = ?,
 		 currency = ?, is_frozen = ?, updated_at = datetime('now') WHERE id = ?`,
-		a.Code, a.Name, a.Description, a.Color, a.Balance, a.Currency, a.IsFrozen, a.ID)
+		a.Code, a.Name, a.Description, a.Color, a.Currency, a.IsFrozen, a.ID)
 	if err != nil {
 		return core.CodeErr(err, a.Code)
 	}
@@ -134,7 +137,6 @@ func (s *Store) Update(a Account) error {
 		logs.F("name", old.Name, a.Name),
 		logs.F("description", old.Description, a.Description),
 		logs.F("color", old.Color, a.Color),
-		logs.F("balance", old.Balance, a.Balance),
 		logs.F("currency", old.Currency, a.Currency),
 		logs.F("frozen", old.IsFrozen, a.IsFrozen),
 	))
