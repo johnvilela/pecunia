@@ -523,12 +523,15 @@ func TestBalanceMayNotPassTheLimit(t *testing.T) {
 		}
 	})
 
-	t.Run("update refuses it", func(t *testing.T) {
+	t.Run("update refuses a limit under what the card holds", func(t *testing.T) {
+		// A balance is never written by an edit any more, so the way past the
+		// limit an update could open is the other one: shrinking the limit
+		// under the balance already held.
 		s := newTestStore(t)
 		c := mustCreate(t, s, nubank())
-		c.Balance = c.Limit + 1
+		c.Limit = c.Balance - 1
 		if err := s.Update(c); err == nil {
-			t.Fatal("a card was updated past its limit")
+			t.Fatal("a card was left holding more than its limit")
 		}
 	})
 

@@ -176,7 +176,9 @@ func TestSeedCards(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Balance = 42
+		// The name, not the balance: Update no longer writes a balance at all —
+		// after creation only the ledger moves one.
+		c.Name = "Renamed by hand"
 		if err := s.Update(c); err != nil {
 			t.Fatal(err)
 		}
@@ -184,8 +186,8 @@ func TestSeedCards(t *testing.T) {
 		if _, err := seedCards(s); err != nil {
 			t.Fatal(err)
 		}
-		if got, _ := s.ByCode(cardFixtures[0].Code); got.Balance != 42 {
-			t.Fatalf("seed overwrote a local edit: balance is %d", got.Balance)
+		if got, _ := s.ByCode(cardFixtures[0].Code); got.Name != "Renamed by hand" {
+			t.Fatalf("seed overwrote a local edit: name is %q", got.Name)
 		}
 	})
 }
