@@ -244,7 +244,7 @@ func deleteGoal(s *goals.Store, args []string) error {
 	if linked > 0 {
 		note += fmt.Sprintf(" %d transaction(s) keep their money and lose the link.", linked)
 	}
-	ok, err := core.Confirm(fmt.Sprintf("Delete %s (%s)?", g.Name, g.Fmt(g.Target)), note)
+	ok, err := core.Confirm(fmt.Sprintf("Delete %s (%s)?", g.Name, g.Fmt(g.Target)), note, "Yes, delete")
 	if err != nil {
 		return err
 	}

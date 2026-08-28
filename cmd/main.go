@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.1.0"
+var version = "0.2.0"
 
 const banner = `
  ___  __    ________  ___  __    _______   ___
@@ -45,6 +45,8 @@ Commands:
   mcp               serve every module to an AI agent over MCP, on stdio
                     (mcp install [AGENT] hooks it up to claude-code, codex,
                     gemini or opencode)
+  upgrade           update kakei to the latest release (-y to skip the prompt)
+  migrate           apply any pending database migrations
   version           show the version
   help              show this message
 
@@ -107,6 +109,12 @@ func run() int {
 
 	case "mcp":
 		return report("mcp", runMCP(os.Args[2:]))
+
+	case "upgrade":
+		return report("upgrade", runUpgrade(os.Args[2:]))
+
+	case "migrate":
+		return report("migrate", runMigrate())
 
 	default:
 		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])

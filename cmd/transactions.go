@@ -491,7 +491,7 @@ func deleteTransaction(args []string) error {
 		}
 		ok, err := core.Confirm(
 			fmt.Sprintf("Delete #%d %s (%s)?", t.ID, t.Title, transactions.Amount(t)),
-			note)
+			note, "Yes, delete")
 		if err != nil {
 			return err
 		}

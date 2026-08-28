@@ -29,6 +29,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0017-mcp-server-exposes-every-module-as-a-tool](decisions/0017-mcp-server-exposes-every-module-as-a-tool.md) — `kakei mcp` serves all nine modules over MCP/stdio; `logs.Actor` stamps agent writes as `ai`
 - [0018-mcp-install-writes-agent-config-files](decisions/0018-mcp-install-writes-agent-config-files.md) — `kakei mcp install <agent>`, offered at the end of `kakei setup` — shells out to an agent's own CLI, or merges JSON directly for opencode
 - [0019-pr-only-master-with-ci-and-release-on-merge](decisions/0019-pr-only-master-with-ci-and-release-on-merge.md) — master takes PRs only (ruleset, admin included); CI runs gofmt/vet/build/test on PRs; bumping `var version` in cmd/main.go releases `v<version>` with 4 tarballs on merge
+- [0020-upgrade-command-self-updates-and-migrates](decisions/0020-upgrade-command-self-updates-and-migrates.md) — `kakei upgrade` fetches GitHub releases, shows every skipped changelog, rename-swaps the binary and execs the new build's `migrate`; `-y` skips only the prompt; `core.Confirm` grew an affirmative-label param
 
 ## Gotchas — bugs that already bit once
 
@@ -64,3 +65,5 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [c2b6cbbe](sessions/c2b6cbbe-5735-4790-abac-4c4b5a60aca7.md) — full-CLI evaluation, budgets module, data-integrity fixes, transfers
 - [55542fff](sessions/55542fff-857b-4326-bc93-9554a745c41b.md) — logs module, GitHub metadata, wiki index, balance-adjustment fix, bill-reads-stop-writing fix — closes the last of decision 0013's gaps
 - [c1d09b19](sessions/c1d09b19-d5ad-4ed0-b929-4d689f8bd290.md) — MCP server exposing all nine modules to an AI agent, plus an agent-config installer wired into `kakei setup`; both committed together
+- [8a34db89](sessions/8a34db89-ce6a-4525-a01c-052289ef8b89.md) — master locked to PR-only with CI checks and release-on-merge (PR #1, merged), then the `kakei upgrade` self-update command (PR #2, open at session end)
+

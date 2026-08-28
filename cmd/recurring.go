@@ -380,7 +380,7 @@ func deleteRecurring(s *recurring.Store, ref string) error {
 	if linked > 0 {
 		note += fmt.Sprintf(" %d payment(s) keep their money and lose the link.", linked)
 	}
-	ok, err := core.Confirm(fmt.Sprintf("Delete %s (%s)?", b.Code, b.Name), note)
+	ok, err := core.Confirm(fmt.Sprintf("Delete %s (%s)?", b.Code, b.Name), note, "Yes, delete")
 	if err != nil {
 		return err
 	}

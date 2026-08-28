@@ -203,7 +203,7 @@ func deleteCategory(conn *sql.DB, s *categories.Store, args []string) error {
 	}
 	ok, err := core.Confirm(
 		fmt.Sprintf("Delete %s (%s)?", c.Code, c.Name),
-		categoryDeleteNote(capped))
+		categoryDeleteNote(capped), "Yes, delete")
 	if err != nil {
 		return err
 	}

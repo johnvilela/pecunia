@@ -366,7 +366,8 @@ func deleteBudget(s *budgets.Store, ref, cycle string) error {
 	ok, err := core.Confirm(
 		fmt.Sprintf("Delete budget %s (%s a month)?", b.Name, b.Fmt(b.Amount)),
 		"This cannot be undone. The transactions and the category stay exactly as they are — "+
-			"only the cap and its history go. To stop tracking it instead, archive it.")
+			"only the cap and its history go. To stop tracking it instead, archive it.",
+		"Yes, delete")
 	if err != nil {
 		return err
 	}
