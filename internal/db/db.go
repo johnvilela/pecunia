@@ -1,4 +1,4 @@
-// Package db opens the kakei database and keeps its schema up to date.
+// Package db opens the pecunia database and keeps its schema up to date.
 package db
 
 import (
@@ -18,26 +18,26 @@ var migrations embed.FS
 
 // DevDB is empty in a release build and set to the seeded database at the repo
 // root by scripts/dev.sh, via
-// -ldflags "-X kakei/internal/db.DevDB=<path>".
+// -ldflags "-X pecunia/internal/db.DevDB=<path>".
 var DevDB string
 
 // Path returns the database file. A dev build always uses DevDB and nothing
-// else — not even $KAKEI_DB — so a dev binary can never reach the real
-// database. A release build uses $KAKEI_DB when set, otherwise
-// <user config dir>/kakei/kakei.db. UserConfigDir honours XDG_CONFIG_HOME and
+// else — not even $PECUNIA_DB — so a dev binary can never reach the real
+// database. A release build uses $PECUNIA_DB when set, otherwise
+// <user config dir>/pecunia/pecunia.db. UserConfigDir honours XDG_CONFIG_HOME and
 // resolves to ~/.config on Linux.
 func Path() (string, error) {
 	if DevDB != "" {
 		return DevDB, nil
 	}
-	if p := os.Getenv("KAKEI_DB"); p != "" {
+	if p := os.Getenv("PECUNIA_DB"); p != "" {
 		return p, nil
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "kakei", "kakei.db"), nil
+	return filepath.Join(dir, "pecunia", "pecunia.db"), nil
 }
 
 // Open opens the database, creating the file and its directory if needed, and
@@ -48,8 +48,8 @@ func Open() (*sql.DB, error) {
 		return nil, err
 	}
 	// 0700 applies only to directories this creates. One that already exists is
-	// left alone: KAKEI_DB may point into $HOME, or /tmp, or anywhere else, and
-	// tightening a directory kakei did not make is not kakei's call.
+	// left alone: PECUNIA_DB may point into $HOME, or /tmp, or anywhere else, and
+	// tightening a directory pecunia did not make is not pecunia's call.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}

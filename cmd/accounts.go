@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 
-	"kakei/internal/accounts"
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 // out is where every command writes; tests swap it for a buffer.
@@ -18,8 +18,8 @@ var out io.Writer = os.Stdout
 const accountsHelp = `Manage accounts.
 
 Usage:
-  kakei accounts [command] [CODE|ID]
-  kakei ac       [command] [CODE|ID]
+  pecunia accounts [command] [CODE|ID]
+  pecunia ac       [command] [CODE|ID]
 
 Commands:
   (none)              list the active accounts
@@ -38,8 +38,8 @@ var subHelp = map[string]string{
 	"new": `Create an account.
 
 Usage:
-  kakei accounts new
-  kakei ac n
+  pecunia accounts new
+  pecunia ac n
 
 Opens a form: name, description (optional), code, color, currency, balance.
 The code is 5 characters and comes pre-filled with a free suggestion.
@@ -50,36 +50,36 @@ fiat, 8 for Bitcoin).
 	"edit": `Edit an account.
 
 Usage:
-  kakei accounts edit [CODE|ID]
-  kakei ac e [CODE|ID]
+  pecunia accounts edit [CODE|ID]
+  pecunia ac e [CODE|ID]
 
 Opens the create form pre-filled. Without CODE|ID, pick from a list first.
 
 Changing the balance does not overwrite it: the difference is filed as an
 adjustment transaction on the ledger, with an optional note for why. That way
 the transactions always explain the balance — delete the adjustment
-(kakei t d ID) and the balance goes back.
+(pecunia t d ID) and the balance goes back.
 `,
 	"delete": `Delete an account for good.
 
 Usage:
-  kakei accounts delete [CODE|ID]
-  kakei ac d [CODE|ID]
+  pecunia accounts delete [CODE|ID]
+  pecunia ac d [CODE|ID]
 
 Asks for confirmation. Without CODE|ID, pick from a list first.
 `,
 	"freeze": `Freeze or unfreeze an account.
 
 Usage:
-  kakei accounts freeze [CODE|ID]
-  kakei ac f [CODE|ID]
+  pecunia accounts freeze [CODE|ID]
+  pecunia ac f [CODE|ID]
 
 Toggles: a frozen account is unfrozen and the new state is printed.
 Without CODE|ID, pick from a list first.
 `,
 }
 
-var errNoAccounts = errors.New("no accounts yet — create one with: kakei ac n")
+var errNoAccounts = errors.New("no accounts yet — create one with: pecunia ac n")
 
 func isHelpFlag(s string) bool { return s == "-h" || s == "--help" }
 
@@ -165,7 +165,7 @@ func listAccounts(showAll bool) error {
 			return err
 		}
 		if len(all) == 0 {
-			fmt.Fprintln(out, "no accounts yet — create one with: kakei ac n")
+			fmt.Fprintln(out, "no accounts yet — create one with: pecunia ac n")
 			return nil
 		}
 
@@ -180,13 +180,13 @@ func listAccounts(showAll bool) error {
 		}
 		if len(shown) == 0 {
 			// An empty table here would read as data loss.
-			fmt.Fprintf(out, "every account is frozen — list them with: kakei ac --all\n")
+			fmt.Fprintf(out, "every account is frozen — list them with: pecunia ac --all\n")
 			return nil
 		}
 
 		fmt.Fprintln(out, accounts.Table(shown))
 		if n := len(all) - len(shown); n > 0 {
-			fmt.Fprintf(out, "%d frozen account(s) hidden — show them with: kakei ac --all\n", n)
+			fmt.Fprintf(out, "%d frozen account(s) hidden — show them with: pecunia ac --all\n", n)
 		}
 		return nil
 	})

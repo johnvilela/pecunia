@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/logs"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/logs"
 )
 
 // world is a database with something of everything to file a transaction
@@ -1276,7 +1276,7 @@ func TestGoalAcrossASeries(t *testing.T) {
 }
 
 // recurringBill writes a recurring bill straight through SQL. This package
-// cannot import kakei/internal/recurring — that package imports this one,
+// cannot import pecunia/internal/recurring — that package imports this one,
 // because a payment names the bill it settles.
 func (w *world) recurringBill(t *testing.T, code string, account int64) int64 {
 	t.Helper()

@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 const upgradeHelp = `Usage:
-  kakei upgrade [-y]
+  pecunia upgrade [-y]
 
 Checks GitHub for a newer release, shows the changelog of every version
 you'd jump over, asks before replacing this binary, then migrates the
@@ -35,7 +35,7 @@ Flags:
 
 // Test seams: the real values point at GitHub and this binary.
 var (
-	releasesURL = "https://api.github.com/repos/johnvilela/kakei/releases"
+	releasesURL = "https://api.github.com/repos/johnvilela/pecunia/releases"
 	selfExe     = os.Executable
 )
 
@@ -82,7 +82,7 @@ func runUpgrade(args []string) error {
 
 	pending := releasesSince(all, version)
 	if len(pending) == 0 {
-		fmt.Fprintf(out, "kakei %s is up to date\n", version)
+		fmt.Fprintf(out, "pecunia %s is up to date\n", version)
 		return nil
 	}
 	latest := pending[0]
@@ -92,7 +92,7 @@ func runUpgrade(args []string) error {
 
 	if !yes {
 		ok, err := core.Confirm(
-			fmt.Sprintf("Upgrade kakei v%s → %s?", version, latest.TagName),
+			fmt.Sprintf("Upgrade pecunia v%s → %s?", version, latest.TagName),
 			"Replaces this binary and migrates the database.",
 			"Yes, upgrade")
 		if err != nil {
@@ -103,7 +103,7 @@ func runUpgrade(args []string) error {
 		}
 	}
 
-	name := fmt.Sprintf("kakei_%s_%s_%s.tar.gz",
+	name := fmt.Sprintf("pecunia_%s_%s_%s.tar.gz",
 		strings.TrimPrefix(latest.TagName, "v"), runtime.GOOS, runtime.GOARCH)
 	var url string
 	for _, a := range latest.Assets {
@@ -138,7 +138,7 @@ func runUpgrade(args []string) error {
 	// The temp file sits next to the target so the rename stays on one
 	// filesystem, and rename-over is the only safe way to replace a running
 	// binary (writing into it fails with ETXTBSY).
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".kakei.tmp*")
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".pecunia.tmp*")
 	if err != nil {
 		return permHint(err)
 	}
@@ -151,7 +151,7 @@ func runUpgrade(args []string) error {
 		os.Remove(tmp.Name())
 		return permHint(err)
 	}
-	fmt.Fprintf(out, "upgraded kakei v%s → %s\n", version, latest.TagName)
+	fmt.Fprintf(out, "upgraded pecunia v%s → %s\n", version, latest.TagName)
 
 	cmd := exec.Command(target, "migrate")
 	cmd.Stdout = out
@@ -160,7 +160,7 @@ func runUpgrade(args []string) error {
 		// The swap already succeeded, and db.Open migrates on every run, so
 		// a failed exec here only defers the schema update — never lose the
 		// upgrade over it.
-		fmt.Fprintf(out, "could not run migrations now (%v) — they will apply on the next kakei run\n", err)
+		fmt.Fprintf(out, "could not run migrations now (%v) — they will apply on the next pecunia run\n", err)
 	}
 	return nil
 }
@@ -176,7 +176,7 @@ func runMigrate() error {
 
 func permHint(err error) error {
 	if errors.Is(err, os.ErrPermission) {
-		return fmt.Errorf("%w — try again with sudo if kakei lives in a root-owned directory", err)
+		return fmt.Errorf("%w — try again with sudo if pecunia lives in a root-owned directory", err)
 	}
 	return err
 }
@@ -213,7 +213,7 @@ func versionParts(v string) [3]int {
 	return p
 }
 
-// untarBinary pulls the "kakei" entry out of a gzipped tarball into dst,
+// untarBinary pulls the "pecunia" entry out of a gzipped tarball into dst,
 // executable. dst may already exist (a reserved temp file); it is truncated.
 func untarBinary(r io.Reader, dst string) error {
 	gz, err := gzip.NewReader(r)
@@ -225,12 +225,12 @@ func untarBinary(r io.Reader, dst string) error {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return errors.New("no kakei binary in the release tarball")
+			return errors.New("no pecunia binary in the release tarball")
 		}
 		if err != nil {
 			return err
 		}
-		if hdr.Name != "kakei" {
+		if hdr.Name != "pecunia" {
 			continue
 		}
 		f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)

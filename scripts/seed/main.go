@@ -1,4 +1,4 @@
-// Command seed fills the database at $KAKEI_DB with sample accounts and credit
+// Command seed fills the database at $PECUNIA_DB with sample accounts and credit
 // cards. It is a dev-only tool: scripts/dev.sh runs it against the database at
 // the repo root.
 package main
@@ -10,15 +10,15 @@ import (
 	"os"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/db"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 // fixtures are the sample accounts — a spread of currencies, one frozen, one
@@ -543,7 +543,7 @@ var txFixtures = []txFixture{
 	{Title: "Assinatura de streaming", Kind: transactions.KindOutcome,
 		Value: 5590, Days: 8, Category: "ENTER", Card: "NUCRD", Tags: []string{"fixo"}},
 	// An income on a card is a credit against the bill it falls in — a refund,
-	// not a payment. Paying a bill is `kakei cc pay`, which files the money as an
+	// not a payment. Paying a bill is `pecunia cc pay`, which files the money as an
 	// outcome on the account it came from.
 	{Title: "Estorno de compra", Kind: transactions.KindIncome,
 		Value: 100000, Days: 11, Category: "HOBBY", Card: "NUCRD", Tags: []string{"extra"}},

@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 // stateColor is where the month stands, as a colour: red past the cap, amber
@@ -104,7 +104,7 @@ func title(cycle string) string {
 	return d.Format("January 2006")
 }
 
-// Table is the static list output — no alt screen, so `kakei bg | grep` works.
+// Table is the static list output — no alt screen, so `pecunia bg | grep` works.
 // Nil comes back empty rather than as a header with nothing under it, so the
 // caller can say why there is nothing instead.
 func Table(bs []Budget, today time.Time) string {
@@ -209,7 +209,7 @@ func months(b Budget, history []CycleSpend) []string {
 // wording already say what every value is.
 //
 // log and history may both be nil — the list of cards passes neither, so a
-// screen of budgets stays readable, and only `kakei bg CODE` asks for them.
+// screen of budgets stays readable, and only `pecunia bg CODE` asks for them.
 func Details(b Budget, log []AmountChange, history []CycleSpend, today time.Time) string {
 	lines := []string{
 		lipgloss.NewStyle().Bold(true).Render(b.Name) + "  " +

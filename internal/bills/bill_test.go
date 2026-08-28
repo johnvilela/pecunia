@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/cards"
+	"pecunia/internal/cards"
 )
 
 func mustDate(t *testing.T, s string) time.Time {

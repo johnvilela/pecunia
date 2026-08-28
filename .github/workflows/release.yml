@@ -25,9 +25,9 @@ jobs:
           fi
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 \
-              go build -trimpath -ldflags="-s -w" -o kakei ./cmd
-            tar czf "kakei_${version}_${target%/*}_${target#*/}.tar.gz" kakei
-            rm kakei
+              go build -trimpath -ldflags="-s -w" -o pecunia ./cmd
+            tar czf "pecunia_${version}_${target%/*}_${target#*/}.tar.gz" pecunia
+            rm pecunia
           done
-          sha256sum kakei_*.tar.gz > checksums.txt
-          gh release create "v$version" --generate-notes kakei_*.tar.gz checksums.txt
+          sha256sum pecunia_*.tar.gz > checksums.txt
+          gh release create "v$version" --generate-notes pecunia_*.tar.gz checksums.txt

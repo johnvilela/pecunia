@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/db"
+	"pecunia/internal/db"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)

@@ -27,7 +27,7 @@ var (
 
 // MoneyLine writes a set of amounts as one figure per currency, in code order
 // so two runs read the same. Nothing is ever added across currencies: centavos
-// and satoshis do not sum, and there is no rate anywhere in kakei to make them.
+// and satoshis do not sum, and there is no rate anywhere in pecunia to make them.
 //
 // The sign goes in front of the symbol, the way a transaction's amount reads —
 // "-R$360.00", not "R$-360.00", which is a riddle. Currencies at zero say

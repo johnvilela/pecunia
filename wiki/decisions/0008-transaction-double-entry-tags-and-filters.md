@@ -41,7 +41,7 @@ that was frozen after the fact.
 `account_id` and `card_id` are left at SQLite's default `NO ACTION`, which refuses the delete —
 a transaction must always have exactly one target. `core.FKErr` turns SQLite's
 `FOREIGN KEY constraint failed (787)` into a sentence the caller supplies, so
-`kakei ac d INTER` says the account still has transactions. This amends what
+`pecunia ac d INTER` says the account still has transactions. This amends what
 [[decisions/0007-category-starter-set-seeded-from-go]] predicted the foreign keys would do to
 category deletes.
 
@@ -60,17 +60,17 @@ at `MaxTags` — and a plain input beside it takes tags that do not exist yet. T
 left out of the form entirely when no tag exists, because an empty select is worse than no
 select.
 
-**Filters are flags, not positional.** The spec's `kakei t {DATE | RANGE | TAG | Title}` cannot
+**Filters are flags, not positional.** The spec's `pecunia t {DATE | RANGE | TAG | Title}` cannot
 express filtering by category, account or card — a bare word is ambiguous between a code and a
 title. Every filter is a `flag.FlagSet` flag; the one positional argument is an id. `--category`,
 `--account` and `--card` take a `{CODE|ID}` and go through each module's own `Resolve`, so
-`--category food1` works the way `kakei ct food1` does. The flag set's own usage dump goes to
+`--category food1` works the way `pecunia ct food1` does. The flag set's own usage dump goes to
 `io.Discard`: it would print the flags a second time in single-dash spelling, next to the error
 `report()` already prints.
 
-**A bare `kakei t` is this month.** Years of history scrolling past is not a list. The footer is
-what keeps the scope from being a secret — `August 2026 — 5 transaction(s). Widen with: kakei t
---all, or kakei t --month 2026-07`. Any explicit filter replaces the default rather than adding
+**A bare `pecunia t` is this month.** Years of history scrolling past is not a list. The footer is
+what keeps the scope from being a secret — `August 2026 — 5 transaction(s). Widen with: pecunia t
+--all, or pecunia t --month 2026-07`. Any explicit filter replaces the default rather than adding
 to it. An empty month and an empty ledger get different messages: one says how to widen, the
 other says how to start.
 
@@ -90,12 +90,12 @@ display, and what keeps a 16-row list at one query instead of 49.
 
 ## Known holes
 
-- **Nothing reconciles.** If a balance is ever edited by hand through `kakei ac e`, the sum of the
-  transactions no longer explains it. There is no `kakei t check` and no ledger invariant — the
+- **Nothing reconciles.** If a balance is ever edited by hand through `pecunia ac e`, the sum of the
+  transactions no longer explains it. There is no `pecunia t check` and no ledger invariant — the
   balance is authoritative and the transactions move it, which is enough until it is not.
-- **`kakei t` with no id opens no picker.** A bare `kakei t` lists, the same as `kakei ct` does,
+- **`pecunia t` with no id opens no picker.** A bare `pecunia t` lists, the same as `pecunia ct` does,
   so the picker is only reachable through `edit` and `delete`. That is the spec's own collision
-  between `list: kakei t` and `details: kakei t {ID?}`, resolved the way module 03 resolved it.
+  between `list: pecunia t` and `details: pecunia t {ID?}`, resolved the way module 03 resolved it.
 - **Interactive paths need a human.** `t n`, `t e` and `t d` open a `huh` form, the picker or the
   confirm prompt, none of which run without a TTY. They are covered through the store, per
   [[rules/tdd]].

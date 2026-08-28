@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"kakei/internal/categories"
-	"kakei/internal/db"
+	"pecunia/internal/categories"
+	"pecunia/internal/db"
 )
 
 func TestRunSetup(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "kakei.db")
-	t.Setenv("KAKEI_DB", path)
+	path := filepath.Join(t.TempDir(), "nested", "pecunia.db")
+	t.Setenv("PECUNIA_DB", path)
 
 	if err := runSetup(false); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestRunSetupSeedsCategories(t *testing.T) {
 	}
 
 	t.Run("a new database starts with the starter set", func(t *testing.T) {
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		if err := runSetup(false); err != nil {
 			t.Fatal(err)
 		}
@@ -74,7 +74,7 @@ func TestRunSetupSeedsCategories(t *testing.T) {
 	})
 
 	t.Run("setup on an existing database tops up what is missing", func(t *testing.T) {
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		if err := runSetup(false); err != nil {
 			t.Fatal(err)
 		}

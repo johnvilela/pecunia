@@ -8,18 +8,18 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/cards"
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/cards"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 const cardsHelp = `Manage credit cards.
 
 Usage:
-  kakei credit-card [command] [CODE|ID]
-  kakei cc          [command] [CODE|ID]
+  pecunia credit-card [command] [CODE|ID]
+  pecunia cc          [command] [CODE|ID]
 
 Commands:
   (none)              list your credit cards
@@ -37,8 +37,8 @@ var cardSubHelp = map[string]string{
 	"new": `Create a credit card.
 
 Usage:
-  kakei credit-card new
-  kakei cc n
+  pecunia credit-card new
+  pecunia cc n
 
 Opens a form: name, description (optional), code, color, currency, limit,
 over-limit allowance, balance, closing day, due day. The code is 5 characters
@@ -54,8 +54,8 @@ month is too short for falls on its last day.
 	"edit": `Edit a credit card.
 
 Usage:
-  kakei credit-card edit [CODE|ID]
-  kakei cc e [CODE|ID]
+  pecunia credit-card edit [CODE|ID]
+  pecunia cc e [CODE|ID]
 
 Opens the create form pre-filled. Without CODE|ID, pick from a list first.
 
@@ -65,16 +65,16 @@ ledger — charges, payments and nothing else.
 	"delete": `Delete a credit card for good.
 
 Usage:
-  kakei credit-card delete [CODE|ID]
-  kakei cc d [CODE|ID]
+  pecunia credit-card delete [CODE|ID]
+  pecunia cc d [CODE|ID]
 
 Asks for confirmation. Without CODE|ID, pick from a list first.
 `,
 	"bill": `Show a credit card's bills.
 
 Usage:
-  kakei credit-card bill [CODE|ID] [YYYY-MM]
-  kakei cc b [CODE|ID] [YYYY-MM]
+  pecunia credit-card bill [CODE|ID] [YYYY-MM]
+  pecunia cc b [CODE|ID] [YYYY-MM]
 
 A bill is one closing cycle: everything charged from the day after the last
 closing through the closing date itself. Without CODE|ID, every card's bills.
@@ -89,8 +89,8 @@ afterwards the detail view says what the ledger sums to now.
 	"pay": `Pay a credit card bill.
 
 Usage:
-  kakei credit-card pay [CODE|ID]
-  kakei cc p [CODE|ID]
+  pecunia credit-card pay [CODE|ID]
+  pecunia cc p [CODE|ID]
 
 Asks which account pays, how much, and when. The amount comes pre-filled with
 what is still owed — type over it to pay part of it, and the bill reads as
@@ -103,7 +103,7 @@ spending on the next bill.
 `,
 }
 
-var errNoCards = errors.New("no credit cards yet — create one with: kakei cc n")
+var errNoCards = errors.New("no credit cards yet — create one with: pecunia cc n")
 
 func runCards(args []string) error {
 	if len(args) == 0 {
@@ -190,7 +190,7 @@ func listCards() error {
 			return err
 		}
 		if len(all) == 0 {
-			fmt.Fprintln(out, "no credit cards yet — create one with: kakei cc n")
+			fmt.Fprintln(out, "no credit cards yet — create one with: pecunia cc n")
 			return nil
 		}
 		fmt.Fprintln(out, cards.Table(all))
@@ -257,7 +257,7 @@ func deleteCard(s *cards.Store, args []string) error {
 	return nil
 }
 
-// showBills drives `kakei cc bill`: every card's bills, one card's bills, or one
+// showBills drives `pecunia cc bill`: every card's bills, one card's bills, or one
 // cycle in detail.
 func showBills(args []string) error {
 	return withConn(func(conn *sql.DB) error {
@@ -332,7 +332,7 @@ func showBill(bs *bills.Store, c cards.Card, month string) error {
 	return fmt.Errorf("%s has no bill closing in %s", c.Code, month)
 }
 
-// payBill drives `kakei cc pay`: pick the bill, then say which account settles it
+// payBill drives `pecunia cc pay`: pick the bill, then say which account settles it
 // and by how much.
 func payBill(args []string) error {
 	return withConn(func(conn *sql.DB) error {

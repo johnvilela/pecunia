@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/categories"
-	"kakei/internal/db"
-	"kakei/internal/logs"
+	"pecunia/internal/categories"
+	"pecunia/internal/db"
+	"pecunia/internal/logs"
 )
 
-// runCategoriesIn points KAKEI_DB at a database of this case's own, captures
+// runCategoriesIn points PECUNIA_DB at a database of this case's own, captures
 // what the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit and the
@@ -20,7 +20,7 @@ import (
 // territory and are covered through the store instead.
 func runCategoriesIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -34,7 +34,7 @@ func runCategoriesIn(t *testing.T, dbPath string, args ...string) (string, error
 // seedCategory puts one category in the database at path and hands it back.
 func seedCategory(t *testing.T, path string, c categories.Category) categories.Category {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -73,10 +73,10 @@ func TestCategoriesHelp(t *testing.T) {
 			// cannot be created and it should still print.
 			got, err := runCategoriesIn(t, filepath.Join(t.TempDir(), "nope", "unused.db"), tc.args...)
 			if err != nil {
-				t.Fatalf("kakei ct %v = %v", tc.args, err)
+				t.Fatalf("pecunia ct %v = %v", tc.args, err)
 			}
 			if !strings.Contains(got, tc.want) {
-				t.Fatalf("kakei ct %v printed %q; want it to contain %q", tc.args, got, tc.want)
+				t.Fatalf("pecunia ct %v printed %q; want it to contain %q", tc.args, got, tc.want)
 			}
 		})
 	}
@@ -84,7 +84,7 @@ func TestCategoriesHelp(t *testing.T) {
 
 func TestCategoriesList(t *testing.T) {
 	t.Run("shows the table", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCategory(t, path, groceries())
 		seedCategory(t, path, categories.Category{Code: "WORK1", Name: "Work", Color: "indigo"})
 
@@ -100,11 +100,11 @@ func TestCategoriesList(t *testing.T) {
 	})
 
 	t.Run("an empty database says how to start", func(t *testing.T) {
-		got, err := runCategoriesIn(t, filepath.Join(t.TempDir(), "kakei.db"))
+		got, err := runCategoriesIn(t, filepath.Join(t.TempDir(), "pecunia.db"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"no categories yet", "kakei setup", "kakei ct n"} {
+		for _, want := range []string{"no categories yet", "pecunia setup", "pecunia ct n"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("empty list = %q; want it to mention %q", got, want)
 			}
@@ -114,27 +114,27 @@ func TestCategoriesList(t *testing.T) {
 
 func TestCategoriesDetails(t *testing.T) {
 	t.Run("resolves a code in any case, and an id", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		c := seedCategory(t, path, groceries())
 
 		for _, ref := range []string{"FOOD1", "food1", strconv.FormatInt(c.ID, 10)} {
 			got, err := runCategoriesIn(t, path, ref)
 			if err != nil {
-				t.Fatalf("kakei ct %s = %v", ref, err)
+				t.Fatalf("pecunia ct %s = %v", ref, err)
 			}
 			if !strings.Contains(got, "Food & Groceries") {
-				t.Fatalf("kakei ct %s printed %q", ref, got)
+				t.Fatalf("pecunia ct %s printed %q", ref, got)
 			}
 		}
 	})
 
 	t.Run("an unknown reference names what was asked for", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCategory(t, path, groceries())
 
 		_, err := runCategoriesIn(t, path, "NOPE1")
 		if err == nil || !strings.Contains(err.Error(), `no category matching "NOPE1"`) {
-			t.Fatalf("kakei ct NOPE1 = %v; want it to name the reference", err)
+			t.Fatalf("pecunia ct NOPE1 = %v; want it to name the reference", err)
 		}
 	})
 }
@@ -144,12 +144,12 @@ func TestCategoriesDetails(t *testing.T) {
 func TestCategoriesEditAndDeleteMissing(t *testing.T) {
 	for _, sub := range []string{"edit", "e", "delete", "d"} {
 		t.Run(sub+" on an unknown reference", func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "kakei.db")
+			path := filepath.Join(t.TempDir(), "pecunia.db")
 			seedCategory(t, path, groceries())
 
 			_, err := runCategoriesIn(t, path, sub, "NOPE1")
 			if err == nil || !strings.Contains(err.Error(), `no category matching "NOPE1"`) {
-				t.Fatalf("kakei ct %s NOPE1 = %v", sub, err)
+				t.Fatalf("pecunia ct %s NOPE1 = %v", sub, err)
 			}
 		})
 	}
@@ -160,7 +160,7 @@ func TestCategoriesWithoutADatabase(t *testing.T) {
 		// A directory where the file should be: Open cannot create it.
 		dir := t.TempDir()
 		if _, err := runCategoriesIn(t, dir); err == nil {
-			t.Fatal("kakei ct on an unopenable database = nil; want an error")
+			t.Fatal("pecunia ct on an unopenable database = nil; want an error")
 		}
 	})
 }

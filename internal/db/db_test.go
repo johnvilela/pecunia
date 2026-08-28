@@ -18,41 +18,41 @@ func setDevDB(t *testing.T, path string) {
 }
 
 func TestPath(t *testing.T) {
-	t.Run("a dev build ignores KAKEI_DB", func(t *testing.T) {
+	t.Run("a dev build ignores PECUNIA_DB", func(t *testing.T) {
 		// The whole point: a dev binary can never be pointed at the real
 		// database, however the environment is set.
 		setDevDB(t, "/tmp/dev.db")
-		t.Setenv("KAKEI_DB", "/home/someone/.config/kakei/kakei.db")
+		t.Setenv("PECUNIA_DB", "/home/someone/.config/pecunia/pecunia.db")
 		if got, err := Path(); err != nil || got != "/tmp/dev.db" {
-			t.Fatalf("dev build with KAKEI_DB set: got %q, %v; want the dev database", got, err)
+			t.Fatalf("dev build with PECUNIA_DB set: got %q, %v; want the dev database", got, err)
 		}
 	})
 
-	t.Run("a dev build with no KAKEI_DB uses the dev database", func(t *testing.T) {
+	t.Run("a dev build with no PECUNIA_DB uses the dev database", func(t *testing.T) {
 		setDevDB(t, "/tmp/dev.db")
-		t.Setenv("KAKEI_DB", "")
+		t.Setenv("PECUNIA_DB", "")
 		if got, err := Path(); err != nil || got != "/tmp/dev.db" {
 			t.Fatalf("with only DevDB set: got %q, %v", got, err)
 		}
 	})
 
-	t.Run("a release build honours KAKEI_DB", func(t *testing.T) {
+	t.Run("a release build honours PECUNIA_DB", func(t *testing.T) {
 		setDevDB(t, "")
-		t.Setenv("KAKEI_DB", "/tmp/explicit.db")
+		t.Setenv("PECUNIA_DB", "/tmp/explicit.db")
 		if got, err := Path(); err != nil || got != "/tmp/explicit.db" {
-			t.Fatalf("with KAKEI_DB set: got %q, %v", got, err)
+			t.Fatalf("with PECUNIA_DB set: got %q, %v", got, err)
 		}
 	})
 
 	t.Run("user config dir is the fallback", func(t *testing.T) {
 		setDevDB(t, "")
-		t.Setenv("KAKEI_DB", "")
+		t.Setenv("PECUNIA_DB", "")
 		got, err := Path()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasSuffix(got, filepath.Join("kakei", "kakei.db")) {
-			t.Fatalf("default path %q does not end in kakei/kakei.db", got)
+		if !strings.HasSuffix(got, filepath.Join("pecunia", "pecunia.db")) {
+			t.Fatalf("default path %q does not end in pecunia/pecunia.db", got)
 		}
 	})
 
@@ -65,7 +65,7 @@ func TestPath(t *testing.T) {
 }
 
 func TestOpenMigratesOnceOnly(t *testing.T) {
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 
 	for i := range 2 {
 		conn, err := Open()
@@ -97,7 +97,7 @@ func TestOpenMigratesOnceOnly(t *testing.T) {
 func TestCardBillsSchema(t *testing.T) {
 	open := func(t *testing.T) *sql.DB {
 		t.Helper()
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		conn, err := Open()
 		if err != nil {
 			t.Fatal(err)
@@ -207,7 +207,7 @@ func TestOpenConcurrencySettings(t *testing.T) {
 	open := func(t *testing.T) *sql.DB {
 		t.Helper()
 		setDevDB(t, "")
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		conn, err := Open()
 		if err != nil {
 			t.Fatal(err)
@@ -249,8 +249,8 @@ func TestOpenConcurrencySettings(t *testing.T) {
 	// find it already set rather than set it again.
 	t.Run("reopening the same file keeps every setting", func(t *testing.T) {
 		setDevDB(t, "")
-		path := filepath.Join(t.TempDir(), "kakei.db")
-		t.Setenv("KAKEI_DB", path)
+		path := filepath.Join(t.TempDir(), "pecunia.db")
+		t.Setenv("PECUNIA_DB", path)
 
 		first, err := Open()
 		if err != nil {
@@ -280,8 +280,8 @@ func TestOpenConcurrencySettings(t *testing.T) {
 func TestOpenPermissions(t *testing.T) {
 	t.Run("the database file is readable only by its owner", func(t *testing.T) {
 		setDevDB(t, "")
-		path := filepath.Join(t.TempDir(), "kakei", "kakei.db")
-		t.Setenv("KAKEI_DB", path)
+		path := filepath.Join(t.TempDir(), "pecunia", "pecunia.db")
+		t.Setenv("PECUNIA_DB", path)
 
 		conn, err := Open()
 		if err != nil {
@@ -298,10 +298,10 @@ func TestOpenPermissions(t *testing.T) {
 		}
 	})
 
-	t.Run("a directory kakei creates is its owner's alone", func(t *testing.T) {
+	t.Run("a directory pecunia creates is its owner's alone", func(t *testing.T) {
 		setDevDB(t, "")
-		dir := filepath.Join(t.TempDir(), "kakei")
-		t.Setenv("KAKEI_DB", filepath.Join(dir, "kakei.db"))
+		dir := filepath.Join(t.TempDir(), "pecunia")
+		t.Setenv("PECUNIA_DB", filepath.Join(dir, "pecunia.db"))
 
 		conn, err := Open()
 		if err != nil {
@@ -318,15 +318,15 @@ func TestOpenPermissions(t *testing.T) {
 		}
 	})
 
-	// The directory may be $HOME, or /tmp, or anything else KAKEI_DB points
-	// into. Tightening one kakei did not create is not kakei's call to make.
+	// The directory may be $HOME, or /tmp, or anything else PECUNIA_DB points
+	// into. Tightening one pecunia did not create is not pecunia's call to make.
 	t.Run("a directory that already existed is left exactly as it was", func(t *testing.T) {
 		setDevDB(t, "")
 		dir := t.TempDir()
 		if err := os.Chmod(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("KAKEI_DB", filepath.Join(dir, "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(dir, "pecunia.db"))
 
 		conn, err := Open()
 		if err != nil {
@@ -345,8 +345,8 @@ func TestOpenPermissions(t *testing.T) {
 
 	t.Run("the write-ahead log beside it is shut too", func(t *testing.T) {
 		setDevDB(t, "")
-		path := filepath.Join(t.TempDir(), "kakei", "kakei.db")
-		t.Setenv("KAKEI_DB", path)
+		path := filepath.Join(t.TempDir(), "pecunia", "pecunia.db")
+		t.Setenv("PECUNIA_DB", path)
 
 		conn, err := Open()
 		if err != nil {
@@ -378,7 +378,7 @@ func TestOpenPermissions(t *testing.T) {
 // the handle Open hands back must enforce references again.
 func TestOpenRestoresForeignKeys(t *testing.T) {
 	setDevDB(t, "")
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := Open()
 	if err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestOpenRestoresForeignKeys(t *testing.T) {
 // tags still attached, nothing dangling.
 func TestAdjustmentRebuildPreservesData(t *testing.T) {
 	setDevDB(t, "")
-	path := filepath.Join(t.TempDir(), "kakei.db")
+	path := filepath.Join(t.TempDir(), "pecunia.db")
 
 	pre, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -445,7 +445,7 @@ func TestAdjustmentRebuildPreservesData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := Open()
 	if err != nil {
 		t.Fatal(err)

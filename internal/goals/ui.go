@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // reachedMark flags a goal that is there. Plain Unicode, same as the ❄ accounts
@@ -165,7 +165,7 @@ func Pick(gs []Goal, title string) (Goal, error) {
 	return core.Pick(gs, title, pickerRow)
 }
 
-// Table is the static list output — no alt screen, so `kakei g | grep` works.
+// Table is the static list output — no alt screen, so `pecunia g | grep` works.
 func Table(gs []Goal) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
@@ -254,7 +254,7 @@ func rule(lines []string) string {
 // what every value is.
 //
 // log is the goal's target history, and may be nil — the list of cards passes
-// none, so a screen of goals stays readable, and only `kakei g ID` asks for it.
+// none, so a screen of goals stays readable, and only `pecunia g ID` asks for it.
 func Details(g Goal, log []TargetChange) string {
 	accent := lipgloss.Color(stateColor(g))
 	if accent == "" {

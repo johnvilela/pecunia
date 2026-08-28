@@ -12,11 +12,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 // The mark each state gets on the board. Plain Unicode, same block as the ❄ on
@@ -47,7 +47,7 @@ func stateColor(status string) string {
 }
 
 // code is the bill's code in its own colour, bracketed like every other code in
-// kakei.
+// pecunia.
 func code(b Bill) string {
 	return "[" + lipgloss.NewStyle().Foreground(lipgloss.Color(core.ColorByName(b.Color).Hex)).
 		Bold(true).Render(b.Code) + "]"
@@ -91,7 +91,7 @@ func plural(n int, word string) string {
 	return strconv.Itoa(n) + " " + word + "s"
 }
 
-// Board is what `kakei bill` shows: one line per bill for the cycle it is at,
+// Board is what `pecunia bill` shows: one line per bill for the cycle it is at,
 // the ones that need paying first, and a footer of what is still owed.
 //
 // It is a plain rendering rather than a lipgloss table because the amounts and
@@ -177,7 +177,7 @@ func Board(bs []Bill, today time.Time) string {
 	// The total closes the table instead of hanging under it, so the figure
 	// lands in the column it is a total of and the block reads as one thing.
 	// One figure per currency: centavos and satoshis do not add up, and there
-	// is no rate anywhere in kakei to make them.
+	// is no rate anywhere in pecunia to make them.
 	if total := core.MoneyLine(owed); total != "" {
 		totalRow = len(lines)
 		t.Row(core.DimStyle.Render("still owed"), total, "", "")
@@ -300,7 +300,7 @@ func rule(lines []string) string {
 }
 
 // tag is how one reference reads inline: its code in its own colour, bracketed
-// like everywhere else in kakei.
+// like everywhere else in pecunia.
 func tag(r transactions.Ref) string {
 	if r.ID == 0 {
 		return ""
@@ -397,7 +397,7 @@ func (d FormData) categoryOptions() []huh.Option[int64] {
 // suggested code and the colour default.
 func Form(d FormData, b *Bill, title string) error {
 	if len(d.sourceOptions()) == 0 {
-		return errors.New("nothing to pay this from — create an account with: kakei ac n")
+		return errors.New("nothing to pay this from — create an account with: pecunia ac n")
 	}
 
 	source := sourceValue("account", b.Account.ID)
@@ -418,7 +418,7 @@ func Form(d FormData, b *Bill, title string) error {
 	var fresh string
 
 	fields := []huh.Field{
-		huh.NewInput().Title("Code").Description("how you will type it: kakei bill ENERG").
+		huh.NewInput().Title("Code").Description("how you will type it: pecunia bill ENERG").
 			Value(&b.Code).Validate(func(v string) error { return core.ValidateCode(v) }),
 		huh.NewInput().Title("Name").Value(&b.Name).Validate(core.ValidateName),
 		huh.NewInput().Title("Description").Description("optional").Value(&b.Description),

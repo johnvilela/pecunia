@@ -30,7 +30,7 @@ what/why, not the file list.
 
 ## Examples
 
-- `feat: initialize kakei go cli with gofmt/vet pre-commit hook` (root commit `159372d`)
+- `feat: initialize pecunia go cli with gofmt/vet pre-commit hook` (root commit `159372d`)
 - `fix(cmd): preserve exit code on unknown command`
 - `refactor(db): replace switch dispatch with command registry`
 

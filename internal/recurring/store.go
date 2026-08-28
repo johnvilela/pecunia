@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	"kakei/internal/core"
-	"kakei/internal/logs"
-	"kakei/internal/transactions"
+	"pecunia/internal/core"
+	"pecunia/internal/logs"
+	"pecunia/internal/transactions"
 )
 
 type Store struct{ db *sql.DB }
@@ -104,7 +104,7 @@ func (s *Store) Get(id int64) (Bill, error) {
 	return s.one(`WHERE b.id = ?`, id)
 }
 
-// ByCode is how the command line names a bill: kakei bill ENERG.
+// ByCode is how the command line names a bill: pecunia bill ENERG.
 func (s *Store) ByCode(code string) (Bill, error) {
 	return s.one(`WHERE b.code = ?`, core.NormalizeCode(code))
 }

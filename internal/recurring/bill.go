@@ -4,7 +4,7 @@
 // and when it is late. It holds no money of its own.
 //
 // What has been paid is the transactions carrying the bill's id, which is why
-// this package imports kakei/internal/transactions rather than reading the
+// this package imports pecunia/internal/transactions rather than reading the
 // table behind its back: nothing in transactions imports this, so there is no
 // cycle to dodge.
 package recurring
@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/cards"
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/cards"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
-// DateLayout is the one date format kakei reads or writes, everywhere.
+// DateLayout is the one date format pecunia reads or writes, everywhere.
 const DateLayout = transactions.DateLayout
 
 // CycleLayout is how a cycle is written: the month a bill is for, and no day.
@@ -248,7 +248,7 @@ type Summary struct {
 }
 
 // Stats sums a bill's payments. Integer division for the average, like every
-// other amount in kakei — no float ever touches money.
+// other amount in pecunia — no float ever touches money.
 func Stats(ts []transactions.Transaction) Summary {
 	var s Summary
 	for _, t := range ts {

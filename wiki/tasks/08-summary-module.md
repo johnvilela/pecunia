@@ -16,11 +16,11 @@ are the decisions below.
 ## Commands
 
 ```
-kakei summary                          today
-kakei s                                the alias
-kakei summary --month                  this month
-kakei summary --date 2026-08-10        that day
-kakei summary --month --date 2026-07-04  that day's month
+pecunia summary                          today
+pecunia s                                the alias
+pecunia summary --month                  this month
+pecunia summary --date 2026-08-10        that day
+pecunia summary --month --date 2026-07-04  that day's month
 ```
 
 ## Decisions
@@ -43,9 +43,9 @@ kakei summary --month --date 2026-07-04  that day's month
   sorted, `·`-joined — the rule
   [[decisions/0010-goal-progress-summed-from-the-ledger]] set and the recurring
   board already followed. Wanting it a second time is what lifted it into
-  `core.MoneyLine`; there is no rate anywhere in kakei to make one currency into
+  `core.MoneyLine`; there is no rate anywhere in pecunia to make one currency into
   another.
-- **Static print, no TUI.** `kakei summary | head` works like every other list.
+- **Static print, no TUI.** `pecunia summary | head` works like every other list.
   A scrollable dashboard was offered and turned down.
 - **What is due comes first**, above the transactions: it is the only section on
   the screen that asks for an action today.
@@ -74,7 +74,7 @@ own SQLite file per subtest, substring assertions for anything lipgloss renders.
   The window scans this month and next; seven days never span more than one
   boundary. A bill already in the due section is never repeated there.
 - **A window that is over says nothing about what is due**, rather than "nothing
-  due". The dev database caught this: `kakei summary --date 2026-08-11` claimed
+  due". The dev database caught this: `pecunia summary --date 2026-08-11` claimed
   a clear board for a day whose bills were never read. Nothing is read for a
   past window, so nothing is claimed — which also skips the expensive per-card
   statement walk.
@@ -88,7 +88,7 @@ Files: `internal/summary/{summary,ui}.go`, `internal/bills/store.go`,
 
 ## Update: the floating owed-total fix
 
-A follow-up in the same session — user, from a screenshot of `kakei bill`: "The
+A follow-up in the same session — user, from a screenshot of `pecunia bill`: "The
 still owed text is feeling strange there, like floating, this also happens on
 the bills command." The fix moved the owed total into `recurring.Board`'s table
 itself as its last row, and lifted the money-formatting `owedLine` used

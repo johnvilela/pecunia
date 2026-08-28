@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/core"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/core"
 )
 
 // statusColor follows the rule the cards table is pinned to: no green anywhere
@@ -42,7 +42,7 @@ func left(b Bill) string {
 		Render(b.Fmt(b.Owed()))
 }
 
-// Table is the static list output — no alt screen, so `kakei cc bill | grep`
+// Table is the static list output — no alt screen, so `pecunia cc bill | grep`
 // works. The card column earns its place even on one card's bills: it is what
 // makes the all-cards list read the same as the filtered one.
 func Table(bs []Bill) string {
@@ -165,7 +165,7 @@ func PayForm(b Bill, accs []accounts.Account) (Payment, error) {
 			accounts.Label(a)+"  "+core.DimStyle.Render(a.Cur().Symbol+a.Amount()), a.ID))
 	}
 	if len(opts) == 0 {
-		return p, errors.New("no account to pay from — create one with: kakei ac n")
+		return p, errors.New("no account to pay from — create one with: pecunia ac n")
 	}
 
 	cur := b.Card.Cur()

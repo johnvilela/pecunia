@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 const recurringHelp = `Recurring bills — the ones that come round every month.
 
 Usage:
-  kakei bill [CODE] [command]
-  kakei b    [CODE] [command]
+  pecunia bill [CODE] [command]
+  pecunia b    [CODE] [command]
 
 Commands:
   (none)              the board: where every bill stands this cycle
@@ -33,8 +33,8 @@ Commands:
 Flags:
   --all               the archived bills too
 
-The code may come on either side of the command: "kakei bill ENERG pay" and
-"kakei bill pay ENERG" are the same thing. Leaving CODE out opens a picker.
+The code may come on either side of the command: "pecunia bill ENERG pay" and
+"pecunia bill pay ENERG" are the same thing. Leaving CODE out opens a picker.
 Add -h to any command for its own help.
 
 A bill holds no money. What it costs is the transactions filed against it, and
@@ -46,8 +46,8 @@ var recurringSubHelp = map[string]string{
 	"new": `Create a recurring bill.
 
 Usage:
-  kakei bill new
-  kakei b n
+  pecunia bill new
+  pecunia b n
 
 Opens a form: code, name, description (optional), colour, what pays it, the
 usual amount (optional), the two days and a category.
@@ -64,8 +64,8 @@ bill nobody has seen a number for yet.
 	"pay": `Pay a bill.
 
 Usage:
-  kakei bill ENERG pay
-  kakei b ENERG p
+  pecunia bill ENERG pay
+  pecunia b ENERG p
 
 Opens the ordinary transaction form with everything the bill already knows
 filled in — title, usual amount, source, category and tags — so paying is a
@@ -81,8 +81,8 @@ paid it, and editing or deleting it later moves that balance back.
 	"edit": `Edit a recurring bill.
 
 Usage:
-  kakei bill ENERG edit
-  kakei b e ENERG
+  pecunia bill ENERG edit
+  pecunia b e ENERG
 
 Opens the create form pre-filled. Without CODE, pick from a list first. Nothing
 that has already been paid changes: the payments are transactions of their own
@@ -91,8 +91,8 @@ and keep the amounts they were filed with.
 	"delete": `Delete a recurring bill for good.
 
 Usage:
-  kakei bill ENERG delete
-  kakei b d ENERG
+  pecunia bill ENERG delete
+  pecunia b d ENERG
 
 Asks for confirmation. Without CODE, pick from a list first. Nothing blocks the
 delete: the payments made against the bill keep their money and lose the link.
@@ -103,8 +103,8 @@ instead.
 	"archive": `Archive a bill, or bring one back.
 
 Usage:
-  kakei bill NFLIX archive
-  kakei bill NFLIX unarchive
+  pecunia bill NFLIX archive
+  pecunia bill NFLIX unarchive
 
 An archived bill is off the board and counts as nothing due, and keeps every
 payment ever made against it — which is what a cancelled subscription wants:
@@ -112,7 +112,7 @@ its history is still worth reading.
 `,
 }
 
-var errNoBills = errors.New("no bills yet — create one with: kakei bill n")
+var errNoBills = errors.New("no bills yet — create one with: pecunia bill n")
 
 // recurringVerbs is every name a subcommand answers to. It is also what tells a
 // verb from a code, since either may come first.
@@ -136,8 +136,8 @@ func runRecurring(args []string) error {
 		return listRecurring(true)
 	}
 
-	// The code may come on either side of the verb: "kakei bill ENERG pay" is
-	// how it is said out loud, "kakei bill pay ENERG" is how every other module
+	// The code may come on either side of the verb: "pecunia bill ENERG pay" is
+	// how it is said out loud, "pecunia bill pay ENERG" is how every other module
 	// reads, and neither is worth refusing.
 	verb, ref := recurringVerbs[args[0]], ""
 	rest := args[1:]
@@ -146,7 +146,7 @@ func runRecurring(args []string) error {
 		if len(rest) > 0 {
 			verb = recurringVerbs[rest[0]]
 			if verb == "" && !isHelpFlag(rest[0]) {
-				return fmt.Errorf("kakei bill: unknown command %q", rest[0])
+				return fmt.Errorf("pecunia bill: unknown command %q", rest[0])
 			}
 			rest = rest[1:]
 		}

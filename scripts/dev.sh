@@ -2,7 +2,7 @@
 # Build the dev CLI: dev, wired to a seeded database at the repo root.
 #
 # ponytail: the database path is baked in with -ldflags, not read from the
-# environment, so a dev binary can never open the real database — KAKEI_DB is
+# environment, so a dev binary can never open the real database — PECUNIA_DB is
 # ignored by design. Unstripped and untrimmed too, unlike build.sh, so stack
 # traces stay readable.
 #
@@ -10,8 +10,8 @@
 set -e
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-DB="$ROOT/kakei.dev.db"
-LDFLAGS="-X kakei/internal/db.DevDB=$DB"
+DB="$ROOT/pecunia.dev.db"
+LDFLAGS="-X pecunia/internal/db.DevDB=$DB"
 
 if [ "$1" = "--reseed" ]; then
 	rm -f "$DB" "$DB-wal" "$DB-shm"

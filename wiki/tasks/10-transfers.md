@@ -50,10 +50,10 @@ end, stored exchange rates, a goal on the outgoing leg, and repeating transfers.
 ## Commands
 
 ```
-kakei transactions transfer      | t tr        record a transfer
-kakei transactions edit {ID}     | t e {ID}    edit one, both legs together
-kakei transactions delete {ID}   | t d {ID}    delete one, both legs together
-kakei transactions --transfers                 list only transfers
+pecunia transactions transfer      | t tr        record a transfer
+pecunia transactions edit {ID}     | t e {ID}    edit one, both legs together
+pecunia transactions delete {ID}   | t d {ID}    delete one, both legs together
+pecunia transactions --transfers                 list only transfers
 ```
 
 ## Decisions
@@ -76,14 +76,14 @@ kakei transactions --transfers                 list only transfers
   the source is a fact of the row rather than a convention about ordering.
 
 - **Accounts only.** Asked and confirmed. A transfer moves money between things
-  that hold money; paying a credit card stays `kakei cc pay`, which already
+  that hold money; paying a credit card stays `pecunia cc pay`, which already
   settles the right bill and already keeps the payment off the next statement.
   Two ways to pay a card would be two ways to get it wrong — and a card payment
   that named no bill would leave the balance and the bill status disagreeing.
 
 - **Two amounts, both typed.** Asked and confirmed. R$500.00 leaves and $92.00
   arrives; the implied rate is used and never stored, because there is no rate
-  anywhere in kakei and this is not where one starts. The same mechanism covers
+  anywhere in pecunia and this is not where one starts. The same mechanism covers
   a fee without a field for one: R$500.00 out and R$495.00 in, same currency, is
   a R$5.00 TED fee, and the renderer says so.
 
@@ -108,7 +108,7 @@ kakei transactions --transfers                 list only transfers
   either leg edits both, deleting either deletes both, and the balances reverse
   on both.
 
-- **Both legs are listed.** `kakei t` shows the transfer twice, once per
+- **Both legs are listed.** `pecunia t` shows the transfer twice, once per
   account, each with its arrow. Honest to the ledger, costs no collapse logic,
   and it is what makes `--account NUBON` show the money leaving without having
   to reason about a row that is only half about NUBON.

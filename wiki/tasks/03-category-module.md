@@ -8,11 +8,11 @@ This module will be responsible for managing user's categories. It will have com
 
 ## Commands
 
-list: "kakei category" or "kakei ct"
-create: "kakei category new" or "kakei ct n"
-edit: "kakei category edit {CODE|ID?}" or "kakei ct e {CODE|ID?}"
-delete: "kakei category delete {CODE|ID?}" or "kakei ct d {CODE|ID?}"
-details: "kakei category {CODE|ID?}" or "kakei ct {CODE|ID?}"
+list: "pecunia category" or "pecunia ct"
+create: "pecunia category new" or "pecunia ct n"
+edit: "pecunia category edit {CODE|ID?}" or "pecunia ct e {CODE|ID?}"
+delete: "pecunia category delete {CODE|ID?}" or "pecunia ct d {CODE|ID?}"
+details: "pecunia category {CODE|ID?}" or "pecunia ct {CODE|ID?}"
 
 ## Suggested structure
 
@@ -62,7 +62,7 @@ Built and verified in the `category-module` session
 ([[sessions/2a7339bb-af86-47f1-a0fb-8fbc097dd9ea]]). Key implementation decisions beyond the
 original spec:
 
-- **The starter set is Go data seeded by `kakei setup`**, and `runSetup` no longer returns early
+- **The starter set is Go data seeded by `pecunia setup`**, and `runSetup` no longer returns early
   on an existing database — it tops up instead, so a database that predates a module never needs
   `--force`. Codes are hand-written (`HOME1`, `FOOD1`, `SLRY1`) rather than generated. Full
   write-up, including the deferred `kind` column and the known hole: [[decisions/0007-category-starter-set-seeded-from-go]].

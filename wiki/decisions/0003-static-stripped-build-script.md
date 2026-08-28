@@ -4,7 +4,7 @@ tags: [go, build, cli]
 
 ## Decision
 
-`build.sh` at the repo root builds the kakei CLI into a single static, stripped binary. Verified output: `file kakei` reports statically linked, the binary is 8.0M, and `./kakei --help` runs correctly from it.
+`build.sh` at the repo root builds the pecunia CLI into a single static, stripped binary. Verified output: `file pecunia` reports statically linked, the binary is 8.0M, and `./pecunia --help` runs correctly from it.
 
 ## Why
 

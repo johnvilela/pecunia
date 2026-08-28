@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 // on is the day a case is rendered against. Nothing here may ask the wall clock
@@ -277,7 +277,7 @@ func TestRender(t *testing.T) {
 			Today:  on("2026-08-13"),
 		}
 		got := Render(fresh)
-		if !strings.Contains(got, "kakei ac n") {
+		if !strings.Contains(got, "pecunia ac n") {
 			t.Errorf("an empty database is not told where to start:\n%s", got)
 		}
 		if strings.Contains(got, "TRANSACTIONS") {

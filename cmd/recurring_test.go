@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/accounts"
-	"kakei/internal/db"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/db"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
-// runBillsIn points KAKEI_DB at a database of this case's own, captures what
+// runBillsIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit, pay
@@ -21,7 +21,7 @@ import (
 // package's territory and are covered through the store instead.
 func runBillsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -36,7 +36,7 @@ func runBillsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 // first time, and hands both back.
 func seedBill(t *testing.T, path string, b recurring.Bill) (recurring.Bill, *sql.DB) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -106,18 +106,18 @@ func TestRecurringHelp(t *testing.T) {
 
 func TestRecurringList(t *testing.T) {
 	t.Run("says how to start when there are none", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		got, err := runBillsIn(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei bill n") {
+		if !strings.Contains(got, "pecunia bill n") {
 			t.Errorf("empty list does not say how to make one:\n%s", got)
 		}
 	})
 
 	t.Run("shows the board", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBill(t, path, energyBill())
 
 		got, err := runBillsIn(t, path)
@@ -132,7 +132,7 @@ func TestRecurringList(t *testing.T) {
 	})
 
 	t.Run("leaves archived bills out until --all", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBill(t, path, energyBill())
 		gone := energyBill()
 		gone.Code, gone.Name = "NFLIX", "Netflix"
@@ -161,7 +161,7 @@ func TestRecurringList(t *testing.T) {
 
 func TestRecurringDetails(t *testing.T) {
 	t.Run("shows one bill and what it has cost", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		bill, conn := seedBill(t, path, energyBill())
 		tr := transactions.Transaction{
 			Title: "Energy", Value: 19000, Kind: transactions.KindOutcome, Date: "2026-07-08",
@@ -183,7 +183,7 @@ func TestRecurringDetails(t *testing.T) {
 	})
 
 	t.Run("finds a bill however the code is typed", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBill(t, path, energyBill())
 		got, err := runBillsIn(t, path, "energ")
 		if err != nil {
@@ -195,7 +195,7 @@ func TestRecurringDetails(t *testing.T) {
 	})
 
 	t.Run("names an unknown code", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBill(t, path, energyBill())
 		_, err := runBillsIn(t, path, "NOPE1")
 		if err == nil || !strings.Contains(err.Error(), "NOPE1") {
@@ -206,11 +206,11 @@ func TestRecurringDetails(t *testing.T) {
 
 func TestRecurringArchive(t *testing.T) {
 	t.Run("archives and brings back, either way round", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBill(t, path, energyBill())
 
-		// The code may come on either side of the verb: kakei bill ENERG archive
-		// is how it is said out loud, kakei bill archive ENERG is how every other
+		// The code may come on either side of the verb: pecunia bill ENERG archive
+		// is how it is said out loud, pecunia bill archive ENERG is how every other
 		// module reads.
 		got, err := runBillsIn(t, path, "ENERG", "archive")
 		if err != nil {

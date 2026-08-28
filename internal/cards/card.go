@@ -1,5 +1,5 @@
 // Package cards holds the credit card domain: the model, its storage and its
-// UI. Currencies, colors, codes and amounts come from kakei/internal/core.
+// UI. Currencies, colors, codes and amounts come from pecunia/internal/core.
 package cards
 
 import (
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // Card is one credit card. Limit and Balance are minor units at the currency's

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/goals"
+	"pecunia/internal/goals"
 )
 
 // shown is what a rendered transaction looks like once the joins have filled it

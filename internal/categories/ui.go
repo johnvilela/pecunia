@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // Label is how a category is named everywhere it appears in a list: its code in
@@ -78,7 +78,7 @@ func Pick(cats []Category, title string) (Category, error) {
 	return core.Pick(cats, title, pickerRow)
 }
 
-// Table is the static list output — no alt screen, so `kakei ct | grep` works.
+// Table is the static list output — no alt screen, so `pecunia ct | grep` works.
 func Table(cats []Category) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).

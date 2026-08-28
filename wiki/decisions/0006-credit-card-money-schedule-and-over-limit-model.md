@@ -12,7 +12,7 @@ The credit-card domain model, settled during planning and then corrected once mi
 
 **No freeze.** The spec has no freeze verb for cards, so `Store.List` is a plain `ORDER BY name`, no `is_frozen` machinery.
 
-**Codes are unique per table.** `kakei cc INTER` and `kakei ac INTER` can coexist — no shared namespace between `accounts` and `credit_cards`.
+**Codes are unique per table.** `pecunia cc INTER` and `pecunia ac INTER` can coexist — no shared namespace between `accounts` and `credit_cards`.
 
 **No FK to an account.** Deferred — the spec's suggested structure has no account field, and the notes defer rules to the transactions module. `PRAGMA foreign_keys = ON` is already set repo-wide, so adding `account_id` is a one-line `ALTER TABLE` migration whenever it's actually needed.
 

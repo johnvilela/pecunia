@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/cards"
-	"kakei/internal/db"
+	"pecunia/internal/cards"
+	"pecunia/internal/db"
 )
 
-// runCardsIn points KAKEI_DB at a database of this case's own, captures what
+// runCardsIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit and the
@@ -20,7 +20,7 @@ import (
 // territory and are covered through the store instead.
 func runCardsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -34,7 +34,7 @@ func runCardsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 // seedCard puts one credit card in the database at path and hands it back.
 func seedCard(t *testing.T, path string, c cards.Card) cards.Card {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -47,11 +47,11 @@ func seedCard(t *testing.T, path string, c cards.Card) cards.Card {
 }
 
 // seedCharge puts one outcome on the card, dated today, straight through the
-// schema — importing kakei/internal/transactions here is not needed for a row
+// schema — importing pecunia/internal/transactions here is not needed for a row
 // this simple.
 func seedCharge(t *testing.T, path string, c cards.Card, title string, value int64) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -90,10 +90,10 @@ func TestCardsHelp(t *testing.T) {
 			// cannot be created and it should still print.
 			got, err := runCardsIn(t, filepath.Join(t.TempDir(), "unused.db"), tc.args...)
 			if err != nil {
-				t.Fatalf("kakei cc %v = %v", tc.args, err)
+				t.Fatalf("pecunia cc %v = %v", tc.args, err)
 			}
 			if !strings.Contains(got, tc.want) {
-				t.Fatalf("kakei cc %v printed:\n%s\nwant it to mention %q", tc.args, got, tc.want)
+				t.Fatalf("pecunia cc %v printed:\n%s\nwant it to mention %q", tc.args, got, tc.want)
 			}
 		})
 	}
@@ -102,7 +102,7 @@ func TestCardsHelp(t *testing.T) {
 		got, _ := runCardsIn(t, filepath.Join(t.TempDir(), "unused.db"), "new", "-h")
 		for _, want := range []string{"open invoice", "1-31"} {
 			if !strings.Contains(got, want) {
-				t.Errorf("kakei cc new -h does not mention %q:\n%s", want, got)
+				t.Errorf("pecunia cc new -h does not mention %q:\n%s", want, got)
 			}
 		}
 	})
@@ -114,7 +114,7 @@ func TestCardsList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "no credit cards yet") || !strings.Contains(got, "kakei cc n") {
+		if !strings.Contains(got, "no credit cards yet") || !strings.Contains(got, "pecunia cc n") {
 			t.Fatalf("empty list printed:\n%s", got)
 		}
 	})
@@ -147,7 +147,7 @@ func TestCardsList(t *testing.T) {
 			t.Fatal(err)
 		}
 		if strings.Contains(got, "WLLT2") {
-			t.Fatalf("kakei cc listed an account:\n%s", got)
+			t.Fatalf("pecunia cc listed an account:\n%s", got)
 		}
 	})
 }
@@ -160,10 +160,10 @@ func TestCardsDetails(t *testing.T) {
 		for _, ref := range []string{"NUCRD", "nucrd", "1"} {
 			got, err := runCardsIn(t, path, ref)
 			if err != nil {
-				t.Fatalf("kakei cc %s = %v", ref, err)
+				t.Fatalf("pecunia cc %s = %v", ref, err)
 			}
 			if !strings.Contains(got, c.Name) || !strings.Contains(got, "R$3761.50") {
-				t.Errorf("kakei cc %s printed:\n%s", ref, got)
+				t.Errorf("pecunia cc %s printed:\n%s", ref, got)
 			}
 		}
 	})
@@ -182,7 +182,7 @@ func TestCardsDetails(t *testing.T) {
 		path := newTestDB(t)
 		seed(t, path, wallet())
 		if _, err := runCardsIn(t, path, "WLLT2"); err == nil {
-			t.Fatal("kakei cc found an account by its code")
+			t.Fatal("pecunia cc found an account by its code")
 		}
 	})
 }
@@ -204,7 +204,7 @@ func TestCardsDeleteMissing(t *testing.T) {
 func TestCardsWithoutADatabase(t *testing.T) {
 	// A directory where the database file should be: opening it must fail
 	// loudly rather than panic.
-	path := filepath.Join(t.TempDir(), "kakei.db")
+	path := filepath.Join(t.TempDir(), "pecunia.db")
 	if err := os.Mkdir(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("a card with nothing on it still has an open bill", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCard(t, path, nubank())
 
 		got, err := runCardsIn(t, path, "bill", "NUCRD")
@@ -240,7 +240,7 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("with no card it lists every card's bills", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCard(t, path, nubank())
 		itau := nubank()
 		itau.Code, itau.Name, itau.Balance = "ITAU1", "Itau", 0
@@ -256,18 +256,18 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("with no cards at all it says how to start", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		got, err := runCardsIn(t, path, "bill")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei cc n") {
+		if !strings.Contains(got, "pecunia cc n") {
 			t.Errorf("output does not say how to make a card:\n%s", got)
 		}
 	})
 
 	t.Run("one cycle in detail", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		c := seedCard(t, path, nubank())
 		seedCharge(t, path, c, "Groceries", 12000)
 
@@ -284,7 +284,7 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("a month with no cycle says so", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCard(t, path, nubank())
 		_, err := runCardsIn(t, path, "bill", "NUCRD", "1999-01")
 		if err == nil {
@@ -293,7 +293,7 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("an unreadable month is refused", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCard(t, path, nubank())
 		_, err := runCardsIn(t, path, "bill", "NUCRD", "august")
 		if err == nil {
@@ -302,7 +302,7 @@ func TestBillCommand(t *testing.T) {
 	})
 
 	t.Run("an unknown card is refused", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedCard(t, path, nubank())
 		if _, err := runCardsIn(t, path, "bill", "NOPE1"); err == nil {
 			t.Fatal("bill on a card that does not exist = nil")
@@ -312,7 +312,7 @@ func TestBillCommand(t *testing.T) {
 
 func TestPayWithNothingOwing(t *testing.T) {
 	// Nothing to pay must not open a form with no options in it.
-	path := filepath.Join(t.TempDir(), "kakei.db")
+	path := filepath.Join(t.TempDir(), "pecunia.db")
 	c := nubank()
 	c.Balance = 0
 	seedCard(t, path, c)

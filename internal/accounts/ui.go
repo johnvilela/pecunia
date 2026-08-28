@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 var frozenMark = lipgloss.NewStyle().Foreground(lipgloss.Color("#05A2C2")).Render("❄")
@@ -156,7 +156,7 @@ func Pick(accs []Account, title string) (Account, error) {
 	return core.Pick(accs, title, pickerRow)
 }
 
-// Table is the static list output — no alt screen, so `kakei ac | grep` works.
+// Table is the static list output — no alt screen, so `pecunia ac | grep` works.
 func Table(accs []Account) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
@@ -207,7 +207,7 @@ func Details(a Account) string {
 		"")
 
 	// The ❄ beside the code already says whether the account is frozen, and the
-	// id is only ever typed by someone who read it off `kakei ac`.
+	// id is only ever typed by someone who read it off `pecunia ac`.
 	if a.CreatedAt != "" {
 		lines = append(lines, core.DimStyle.Render(
 			createdIcon+" "+a.CreatedAt+"   "+updatedIcon+" "+a.UpdatedAt))

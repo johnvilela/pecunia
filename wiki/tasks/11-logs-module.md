@@ -4,8 +4,8 @@ tags: [logs, audit, module, sqlite, tdd, cli]
 
 # Logs module
 
-An audit trail: every logical action in kakei — create, edit or delete, by the
-user or by kakei itself — writes one log row. Spec settled through Q&A before
+An audit trail: every logical action in pecunia — create, edit or delete, by the
+user or by pecunia itself — writes one log row. Spec settled through Q&A before
 any code, the way [[tasks/07-recurring-bills-module]] was.
 
 ## The row
@@ -23,7 +23,7 @@ any code, the way [[tasks/07-recurring-bills-module]] was.
 ## The rules (user-confirmed)
 
 - **Everything logs** — including system actions: card bills generated on
-  read, the starter categories seeded by `kakei setup`.
+  read, the starter categories seeded by `pecunia setup`.
 - **But each logical action logs exactly once.** A transfer is one entry, not
   two transactions; an installment purchase is one entry however many rows it
   wrote; a bill payment is one entry. Side-effects inside an action — balances
@@ -32,7 +32,7 @@ any code, the way [[tasks/07-recurring-bills-module]] was.
 
 ## The command
 
-`kakei logs` / `kakei l` — last 10, newest first. Flags: `--entity`, `--id`
+`pecunia logs` / `pecunia l` — last 10, newest first. Flags: `--entity`, `--id`
 (requires `--entity`), `--action`, `--source`, `--from`/`--to` (both
 inclusive), `--limit`.
 

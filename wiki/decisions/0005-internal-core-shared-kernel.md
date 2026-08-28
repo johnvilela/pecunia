@@ -9,7 +9,7 @@ Extracted a new `internal/core` package holding the currency/palette/code/money/
 ## Why
 
 Building the credit-card module needed roughly 90% of `account.go`'s non-domain surface (currencies, palette, code generation/validation, `ParseAmount`/`FormatAmount`) plus about half of `ui.go` (the picker, `Confirm`, dim styling). That much shared surface is a shared kernel, not a one-off import. Rejected alternatives:
-- **`cards` imports `accounts` directly** — zero-line diff today, but hardwires a domain edge that reads wrong (`accounts.Currency` inside credit-card code, `accounts.ErrCancelled` returned by `kakei cc`), and gets worse once a third consumer (transactions) arrives.
+- **`cards` imports `accounts` directly** — zero-line diff today, but hardwires a domain edge that reads wrong (`accounts.Currency` inside credit-card code, `accounts.ErrCancelled` returned by `pecunia cc`), and gets worse once a third consumer (transactions) arrives.
 - **Duplicate the code** — rejected outright: it forks `ParseAmount`, a money-correctness path, into two copies that can drift.
 
 ## What moved to internal/core

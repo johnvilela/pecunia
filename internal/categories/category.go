@@ -3,7 +3,7 @@ package categories
 import (
 	"errors"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // Category is a label a transaction is filed under. It holds no money — what a

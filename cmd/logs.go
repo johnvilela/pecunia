@@ -8,15 +8,15 @@ import (
 	"io"
 	"strings"
 
-	"kakei/internal/logs"
-	"kakei/internal/transactions"
+	"pecunia/internal/logs"
+	"pecunia/internal/transactions"
 )
 
 const logsHelp = `Logs — what happened, newest first.
 
 Usage:
-  kakei logs [flags]
-  kakei l    [flags]
+  pecunia logs [flags]
+  pecunia l    [flags]
 
 Flags:
   --entity NAME     one kind of thing: account, card, category, transaction,
@@ -30,7 +30,7 @@ Flags:
   --limit N         how many rows (default 10)
 
 Every create, edit and delete lands here, whoever caused it — you at the
-terminal, or kakei itself generating a card bill. An edit carries only what
+terminal, or pecunia itself generating a card bill. An edit carries only what
 changed: the fields that moved, what they said before and what they say now.
 
 The trail outlives what it describes. Deleting an account does not delete the
@@ -75,7 +75,7 @@ func runLogs(args []string) error {
 func parseLogFlags(args []string) (logs.Filter, error) {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 	// The flag package's own usage dump would print the flags a second time,
-	// right next to the error report() already prints. kakei l -h is the one
+	// right next to the error report() already prints. pecunia l -h is the one
 	// that documents them.
 	fs.SetOutput(io.Discard)
 	var (
@@ -88,7 +88,7 @@ func parseLogFlags(args []string) (logs.Filter, error) {
 		limit  = fs.Int("limit", 0, "how many rows")
 	)
 	if err := fs.Parse(args); err != nil {
-		return logs.Filter{}, fmt.Errorf("%w — see: kakei l -h", err)
+		return logs.Filter{}, fmt.Errorf("%w — see: pecunia l -h", err)
 	}
 	if fs.NArg() > 0 {
 		return logs.Filter{}, fmt.Errorf("unexpected argument %q — the trail is narrowed with flags", fs.Arg(0))

@@ -6,21 +6,21 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/db"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 func newTestStore(t *testing.T) *accounts.Store {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestFixturesAreValid(t *testing.T) {
 
 func newTestCardStore(t *testing.T) *cards.Store {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestCardFixturesCoverTheRenderBranches(t *testing.T) {
 // store off the same connection.
 func newTestConn(t *testing.T) *sql.DB {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)

@@ -10,19 +10,19 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/goals"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/goals"
+	"pecunia/internal/transactions"
 )
 
 const transactionsHelp = `Record and review transactions.
 
 Usage:
-  kakei transactions [command] [ID]
-  kakei t            [command] [ID]
+  pecunia transactions [command] [ID]
+  pecunia t            [command] [ID]
 
 Commands:
   (none)              list this month
@@ -55,8 +55,8 @@ var transactionSubHelp = map[string]string{
 	"new": `Record a transaction.
 
 Usage:
-  kakei transactions new
-  kakei t n
+  pecunia transactions new
+  pecunia t n
 
 Opens a form: title, description (optional), date, kind, account or credit
 card, amount, category (optional), goal (optional), installments and tags. The
@@ -64,7 +64,7 @@ amount is typed without a sign — income and outcome is what the kind says — 
 is read at the currency of whatever it is filed against.
 
 Only goals counting the same currency as the chosen account or card are
-offered: a goal adds up one currency and there is no rate anywhere in kakei to
+offered: a goal adds up one currency and there is no rate anywhere in pecunia to
 turn satoshis into centavos.
 
 Spending from an account lowers its balance; spending on a credit card raises
@@ -80,8 +80,8 @@ account purchase cannot be split — it has no bills to spread over.
 	"transfer": `Move money between two accounts you own.
 
 Usage:
-  kakei transactions transfer
-  kakei t tr
+  pecunia transactions transfer
+  pecunia t tr
 
 Opens a form: title, description (optional), the account it leaves, the one it
 arrives in, both amounts, the date, an optional goal and tags.
@@ -106,8 +106,8 @@ toward one, and only goals in that account's currency are offered.
 	"edit": `Edit a transaction.
 
 Usage:
-  kakei transactions edit [ID]
-  kakei t e [ID]
+  pecunia transactions edit [ID]
+  pecunia t e [ID]
 
 Opens the create form pre-filled. Without ID, pick from a list first. The
 balance the old transaction moved is put back before the new one is applied,
@@ -123,8 +123,8 @@ is worth, delete it and record it again.
 	"delete": `Delete a transaction for good.
 
 Usage:
-  kakei transactions delete [ID]
-  kakei t d [ID]
+  pecunia transactions delete [ID]
+  pecunia t d [ID]
 
 Asks for confirmation, then gives the account or credit card back what the
 transaction took. Without ID, pick from a list first.
@@ -135,7 +135,7 @@ its money back and the card its debt.
 `,
 }
 
-var errNoTransactions = errors.New("no transactions yet — create one with: kakei t n")
+var errNoTransactions = errors.New("no transactions yet — create one with: pecunia t n")
 
 func runTransactions(args []string) error {
 	if len(args) == 0 {
@@ -229,12 +229,12 @@ type listFilter struct {
 
 // parseListFlags turns the command line into a filter, resolving every
 // {CODE|ID} through its own module so `--category food1` works the way
-// `kakei ct food1` does.
+// `pecunia ct food1` does.
 func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 	fs := flag.NewFlagSet("transactions", flag.ContinueOnError)
 	// The flag package's own usage dump would print the flags a second time, in
 	// its own single-dash spelling, right next to the error report() already
-	// prints. kakei t -h is the one that documents them.
+	// prints. pecunia t -h is the one that documents them.
 	fs.SetOutput(io.Discard)
 	var (
 		all       = fs.Bool("all", false, "every transaction ever")
@@ -251,7 +251,7 @@ func parseListFlags(conn *sql.DB, args []string) (listFilter, error) {
 		goal      = fs.String("goal", "", "goal ID")
 	)
 	if err := fs.Parse(args); err != nil {
-		return listFilter{}, fmt.Errorf("%w — see: kakei t -h", err)
+		return listFilter{}, fmt.Errorf("%w — see: pecunia t -h", err)
 	}
 	if n := fs.NArg(); n > 0 {
 		return listFilter{}, fmt.Errorf("unexpected argument %q — filters are flags, and an id takes none", fs.Arg(0))
@@ -375,16 +375,16 @@ func listTransactions(args []string) error {
 			case len(total) == 0:
 				fmt.Fprintln(out, errNoTransactions)
 			case scope != "":
-				fmt.Fprintf(out, "nothing in %s — widen with: kakei t --all\n", scope)
+				fmt.Fprintf(out, "nothing in %s — widen with: pecunia t --all\n", scope)
 			default:
-				fmt.Fprintln(out, "nothing matched that filter — widen with: kakei t --all")
+				fmt.Fprintln(out, "nothing matched that filter — widen with: pecunia t --all")
 			}
 			return nil
 		}
 
 		fmt.Fprintln(out, transactions.Table(found))
 		if scope != "" {
-			fmt.Fprintf(out, "%s — %d transaction(s). Widen with: kakei t --all, or kakei t --month %s\n",
+			fmt.Fprintf(out, "%s — %d transaction(s). Widen with: pecunia t --all, or pecunia t --month %s\n",
 				scope, len(found), now.AddDate(0, -1, 0).Format("2006-01"))
 		}
 		return nil
@@ -447,7 +447,7 @@ func editTransaction(args []string) error {
 			return editTransfer(conn, s, t.TransferGroup)
 		}
 		if t.Kind == transactions.KindAdjustment {
-			return fmt.Errorf("#%d is a balance adjustment — it is not edited; delete it (kakei t d %d) and the balance reverts", t.ID, t.ID)
+			return fmt.Errorf("#%d is a balance adjustment — it is not edited; delete it (pecunia t d %d) and the balance reverts", t.ID, t.ID)
 		}
 		scope, err := transactions.AskScope(t, "Edit")
 		if err != nil {

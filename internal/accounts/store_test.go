@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/core"
-	"kakei/internal/db"
-	"kakei/internal/logs"
+	"pecunia/internal/core"
+	"pecunia/internal/db"
+	"pecunia/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file in its own temp dir, so no
@@ -21,7 +21,7 @@ import (
 // only the real migration path builds them.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -457,7 +457,7 @@ func TestNameIsRequired(t *testing.T) {
 
 // A transaction must always name exactly one account or card, so the row cannot
 // be pulled out from under it. The raw INSERT is deliberate: importing
-// kakei/internal/transactions here would be an import cycle.
+// pecunia/internal/transactions here would be an import cycle.
 func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
 	t.Run("says what is blocking it", func(t *testing.T) {
 		s := newTestStore(t)

@@ -6,24 +6,24 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/db"
-	"kakei/internal/goals"
-	"kakei/internal/logs"
-	"kakei/internal/recurring"
-	"kakei/internal/summary"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
+	"pecunia/internal/logs"
+	"pecunia/internal/recurring"
+	"pecunia/internal/summary"
+	"pecunia/internal/transactions"
 )
 
-// mcpConn points KAKEI_DB at a database of this case's own and opens it with
+// mcpConn points PECUNIA_DB at a database of this case's own and opens it with
 // the audit actor set to AI, the way runMCP does.
 func mcpConn(t *testing.T) *sql.DB {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)

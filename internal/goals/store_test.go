@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/logs"
+	"pecunia/internal/logs"
 )
 
 func newTestStore(t *testing.T) (*Store, *sql.DB) {

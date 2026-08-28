@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/db"
-	"kakei/internal/goals"
-	"kakei/internal/logs"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
+	"pecunia/internal/logs"
+	"pecunia/internal/transactions"
 )
 
-// runTransactionsIn points KAKEI_DB at a database of this case's own, captures
+// runTransactionsIn points PECUNIA_DB at a database of this case's own, captures
 // what the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit and the
@@ -26,7 +26,7 @@ import (
 // territory and are covered through the store instead.
 func runTransactionsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -48,7 +48,7 @@ type ledger struct {
 
 func newLedger(t *testing.T) *ledger {
 	t.Helper()
-	l := &ledger{path: filepath.Join(t.TempDir(), "kakei.db")}
+	l := &ledger{path: filepath.Join(t.TempDir(), "pecunia.db")}
 	l.with(t, func(conn *sql.DB) {
 		l.account = accounts.Account{Code: "INTER", Name: "Banco Inter", Color: "orange",
 			Currency: "BRL", Balance: 1000000}
@@ -70,7 +70,7 @@ func newLedger(t *testing.T) *ledger {
 
 func (l *ledger) with(t *testing.T, fn func(*sql.DB)) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", l.path)
+	t.Setenv("PECUNIA_DB", l.path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -131,10 +131,10 @@ func TestTransactionsHelp(t *testing.T) {
 			// cannot be created and it should still print.
 			got, err := runTransactionsIn(t, filepath.Join(t.TempDir(), "nope", "unused.db"), tc.args...)
 			if err != nil {
-				t.Fatalf("kakei t %v = %v", tc.args, err)
+				t.Fatalf("pecunia t %v = %v", tc.args, err)
 			}
 			if !strings.Contains(got, tc.want) {
-				t.Fatalf("kakei t %v printed %q; want it to contain %q", tc.args, got, tc.want)
+				t.Fatalf("pecunia t %v printed %q; want it to contain %q", tc.args, got, tc.want)
 			}
 		})
 	}
@@ -175,7 +175,7 @@ func TestTransactionsList(t *testing.T) {
 		}
 		for _, want := range []string{"DATE", "TITLE", "CATEGORY", "SOURCE", "AMOUNT", "Groceries", "Old rent"} {
 			if !strings.Contains(got, want) {
-				t.Fatalf("kakei t --all is missing %q:\n%s", want, got)
+				t.Fatalf("pecunia t --all is missing %q:\n%s", want, got)
 			}
 		}
 	})
@@ -186,7 +186,7 @@ func TestTransactionsList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"no transactions yet", "kakei t n"} {
+		for _, want := range []string{"no transactions yet", "pecunia t n"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("empty list = %q; want it to mention %q", got, want)
 			}
@@ -245,16 +245,16 @@ func TestTransactionsFilters(t *testing.T) {
 			l := build(t)
 			got, err := runTransactionsIn(t, l.path, tc.args...)
 			if err != nil {
-				t.Fatalf("kakei t %v = %v", tc.args, err)
+				t.Fatalf("pecunia t %v = %v", tc.args, err)
 			}
 			for _, want := range tc.want {
 				if !strings.Contains(got, want) {
-					t.Fatalf("kakei t %v is missing %q:\n%s", tc.args, want, got)
+					t.Fatalf("pecunia t %v is missing %q:\n%s", tc.args, want, got)
 				}
 			}
 			for _, avoid := range tc.avoid {
 				if strings.Contains(got, avoid) {
-					t.Fatalf("kakei t %v should have left %q out:\n%s", tc.args, avoid, got)
+					t.Fatalf("pecunia t %v should have left %q out:\n%s", tc.args, avoid, got)
 				}
 			}
 		})
@@ -263,7 +263,7 @@ func TestTransactionsFilters(t *testing.T) {
 	t.Run("an unknown flag is an error, not a silent list", func(t *testing.T) {
 		l := build(t)
 		if _, err := runTransactionsIn(t, l.path, "--nope"); err == nil {
-			t.Fatal("kakei t --nope = nil; want an error")
+			t.Fatal("pecunia t --nope = nil; want an error")
 		}
 	})
 
@@ -271,7 +271,7 @@ func TestTransactionsFilters(t *testing.T) {
 		l := build(t)
 		_, err := runTransactionsIn(t, l.path, "--category", "NOPE1")
 		if err == nil || !strings.Contains(err.Error(), "NOPE1") {
-			t.Fatalf("kakei t --category NOPE1 = %v; want it to name the reference", err)
+			t.Fatalf("pecunia t --category NOPE1 = %v; want it to name the reference", err)
 		}
 	})
 
@@ -279,7 +279,7 @@ func TestTransactionsFilters(t *testing.T) {
 		l := build(t)
 		for _, args := range [][]string{{"--date", "08/03/2026"}, {"--month", "2026-3"}, {"--from", "nope"}} {
 			if _, err := runTransactionsIn(t, l.path, args...); err == nil {
-				t.Fatalf("kakei t %v = nil; want an error", args)
+				t.Fatalf("pecunia t %v = nil; want an error", args)
 			}
 		}
 	})
@@ -306,7 +306,7 @@ func TestTransactionsDetails(t *testing.T) {
 		l := newLedger(t)
 		_, err := runTransactionsIn(t, l.path, "999")
 		if err == nil || !strings.Contains(err.Error(), `no transaction matching "999"`) {
-			t.Fatalf("kakei t 999 = %v; want it to name the reference", err)
+			t.Fatalf("pecunia t 999 = %v; want it to name the reference", err)
 		}
 	})
 
@@ -315,7 +315,7 @@ func TestTransactionsDetails(t *testing.T) {
 		l.add(t, transactions.Transaction{Title: "Groceries", Date: today()})
 		_, err := runTransactionsIn(t, l.path, "Groceries")
 		if err == nil || !strings.Contains(err.Error(), "Groceries") {
-			t.Fatalf("kakei t Groceries = %v; want it to say that is not an id", err)
+			t.Fatalf("pecunia t Groceries = %v; want it to say that is not an id", err)
 		}
 	})
 }
@@ -330,7 +330,7 @@ func TestTransactionsEditAndDeleteMissing(t *testing.T) {
 
 			_, err := runTransactionsIn(t, l.path, sub, "999")
 			if err == nil || !strings.Contains(err.Error(), `no transaction matching "999"`) {
-				t.Fatalf("kakei t %s 999 = %v", sub, err)
+				t.Fatalf("pecunia t %s 999 = %v", sub, err)
 			}
 		})
 	}
@@ -340,7 +340,7 @@ func TestTransactionsWithoutADatabase(t *testing.T) {
 	t.Run("reports the error instead of panicking", func(t *testing.T) {
 		// A directory where the file should be: Open cannot create it.
 		if _, err := runTransactionsIn(t, t.TempDir()); err == nil {
-			t.Fatal("kakei t on an unopenable database = nil; want an error")
+			t.Fatal("pecunia t on an unopenable database = nil; want an error")
 		}
 	})
 }
@@ -400,7 +400,7 @@ func TestTransactionsFilterByGoal(t *testing.T) {
 // group, which is the id of the leg the money left.
 func seedTransfer(t *testing.T, path string) int64 {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -454,7 +454,7 @@ func TestTransactionsTransferHelp(t *testing.T) {
 
 func TestTransactionsTransferList(t *testing.T) {
 	t.Run("--transfers shows only the transfers", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedTransfer(t, path)
 
 		got, err := runTransactionsIn(t, path, "--transfers")
@@ -470,7 +470,7 @@ func TestTransactionsTransferList(t *testing.T) {
 	})
 
 	t.Run("both legs are listed, pointing opposite ways", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedTransfer(t, path)
 
 		got, err := runTransactionsIn(t, path, "--transfers")
@@ -483,7 +483,7 @@ func TestTransactionsTransferList(t *testing.T) {
 	})
 
 	t.Run("the ordinary list shows them too", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedTransfer(t, path)
 
 		got, err := runTransactionsIn(t, path, "--all")
@@ -497,7 +497,7 @@ func TestTransactionsTransferList(t *testing.T) {
 }
 
 func TestTransactionsTransferDetails(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "kakei.db")
+	path := filepath.Join(t.TempDir(), "pecunia.db")
 	group := seedTransfer(t, path)
 
 	got, err := runTransactionsIn(t, path, strconv.FormatInt(group, 10))

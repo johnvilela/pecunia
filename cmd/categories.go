@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 
-	"kakei/internal/budgets"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/logs"
+	"pecunia/internal/budgets"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/logs"
 )
 
 const categoriesHelp = `Manage categories.
 
 Usage:
-  kakei category [command] [CODE|ID]
-  kakei ct       [command] [CODE|ID]
+  pecunia category [command] [CODE|ID]
+  pecunia ct       [command] [CODE|ID]
 
 Commands:
   (none)              list your categories
@@ -33,8 +33,8 @@ var categorySubHelp = map[string]string{
 	"new": `Create a category.
 
 Usage:
-  kakei category new
-  kakei ct n
+  pecunia category new
+  pecunia ct n
 
 Opens a form: name, description (optional), code, color. The code is 5
 characters and comes pre-filled with a free suggestion. Colors are a preset of
@@ -43,23 +43,23 @@ characters and comes pre-filled with a free suggestion. Colors are a preset of
 	"edit": `Edit a category.
 
 Usage:
-  kakei category edit [CODE|ID]
-  kakei ct e [CODE|ID]
+  pecunia category edit [CODE|ID]
+  pecunia ct e [CODE|ID]
 
 Opens the create form pre-filled. Without CODE|ID, pick from a list first.
 `,
 	"delete": `Delete a category for good.
 
 Usage:
-  kakei category delete [CODE|ID]
-  kakei ct d [CODE|ID]
+  pecunia category delete [CODE|ID]
+  pecunia ct d [CODE|ID]
 
 Asks for confirmation. Without CODE|ID, pick from a list first. A category the
 starter set put there is not restored once deleted.
 `,
 }
 
-var errNoCategories = errors.New("no categories yet — run: kakei setup, or create one with: kakei ct n")
+var errNoCategories = errors.New("no categories yet — run: pecunia setup, or create one with: pecunia ct n")
 
 func runCategories(args []string) error {
 	if len(args) == 0 {

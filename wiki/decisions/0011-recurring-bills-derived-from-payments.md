@@ -47,7 +47,7 @@ and a bill unpaid for a year is not news a list can break.
 is `internal/recurring`. They are genuinely different things and a transaction
 can carry both links at once: `pays_bill_id` settles a statement and moves the
 card's balance, `recurring_id` is a label saying which monthly cost the money
-went to. The CLI verb `kakei bill` was free — `kakei cc bill` is the card one —
+went to. The CLI verb `pecunia bill` was free — `pecunia cc bill` is the card one —
 and is what the user says out loud, so only the package had to move.
 
 `internal/recurring` imports `internal/transactions`, unlike `goals` and

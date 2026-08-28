@@ -12,13 +12,13 @@ func TestAgentArgv(t *testing.T) {
 		agent string
 		want  []string
 	}{
-		{"claude-code", []string{"claude", "mcp", "add", "--scope", "user", "kakei", "--", "/bin/kakei", "mcp"}},
-		{"codex", []string{"codex", "mcp", "add", "kakei", "--", "/bin/kakei", "mcp"}},
-		{"gemini", []string{"gemini", "mcp", "add", "--scope", "user", "kakei", "/bin/kakei", "mcp"}},
+		{"claude-code", []string{"claude", "mcp", "add", "--scope", "user", "pecunia", "--", "/bin/pecunia", "mcp"}},
+		{"codex", []string{"codex", "mcp", "add", "pecunia", "--", "/bin/pecunia", "mcp"}},
+		{"gemini", []string{"gemini", "mcp", "add", "--scope", "user", "pecunia", "/bin/pecunia", "mcp"}},
 	}
 	for _, c := range cases {
 		t.Run(c.agent, func(t *testing.T) {
-			got, err := agentArgv(c.agent, "/bin/kakei")
+			got, err := agentArgv(c.agent, "/bin/pecunia")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -29,7 +29,7 @@ func TestAgentArgv(t *testing.T) {
 	}
 
 	t.Run("unknown agent names the real ones", func(t *testing.T) {
-		_, err := agentArgv("cursor", "/bin/kakei")
+		_, err := agentArgv("cursor", "/bin/pecunia")
 		if err == nil || !strings.Contains(err.Error(), "opencode") {
 			t.Fatalf("err %v — want the agent list", err)
 		}
@@ -44,28 +44,28 @@ func TestOpencodeMerge(t *testing.T) {
 			t.Fatalf("merge produced bad JSON: %v\n%s", err, out)
 		}
 		mcp, _ := cfg["mcp"].(map[string]any)
-		kakei, _ := mcp["kakei"].(map[string]any)
-		if kakei == nil {
-			t.Fatalf("no mcp.kakei in %s", out)
+		pecunia, _ := mcp["pecunia"].(map[string]any)
+		if pecunia == nil {
+			t.Fatalf("no mcp.pecunia in %s", out)
 		}
-		return kakei
+		return pecunia
 	}
 
 	t.Run("fresh file", func(t *testing.T) {
-		out, err := opencodeMerge(nil, "/bin/kakei")
+		out, err := opencodeMerge(nil, "/bin/pecunia")
 		if err != nil {
 			t.Fatal(err)
 		}
 		k := entry(t, out)
 		cmd, _ := k["command"].([]any)
-		if k["type"] != "local" || len(cmd) != 2 || cmd[0] != "/bin/kakei" || cmd[1] != "mcp" {
+		if k["type"] != "local" || len(cmd) != 2 || cmd[0] != "/bin/pecunia" || cmd[1] != "mcp" {
 			t.Fatalf("entry %+v", k)
 		}
 	})
 
 	t.Run("keeps unrelated keys and mcp siblings", func(t *testing.T) {
 		existing := []byte(`{"theme": "dark", "mcp": {"other": {"type": "remote", "url": "https://x"}}}`)
-		out, err := opencodeMerge(existing, "/bin/kakei")
+		out, err := opencodeMerge(existing, "/bin/pecunia")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +83,7 @@ func TestOpencodeMerge(t *testing.T) {
 	})
 
 	t.Run("refuses to clobber JSONC", func(t *testing.T) {
-		_, err := opencodeMerge([]byte("{\n// my settings\n}"), "/bin/kakei")
+		_, err := opencodeMerge([]byte("{\n// my settings\n}"), "/bin/pecunia")
 		if err == nil {
 			t.Fatal("comments were about to be clobbered")
 		}

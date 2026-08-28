@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // Everything here asserts on substrings: the ANSI escapes lipgloss wraps text in

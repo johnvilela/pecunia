@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/transactions"
+	"pecunia/internal/transactions"
 )
 
 // bills is the board every case here renders: one of each state, deliberately
