@@ -65,3 +65,5 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [c2b6cbbe](sessions/c2b6cbbe-5735-4790-abac-4c4b5a60aca7.md) — full-CLI evaluation, budgets module, data-integrity fixes, transfers
 - [55542fff](sessions/55542fff-857b-4326-bc93-9554a745c41b.md) — logs module, GitHub metadata, wiki index, balance-adjustment fix, bill-reads-stop-writing fix — closes the last of decision 0013's gaps
 - [c1d09b19](sessions/c1d09b19-d5ad-4ed0-b929-4d689f8bd290.md) — MCP server exposing all nine modules to an AI agent, plus an agent-config installer wired into `kakei setup`; both committed together
+- [8a34db89](sessions/8a34db89-ce6a-4525-a01c-052289ef8b89.md) — master locked to PR-only with CI checks and release-on-merge (PR #1, merged), then the `kakei upgrade` self-update command (PR #2, open at session end)
+
