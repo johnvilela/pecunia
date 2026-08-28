@@ -29,4 +29,5 @@ jobs:
             tar czf "kakei_${version}_${target%/*}_${target#*/}.tar.gz" kakei
             rm kakei
           done
-          gh release create "v$version" --generate-notes kakei_*.tar.gz
+          sha256sum kakei_*.tar.gz > checksums.txt
+          gh release create "v$version" --generate-notes kakei_*.tar.gz checksums.txt
