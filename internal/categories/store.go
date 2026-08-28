@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"kakei/internal/core"
-	"kakei/internal/logs"
+	"pecunia/internal/core"
+	"pecunia/internal/logs"
 )
 
 type Store struct{ db *sql.DB }

@@ -50,7 +50,7 @@ lifetime keep the gap negligible. `bills.Ensure` logs only when
 `RowsAffected() == 1`, since its insert is `ON CONFLICT DO NOTHING` and every
 read path runs it.
 
-`kakei logs` / `kakei l` lists newest first, default 10; filters `--entity`,
+`pecunia logs` / `pecunia l` lists newest first, default 10; filters `--entity`,
 `--id` (requires `--entity` — an id is only an id of something), `--action`,
 `--source`, `--from`/`--to`, `--limit`. `--to` compares
 `created_at < date(?, '+1 day')` so the named day is included despite the
@@ -59,7 +59,7 @@ stored time of day.
 ## Verification
 
 TDD throughout, one red→green cycle per module hook, full suite green,
-`gofmt`/`go vet` clean per commit. Live on a reseeded dev build: `kakei s`
+`gofmt`/`go vet` clean per commit. Live on a reseeded dev build: `pecunia s`
 generated card bills logged as `system`; the seeder's freeze, archive and
 target edits appeared with only the moved fields; every filter and both
 validation errors checked at the terminal.

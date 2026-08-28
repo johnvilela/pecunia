@@ -1,5 +1,5 @@
 -- The transactions table, rebuilt to admit a third kind: 'adjustment' — the
--- correction `kakei ac edit` files when a recorded balance is put right. No
+-- correction `pecunia ac edit` files when a recorded balance is put right. No
 -- form ever offers it, and it counts toward nothing: not income, not spending,
 -- just the record catching up with reality.
 --

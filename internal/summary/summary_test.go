@@ -6,14 +6,14 @@ import (
 	"slices"
 	"testing"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/db"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 // world is a database with something of everything a summary reads. Call it
@@ -28,7 +28,7 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +448,7 @@ func TestCollectBalancesAndGoals(t *testing.T) {
 		s := w.collect(t, aug13(), "2026-08-13")
 		for _, a := range s.Accounts {
 			if a.Code == "OLDAC" {
-				t.Errorf("the frozen account is on the balances; `kakei ac` hides it")
+				t.Errorf("the frozen account is on the balances; `pecunia ac` hides it")
 			}
 		}
 		if len(s.Accounts) != 2 {
@@ -476,7 +476,7 @@ func TestCollectBalancesAndGoals(t *testing.T) {
 	})
 
 	t.Run("comes back empty on a database with nothing in it", func(t *testing.T) {
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		conn, err := db.Open()
 		if err != nil {
 			t.Fatal(err)

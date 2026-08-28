@@ -6,7 +6,7 @@ tags: [transactions, accounts, cards, money, schema, sqlite, migrations, decisio
 
 Closes gap #1 of [[decisions/0013-data-integrity-fixes-and-known-gaps]]: the
 account balance was the one number a user could silently move out from under
-the ledger. Now `kakei ac edit` never writes the balance — a changed balance is
+the ledger. Now `pecunia ac edit` never writes the balance — a changed balance is
 **filed as an adjustment transaction**, and after creation only the ledger
 moves a balance. Cards go further: `cc edit` lost its Balance field outright; a
 card balance is ledger-only after creation, no adjustment mechanism at all.
@@ -28,7 +28,7 @@ ledger, absent from In/Out/MTD.
 
 **Delete yes, edit no.** Deleting reverts the balance through the normal path.
 Editing is refused in the store (either direction — nothing becomes an
-adjustment either) *and* in the cmd layer with a message naming `kakei t d ID`;
+adjustment either) *and* in the cmd layer with a message naming `pecunia t d ID`;
 without the store guard, huh's two-option select would silently rewrite a
 stored adjustment to outcome on submit.
 
@@ -58,8 +58,8 @@ rebuild preserves rows, ids, tags and referential integrity.
 TDD throughout, full suite green, `gofmt`/`go vet` clean per commit. The
 populated dev database was migrated **in place** (no reseed): 47 transactions
 and 49 tags before and after, `foreign_key_check` empty. Live after a reseed:
-the seeded adjustment renders `-R$15.00` red with no double sign, `kakei s`
-totals exclude it, `kakei t e` refuses it by name, and the trail carries it.
+the seeded adjustment renders `-R$15.00` red with no double sign, `pecunia s`
+totals exclude it, `pecunia t e` refuses it by name, and the trail carries it.
 
 Commits: `feat(db)`, `feat(transactions)`, `feat(accounts)`, `feat(cards)` (+
 `test(cards)` retargeting two balance-edit cases), `feat(summary)`,

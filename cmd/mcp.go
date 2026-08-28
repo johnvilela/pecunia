@@ -1,4 +1,4 @@
-// kakei mcp serves the modules to an AI agent over the Model Context
+// pecunia mcp serves the modules to an AI agent over the Model Context
 // Protocol, one tool per module, on stdio. Reads answer from the same stores
 // the CLI uses; writes go through them too, so every rule — frozen accounts,
 // card limits, currency freezes — holds, and every write lands in the audit
@@ -16,30 +16,30 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/goals"
-	"kakei/internal/logs"
-	"kakei/internal/recurring"
-	"kakei/internal/summary"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/goals"
+	"pecunia/internal/logs"
+	"pecunia/internal/recurring"
+	"pecunia/internal/summary"
+	"pecunia/internal/transactions"
 )
 
-const mcpHelp = `Serve kakei to an AI agent over the Model Context Protocol.
+const mcpHelp = `Serve pecunia to an AI agent over the Model Context Protocol.
 
 Usage:
-  kakei mcp
-  kakei mcp install [AGENT]
+  pecunia mcp
+  pecunia mcp install [AGENT]
 
 Speaks MCP on stdin/stdout — point an MCP client (Claude Code, Claude
-Desktop, …) at "kakei mcp" and it gets one tool per module: accounts, credit
+Desktop, …) at "pecunia mcp" and it gets one tool per module: accounts, credit
 cards, categories, transactions, goals, recurring bills, budgets, summary and
 logs. Reads and writes go through the same stores the CLI uses, and every
-write is logged with source "ai" so "kakei logs --source ai" shows exactly
+write is logged with source "ai" so "pecunia logs --source ai" shows exactly
 what an agent did.
 
 "install" registers this binary with an agent so nothing has to be
@@ -66,32 +66,32 @@ func runMCP(args []string) error {
 const moneyNote = "Amounts are integers in minor units (cents; satoshis for BTC)."
 
 func mcpServer(conn *sql.DB) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "kakei", Title: "kakei — personal finance", Version: version}, nil)
-	tool(s, conn, "kakei_accounts",
+	s := mcp.NewServer(&mcp.Implementation{Name: "pecunia", Title: "pecunia — personal finance", Version: version}, nil)
+	tool(s, conn, "pecunia_accounts",
 		"Manage money accounts: list, get, create, update, delete, toggle_freeze. Changing the balance on update files a balance-adjustment transaction on the ledger. "+moneyNote,
 		accountsDo)
-	tool(s, conn, "kakei_credit_cards",
+	tool(s, conn, "pecunia_credit_cards",
 		"Manage credit cards and their bills: list, get, create, update, delete, plus bills (the card's statements), bill_charges (one statement's lines) and pay_bill (settle a statement from an account). "+moneyNote,
 		cardsDo)
-	tool(s, conn, "kakei_categories",
+	tool(s, conn, "pecunia_categories",
 		"Manage the categories transactions are filed under: list, get, create, update, delete.",
 		categoriesDo)
-	tool(s, conn, "kakei_transactions",
+	tool(s, conn, "pecunia_transactions",
 		"The ledger. list (with filters), get, create, update, delete, transfer. A transaction is income or outcome on exactly one account or credit card; a card purchase may be split into installments; paying a recurring bill is a transaction carrying recurring and cycle. "+moneyNote,
 		transactionsDo)
-	tool(s, conn, "kakei_goals",
+	tool(s, conn, "pecunia_goals",
 		"Manage savings/payoff goals: list, get, create, update, delete, target_log. Progress is summed from the transactions linked to the goal. "+moneyNote,
 		goalsDo)
-	tool(s, conn, "kakei_recurring_bills",
+	tool(s, conn, "pecunia_recurring_bills",
 		"Manage recurring bills (rent, energy, subscriptions): list, get, create, update, set_active, delete, payments. To pay one, create a transaction with recurring and cycle set. "+moneyNote,
 		recurringDo)
-	tool(s, conn, "kakei_budgets",
+	tool(s, conn, "pecunia_budgets",
 		"Manage monthly caps per category: list, get, create, update, set_active, delete, history. "+moneyNote,
 		budgetsDo)
-	tool(s, conn, "kakei_summary",
+	tool(s, conn, "pecunia_summary",
 		"Where the user stands: totals in and out, what is due or coming up, account and card balances, goals and budgets — for one day or a whole month. "+moneyNote,
 		summaryDo)
-	tool(s, conn, "kakei_logs",
+	tool(s, conn, "pecunia_logs",
 		"The audit trail, newest first: who (user, system or ai) did what to which row, with field-level diffs on edits.",
 		logsDo)
 	return s
@@ -221,7 +221,7 @@ func accountsDo(conn *sql.DB, in accountsIn) (any, error) {
 		}
 		set(&a.Balance, in.Balance)
 		// A changed balance is filed as an adjustment before the rest of the
-		// edit, exactly as `kakei ac edit` files it, and for the same reason:
+		// edit, exactly as `pecunia ac edit` files it, and for the same reason:
 		// a frozen account's refusal aborts with nothing written.
 		if delta := a.Balance - old; delta != 0 {
 			adj := transactions.Transaction{

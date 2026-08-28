@@ -1,23 +1,23 @@
-# Kakei - Personal Finance Manager CLI
+# Pecunia - Personal Finance Manager CLI
 
-Kakei (家計) is a CLI to manage your personal finances holding everything on your PC and using your favorite LLM to help you understand and plan better. Inspired by hledger, this is crafted to match my personal needs as a guy who NEEDS to control the finances but struggles to use the mainstream apps. The main problem is that as apps that focus on controlling your expenses, they focus too much on selling me something that most of the time was not worth it. This aims to be simple, direct and easy to use. First starting with a CLI, but with plans to create a PWA, mobile app and even a self-hosted ecosystem. Take control of what is yours.
+Pecunia (Latin for money, wealth) is a CLI to manage your personal finances holding everything on your PC and using your favorite LLM to help you understand and plan better. Inspired by hledger, this is crafted to match my personal needs as a guy who NEEDS to control the finances but struggles to use the mainstream apps. The main problem is that as apps that focus on controlling your expenses, they focus too much on selling me something that most of the time was not worth it. This aims to be simple, direct and easy to use. First starting with a CLI, but with plans to create a PWA, mobile app and even a self-hosted ecosystem. Take control of what is yours.
 
 ## Install
 
 ```sh
-curl -sS https://raw.githubusercontent.com/johnvilela/kakei/master/scripts/install.sh | sh
+curl -sS https://raw.githubusercontent.com/johnvilela/pecunia/master/scripts/install.sh | sh
 ```
 
-The script downloads the latest release binary for your platform (Linux/macOS, amd64/arm64, checksum-verified, no Go needed) to `~/.local/bin`, then runs `kakei setup` — which creates the SQLite database, seeds starter categories and offers to hook kakei up to an AI agent. Later, `kakei upgrade` updates it in place.
+The script downloads the latest release binary for your platform (Linux/macOS, amd64/arm64, checksum-verified, no Go needed) to `~/.local/bin`, then runs `pecunia setup` — which creates the SQLite database, seeds starter categories and offers to hook pecunia up to an AI agent. Later, `pecunia upgrade` updates it in place.
 
 Or manually:
 
 ```sh
-# grab a tarball from https://github.com/johnvilela/kakei/releases
+# grab a tarball from https://github.com/johnvilela/pecunia/releases
 
 # or from a local checkout (requires Go):
 scripts/install.sh      # builds and installs to ~/.local/bin + runs setup
-scripts/build.sh        # just builds ./kakei
+scripts/build.sh        # just builds ./pecunia
 ```
 
 Set `BIN_DIR` to install somewhere other than `~/.local/bin`.
@@ -26,27 +26,27 @@ Set `BIN_DIR` to install somewhere other than `~/.local/bin`.
 
 ```sh
 # 1. Create the database and seed starter categories (once)
-kakei setup
+pecunia setup
 
 # 2. Create an account and a credit card (interactive forms)
-kakei accounts new
-kakei credit-card new
+pecunia accounts new
+pecunia credit-card new
 
 # 3. Record what happens
-kakei transactions new     # a purchase, a salary, a bill paid
-kakei t transfer           # move money between your accounts
-kakei bill new             # a recurring bill (rent, subscription)
-kakei budget new           # a monthly cap for a category
+pecunia transactions new     # a purchase, a salary, a bill paid
+pecunia t transfer           # move money between your accounts
+pecunia bill new             # a recurring bill (rent, subscription)
+pecunia budget new           # a monthly cap for a category
 
 # 4. See where you stand
-kakei summary              # today, on one screen
-kakei s --month            # the whole month
-kakei t --month 2026-08    # the ledger for a month
-kakei t --category food    # what a category cost
-kakei goals                # how the goals are doing
+pecunia summary              # today, on one screen
+pecunia s --month            # the whole month
+pecunia t --month 2026-08    # the ledger for a month
+pecunia t --category food    # what a category cost
+pecunia goals                # how the goals are doing
 
 # 5. Stay current
-kakei upgrade              # update to the latest release
+pecunia upgrade              # update to the latest release
 ```
 
 Every command opens an interactive picker or form when you leave arguments out, and `-h` on any command prints its own help.
@@ -55,7 +55,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `setup [--force]` | — | Create the SQLite database and seed starter categories, then offer to hook kakei up to an AI agent. `--force` backs up the existing database and creates a fresh one |
+| `setup [--force]` | — | Create the SQLite database and seed starter categories, then offer to hook pecunia up to an AI agent. `--force` backs up the existing database and creates a fresh one |
 | `summary [--date YYYY-MM-DD] [--month]` | `s` | Where you stand on one screen: in and out, what needs paying, account and card balances, goal progress. The flags stack: `--month --date 2026-07-04` is that day's whole month |
 | `accounts [new\|edit\|delete\|freeze] [CODE\|ID]` | `ac` | Manage accounts. Bare `CODE\|ID` shows one in detail; `--all`/`-a` includes frozen accounts |
 | `credit-card [new\|edit\|delete\|bill\|pay] [CODE\|ID]` | `cc` | Manage credit cards. `bill [ref] [YYYY-MM]` lists bills or shows one, `pay` pays one |
@@ -73,30 +73,30 @@ Every command opens an interactive picker or form when you leave arguments out, 
 
 ## MCP server
 
-`kakei mcp install` registers `kakei mcp` with your agent (claude-code, codex, gemini or opencode — leaving the agent out opens a picker), so sessions get one tool per module:
+`pecunia mcp install` registers `pecunia mcp` with your agent (claude-code, codex, gemini or opencode — leaving the agent out opens a picker), so sessions get one tool per module:
 
 | Tool | What it does |
 |------|--------------|
-| `kakei_summary` | Where you stand — the same one-screen figures as `kakei summary` |
-| `kakei_accounts` | List, create, edit, delete and freeze accounts |
-| `kakei_credit_cards` | Manage credit cards, their bills and payments |
-| `kakei_categories` | Manage categories |
-| `kakei_transactions` | Record and review transactions and transfers |
-| `kakei_goals` | Track goals |
-| `kakei_recurring_bills` | Manage recurring bills |
-| `kakei_budgets` | Manage monthly caps per category |
-| `kakei_logs` | Read the audit trail |
+| `pecunia_summary` | Where you stand — the same one-screen figures as `pecunia summary` |
+| `pecunia_accounts` | List, create, edit, delete and freeze accounts |
+| `pecunia_credit_cards` | Manage credit cards, their bills and payments |
+| `pecunia_categories` | Manage categories |
+| `pecunia_transactions` | Record and review transactions and transfers |
+| `pecunia_goals` | Track goals |
+| `pecunia_recurring_bills` | Manage recurring bills |
+| `pecunia_budgets` | Manage monthly caps per category |
+| `pecunia_logs` | Read the audit trail |
 
-Reads and writes go through the same stores the CLI uses, and every agent write is logged with source `ai` — `kakei logs --source ai` shows exactly what an agent did. Amounts everywhere are integers in minor units (cents; satoshis for BTC).
+Reads and writes go through the same stores the CLI uses, and every agent write is logged with source `ai` — `pecunia logs --source ai` shows exactly what an agent did. Amounts everywhere are integers in minor units (cents; satoshis for BTC).
 
 ## Data
 
 Everything lives in a single SQLite file:
 
-1. `$KAKEI_DB`, if set
-2. `~/.config/kakei/kakei.db` on Linux, `~/Library/Application Support/kakei/kakei.db` on macOS
+1. `$PECUNIA_DB`, if set
+2. `~/.config/pecunia/pecunia.db` on Linux, `~/Library/Application Support/pecunia/pecunia.db` on macOS
 
-The file is created `0600` and migrations apply automatically on every run. Amounts are stored as integers in minor units, and currencies are never added together — there is no exchange rate anywhere in kakei.
+The file is created `0600` and migrations apply automatically on every run. Amounts are stored as integers in minor units, and currencies are never added together — there is no exchange rate anywhere in pecunia.
 
 ## Technology used
 
@@ -107,7 +107,7 @@ The file is created `0600` and migrations apply automatically on every run. Amou
 ## Development
 
 ```sh
-scripts/dev.sh             # builds ./dev wired to an isolated kakei.dev.db + seeds it
+scripts/dev.sh             # builds ./dev wired to an isolated pecunia.dev.db + seeds it
 scripts/dev.sh --reseed    # recreate the dev database from scratch
 scripts/build.sh           # release-style build (GOOS/GOARCH to cross-compile)
 go test ./...

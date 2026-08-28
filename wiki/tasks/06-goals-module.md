@@ -8,11 +8,11 @@ tags: [goals, module, tui, sqlite, tdd]
 
 ## Commands
 
-list: "kakei goals" or "kakei g"
-create: "kakei goals new" or "kakei g n"
-edit: "kakei goals edit {ID?}" or "kakei g e {ID?}"
-delete: "kakei goals delete {ID?}" or "kakei g d {ID?}"
-details: "kakei goals {ID?}" or "kakei g {ID?}"
+list: "pecunia goals" or "pecunia g"
+create: "pecunia goals new" or "pecunia g n"
+edit: "pecunia goals edit {ID?}" or "pecunia g e {ID?}"
+delete: "pecunia goals delete {ID?}" or "pecunia g d {ID?}"
+details: "pecunia goals {ID?}" or "pecunia g {ID?}"
 
 ## Suggested structure
 
@@ -82,7 +82,7 @@ Full session: [[sessions/4b4dcd74-5218-4aa9-b73f-c1f8ae4e3279]].
 Two follow-up requests after the module first landed, both driven by the user looking at real output and both TDD'd like the rest:
 
 - **A green `✓` after the name once a goal is reached.** Rendered through a `name(g)` helper rather than inlined in `Table`, so the picker and the transaction form's goal select carry it too. A paying goal that reaches zero gets the same mark, since `Reached()` covers both kinds.
-- **`kakei g` now lists one card per goal, with its bar — the compact table moved behind `kakei g --resume`.** The bar is the point and does not fit a table row. Handled with a plain string comparison in `runGoals`, not a `flag.FlagSet`: one boolean does not need the ten-flag machinery `kakei t` has. The `✓` mark was extended to the detail card at the same time, since the card is now the default view.
+- **`pecunia g` now lists one card per goal, with its bar — the compact table moved behind `pecunia g --resume`.** The bar is the point and does not fit a table row. Handled with a plain string comparison in `runGoals`, not a `flag.FlagSet`: one boolean does not need the ten-flag machinery `pecunia t` has. The `✓` mark was extended to the detail card at the same time, since the card is now the default view.
 
 `go build`/`go test ./...`/`gofmt`/`go vet` clean throughout. Commits: `feat(goals): mark a reached goal in the list` → `feat(goals): list goals as cards, table behind --resume` → `docs(wiki): record the goals module session` (the last one updated the session's own wiki page, which had stopped documenting itself four commits early).
 
@@ -99,15 +99,15 @@ the goal has to follow without losing the fact that it ever said R$5000.00.
 the user's:
 
 - **Target changes only.** Not freeform notes, not an audit trail of every edit.
-- **Entered through `kakei g e`.** The form asks "Why?" on any edit; the store
+- **Entered through `pecunia g e`.** The form asks "Why?" on any edit; the store
   keeps the note only when the target actually moved, so there is no conditional
   field for huh to redraw underfoot.
 - **`goals.target` stays the live value**, with the log beside it rather than
   derived from it. `Store.Update(g, note)` writes the row and its log entry in
   one SQL transaction, so a goal can never sit at a target its history does not
   account for.
-- **Shown on `kakei g ID` only.** `Details(g, log)` takes the entries; the
-  `kakei g` list passes nil, because a screen of goals each dragging its own log
+- **Shown on `pecunia g ID` only.** `Details(g, log)` takes the entries; the
+  `pecunia g` list passes nil, because a screen of goals each dragging its own log
   behind it is not a list.
 
 Each entry stores `previous` as well as `target`, so a line explains itself

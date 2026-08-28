@@ -15,11 +15,11 @@ to card X and tell it is divided by 5, from the first transaction date it will r
 ## Commands
 
 ```
-kakei credit-card bill                  every card's bills, newest first
-kakei cc b CODE|ID                      that card's bills
-kakei cc b CODE|ID 2026-07              one cycle in detail, with its charges
-kakei cc pay [CODE|ID]                  pay a bill, in full or in part
-kakei t n                               the form now asks for installments
+pecunia credit-card bill                  every card's bills, newest first
+pecunia cc b CODE|ID                      that card's bills
+pecunia cc b CODE|ID 2026-07              one cycle in detail, with its charges
+pecunia cc pay [CODE|ID]                  pay a bill, in full or in part
+pecunia t n                               the form now asks for installments
 ```
 
 ## Status: Implemented
@@ -56,11 +56,11 @@ Files: `internal/db/migrations/006_card_bills.sql`, `internal/bills/{bill,store,
 `internal/transactions/{transaction,store,ui}.go`, `internal/cards/card.go`, `cmd/cards.go`,
 `cmd/transactions.go`, `cmd/main.go`, `scripts/seed/main.go`.
 
-## Update (session kakei-f1): month name on the bill table
+## Update (session pecunia-f1): month name on the bill table
 
 Full session: [[sessions/b04280f1-f379-437b-bf05-df83f355e2f4]].
 
-- `kakei cc bill`'s table gained a `MONTH` column between `CARD` and `CLOSES`, derived from
+- `pecunia cc bill`'s table gained a `MONTH` column between `CARD` and `CLOSES`, derived from
   `ClosesOn`'s month name — a cycle closing 2026-09-10 reads `September`. Changed
   `internal/bills/bill.go` and `internal/bills/ui.go`, pinned by a new case in
   `internal/bills/ui_test.go`.

@@ -1,12 +1,12 @@
 // Package accounts holds the account domain: the model, its storage and its UI.
 // Everything generic it needs — currencies, colors, codes, amounts — comes from
-// kakei/internal/core.
+// pecunia/internal/core.
 package accounts
 
 import (
 	"errors"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 type Account struct {

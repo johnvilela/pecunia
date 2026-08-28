@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"slices"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // The two things a goal can be. A saving goal climbs when money arrives; a
@@ -104,7 +104,7 @@ func (g Goal) Validate() error {
 	// falls back rather than failing — a hand-edited BTC goal would quietly
 	// start reading its satoshis as cents.
 	if !slices.ContainsFunc(core.Currencies, func(c core.Currency) bool { return c.Code == g.Currency }) {
-		return fmt.Errorf("%q is not a currency kakei knows", g.Currency)
+		return fmt.Errorf("%q is not a currency pecunia knows", g.Currency)
 	}
 	return nil
 }

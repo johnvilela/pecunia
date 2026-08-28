@@ -10,11 +10,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/accounts"
-	"kakei/internal/cards"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/goals"
+	"pecunia/internal/accounts"
+	"pecunia/internal/cards"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/goals"
 )
 
 // Amount is the signed money, green when it arrives and red when it leaves.
@@ -35,7 +35,7 @@ func Amount(t Transaction) string {
 }
 
 // tag is how one reference — a category, an account, a card — reads inline: its
-// code in its own colour, bracketed like everywhere else in kakei.
+// code in its own colour, bracketed like everywhere else in pecunia.
 func tag(r Ref) string {
 	if r.ID == 0 {
 		return ""
@@ -78,7 +78,7 @@ func sourceKind(t Transaction) string {
 	return "account"
 }
 
-// Table is the static list output — no alt screen, so `kakei t | grep` works.
+// Table is the static list output — no alt screen, so `pecunia t | grep` works.
 // arrow is which way the money went, from this leg's point of view: out of the
 // account this row is on, or into it.
 func arrow(t Transaction) string {
@@ -102,7 +102,7 @@ func counterAmount(t Transaction) string {
 }
 
 // fee is what the transfer cost on the way, when it cost anything. Only in one
-// currency: across two there is no rate in kakei to subtract with, so the
+// currency: across two there is no rate in pecunia to subtract with, so the
 // difference is the rate rather than a fee and saying otherwise would be a
 // figure nobody could check.
 func fee(t Transaction) string {
@@ -354,7 +354,7 @@ func (d FormData) categoryOptions() []huh.Option[int64] {
 // Form drives create and edit.
 func Form(d FormData, t *Transaction, title string) error {
 	if len(d.sourceOptions()) == 0 {
-		return errors.New("nothing to file this against — create an account with: kakei ac n")
+		return errors.New("nothing to file this against — create an account with: pecunia ac n")
 	}
 
 	source := sourceValue("account", t.Account.ID)
@@ -590,7 +590,7 @@ func TransferForm(d FormData, t *Transfer, title string) error {
 		live = append(live, huh.NewOption(a.Code+"  "+a.Name+"  ("+a.Currency+")", a.ID))
 	}
 	if len(live) < 2 {
-		return errors.New("a transfer needs two accounts — make another with: kakei ac n")
+		return errors.New("a transfer needs two accounts — make another with: pecunia ac n")
 	}
 	if t.From.ID == 0 {
 		t.From.ID = live[0].Value

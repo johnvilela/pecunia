@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/accounts"
+	"pecunia/internal/accounts"
 )
 
-// runSummaryIn points KAKEI_DB at a database of this case's own, captures what
+// runSummaryIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both. Nothing here opens a form or a picker,
 // so the whole command is drivable from a test.
 func runSummaryIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -108,7 +108,7 @@ func TestSummaryScope(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei ac n") {
+		if !strings.Contains(got, "pecunia ac n") {
 			t.Errorf("a fresh database is not told where to start:\n%s", got)
 		}
 	})

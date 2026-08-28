@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"time"
 
-	"kakei/internal/budgets"
-	"kakei/internal/categories"
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/budgets"
+	"pecunia/internal/categories"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 const budgetsHelp = `Budgets — what a category is allowed to cost each month.
 
 Usage:
-  kakei budget [CODE] [command]
-  kakei bg     [CODE] [command]
+  pecunia budget [CODE] [command]
+  pecunia bg     [CODE] [command]
 
 Commands:
   (none)              every budget and where this month stands
@@ -31,8 +31,8 @@ Flags:
   --month YYYY-MM     the month to read (default this one)
   --all               the archived budgets too
 
-The code may come on either side of the command: "kakei bg FOOD1 edit" and
-"kakei bg edit FOOD1" are the same thing. Leaving CODE out opens a picker.
+The code may come on either side of the command: "pecunia bg FOOD1 edit" and
+"pecunia bg edit FOOD1" are the same thing. Leaving CODE out opens a picker.
 Add -h to any command for its own help.
 
 A budget holds no money and nothing is linked to it. What it is at is the sum
@@ -50,8 +50,8 @@ var budgetSubHelp = map[string]string{
 	"new": `Create a budget.
 
 Usage:
-  kakei budget new
-  kakei bg n
+  pecunia budget new
+  pecunia bg n
 
 Opens a form: name, description (optional), code, category, colour, currency
 and the monthly cap. The cap is read at the currency you pick, so a Bitcoin
@@ -67,12 +67,12 @@ counted because of the category it already names.
 	"edit": `Edit a budget.
 
 Usage:
-  kakei budget FOOD1 edit
-  kakei bg e FOOD1
+  pecunia budget FOOD1 edit
+  pecunia bg e FOOD1
 
 Opens the create form pre-filled. Without CODE, pick from a list first.
 
-Changing the cap is logged: the form asks why, and "kakei bg CODE" shows every
+Changing the cap is logged: the form asks why, and "pecunia bg CODE" shows every
 move it has made with the day it happened. A cap is a promise about the future
 and the future moves — rice goes up and the food budget follows — and what it
 used to say is worth keeping. The reason is optional, and is only kept when the
@@ -86,8 +86,8 @@ having moved.
 	"delete": `Delete a budget for good.
 
 Usage:
-  kakei budget FOOD1 delete
-  kakei bg d FOOD1
+  pecunia budget FOOD1 delete
+  pecunia bg d FOOD1
 
 Asks for confirmation. Without CODE, pick from a list first. Nothing is blocked
 and nothing else goes: no transaction was ever linked to the budget, and the
@@ -98,8 +98,8 @@ To stop tracking a budget without losing what it has been, archive it instead.
 	"archive": `Archive a budget, or bring one back.
 
 Usage:
-  kakei budget FOOD1 archive
-  kakei budget FOOD1 unarchive
+  pecunia budget FOOD1 archive
+  pecunia budget FOOD1 unarchive
 
 An archived budget drops out of the list and off the summary, and stops being
 judged against the month — it is not being tracked, so it is neither on track
@@ -108,7 +108,7 @@ into view.
 `,
 }
 
-var errNoBudgets = errors.New("no budgets yet — create one with: kakei bg n")
+var errNoBudgets = errors.New("no budgets yet — create one with: pecunia bg n")
 
 // budgetVerbs is every name a subcommand answers to. It is also what tells a
 // verb from a code, since either may come first.
@@ -172,8 +172,8 @@ func runBudgets(args []string) error {
 		return listBudgets(f)
 	}
 
-	// The code may come on either side of the verb: "kakei bg FOOD1 edit" is how
-	// it is said out loud, "kakei bg edit FOOD1" is how every other module reads,
+	// The code may come on either side of the verb: "pecunia bg FOOD1 edit" is how
+	// it is said out loud, "pecunia bg edit FOOD1" is how every other module reads,
 	// and neither is worth refusing.
 	verb, ref := budgetVerbs[f.rest[0]], ""
 	rest := f.rest[1:]
@@ -182,7 +182,7 @@ func runBudgets(args []string) error {
 		if len(rest) > 0 {
 			verb = budgetVerbs[rest[0]]
 			if verb == "" && !isHelpFlag(rest[0]) {
-				return fmt.Errorf("kakei budget: unknown command %q", rest[0])
+				return fmt.Errorf("pecunia budget: unknown command %q", rest[0])
 			}
 			rest = rest[1:]
 		}
@@ -309,7 +309,7 @@ func createBudget(conn *sql.DB, s *budgets.Store, cycle string) error {
 		return err
 	}
 	if len(d.Categories) == 0 {
-		return errors.New("no categories yet — a budget caps one, so make it first with: kakei ct n")
+		return errors.New("no categories yet — a budget caps one, so make it first with: pecunia ct n")
 	}
 
 	code, err := s.SuggestCode()

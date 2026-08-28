@@ -15,25 +15,25 @@ any code.
 ## Commands
 
 ```
-kakei bill                board: this cycle for every active bill, urgent first
-kakei bill --all          archived bills too
-kakei bill new | n        create a bill
-kakei bill CODE           details: status, dates, last 12 payments, averages
-kakei bill CODE pay       record this cycle's payment
-kakei bill CODE edit | e
-kakei bill CODE delete | d
-kakei bill CODE archive   stop it counting as due; unarchive brings it back
+pecunia bill                board: this cycle for every active bill, urgent first
+pecunia bill --all          archived bills too
+pecunia bill new | n        create a bill
+pecunia bill CODE           details: status, dates, last 12 payments, averages
+pecunia bill CODE pay       record this cycle's payment
+pecunia bill CODE edit | e
+pecunia bill CODE delete | d
+pecunia bill CODE archive   stop it counting as due; unarchive brings it back
 ```
 
-Verb-first (`kakei bill pay ENERG`) works too — the code may come on either
-side, since `kakei bill ENERG pay` is how the user says it out loud.
+Verb-first (`pecunia bill pay ENERG`) works too — the code may come on either
+side, since `pecunia bill ENERG pay` is how the user says it out loud.
 
 ## Decisions
 
 - **Package is `internal/recurring`, table `recurring_bills`.** `internal/bills`
   is already the credit-card statement — see
   [[decisions/0009-bills-as-rows-and-installments-as-transactions]]. The CLI verb
-  `kakei bill` was free (`kakei cc bill` is the card one) and is what the user
+  `pecunia bill` was free (`pecunia cc bill` is the card one) and is what the user
   types, so only the package had to move out of the way.
 - **Two day-of-month integers, monthly only.** `open_day` is when the bill can
   be paid, `due_day` when it is late. `cards.NextDate` clamps a day the month is
@@ -86,11 +86,11 @@ Files: `internal/db/migrations/009_recurring_bills.sql`,
 
 Full session: [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]].
 
-User, from a screenshot: "i think we should improve this using the bubbles package and the lipgloss. Maybe using a table." `Board` was rewired onto `lipgloss/table`, matching the border and header style `kakei t` and `kakei g --resume` already use:
+User, from a screenshot: "i think we should improve this using the bubbles package and the lipgloss. Maybe using a table." `Board` was rewired onto `lipgloss/table`, matching the border and header style `pecunia t` and `pecunia g --resume` already use:
 
 - Four columns — **BILL** (code in its color, then name), **AMOUNT** (right-aligned so the figures line up), **STATUS** (mark + word, colored by state), **WHEN** (just the date half — `when()` was split out of `state()` so the status word isn't repeated in the column; `state()` itself, `status — when`, stayed for the details card and the picker).
 - Sort order (most urgent first, tie-broken by due date then code) and the per-currency owed footer are unchanged; the footer is now indented to sit under the table's own cells instead of under the border.
-- `bubbles` was deliberately not brought in for the board itself — it is static output and `kakei b | grep` has to keep working, the same reason `kakei t` and `kakei g --resume` already render through `lipgloss/table`. `bubbles/list` is untouched and still drives the picker whenever the code is left off (`kakei bill pay`). An interactive board (arrow to a bill, enter to pay) was named as a possible follow-up, not built.
+- `bubbles` was deliberately not brought in for the board itself — it is static output and `pecunia b | grep` has to keep working, the same reason `pecunia t` and `pecunia g --resume` already render through `lipgloss/table`. `bubbles/list` is untouched and still drives the picker whenever the code is left off (`pecunia bill pay`). An interactive board (arrow to a bill, enter to pay) was named as a possible follow-up, not built.
 
 User: "on the seed. Add a scenario where the bill is paid too." A sixth fixture, `INTNT` (Internet, Vivo Fibra, R$129.90, opens 1st, due 10th), was added along with a new `PaidNow` fixture flag that settles the current cycle in addition to past ones — the seeded board now shows all five states (`upcoming`, `open`, `overdue`, `paid`, `archived`) at once. Payment dates clamp to today when open-day+2 hasn't happened yet, so nothing seeded is ever dated into the future. The fixture-coverage test was tightened from `len(states) >= 3` (which is how a missing `paid` state had slipped through undetected) to demanding every one of the five states by name, and a new case asserts no seeded payment is future-dated — both written red-first per [[rules/tdd]].
 
@@ -100,7 +100,7 @@ Links: [[decisions/0011-recurring-bills-derived-from-payments]] · [[decisions/0
 
 ## Update: the owed total closes the table instead of hanging under it
 
-User, from a screenshot of `kakei bill`: "The still owned text is feeling
+User, from a screenshot of `pecunia bill`: "The still owned text is feeling
 strange there, like floating, this also happens on the bills command."
 
 It was a line printed after `t.Render()`, indented two spaces — attached to
@@ -115,7 +115,7 @@ counted, so an upcoming or archived bill is no more owed than it was.
 figure per currency, sorted, `·`-joined, sign in front of the symbol — because
 [[tasks/08-summary-module]] needed the same rule four times over and two copies
 of "never add centavos to satoshis" is one too many. `Board` is what
-`kakei summary` renders its DUE and NEXT 7 DAYS sections with, so both screens
+`pecunia summary` renders its DUE and NEXT 7 DAYS sections with, so both screens
 got the fix from one change.
 
 Written red-first per [[rules/tdd]]: the case that pinned it asserts the total

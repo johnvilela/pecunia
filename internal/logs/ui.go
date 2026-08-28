@@ -8,10 +8,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
-// Table is the static trail output — no alt screen, so `kakei l | grep` works.
+// Table is the static trail output — no alt screen, so `pecunia l | grep` works.
 // Nil comes back empty rather than as a header with nothing under it, so the
 // caller can say why there is nothing instead.
 func Table(es []Entry) string {

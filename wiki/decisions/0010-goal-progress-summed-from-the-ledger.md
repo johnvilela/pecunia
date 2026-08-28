@@ -13,7 +13,7 @@ dropped deliberately.
 ## Why
 
 [[decisions/0008-transaction-double-entry-tags-and-filters]] names the one hole
-in the accounts model: "if a balance is ever edited by hand through `kakei ac e`,
+in the accounts model: "if a balance is ever edited by hand through `pecunia ac e`,
 the sum of the transactions no longer explains it." A stored goal total would be
 a second copy of that hole, and a worse one — an account balance is authoritative
 because money really is in the account, but a goal is nothing except what was
@@ -41,7 +41,7 @@ puts the rule beside `Verb()` — the other thing the kind decides — and lets 
 view case downstream be a struct literal with no database.
 
 **A goal carries its own currency, and only matching transactions may link.**
-Nothing in kakei converts between currencies ([[decisions/0001-balance-as-int64-minor-units]]),
+Nothing in pecunia converts between currencies ([[decisions/0001-balance-as-int64-minor-units]]),
 so a mixed-currency total would be meaningless. Three layers hold it up, each
 closing a different door:
 
@@ -92,10 +92,10 @@ links the whole series, `ScopeOne` links just that installment.
 
 ## Known holes
 
-- **`kakei cc pay` does not feed a paying goal.** `PayBill` builds its own
+- **`pecunia cc pay` does not feed a paying goal.** `PayBill` builds its own
   `Transaction` in the store and sets no goal, so a bill payment has to be edited
   afterwards to name one. A `cc pay --goal` would close it.
-- **No goal column in `kakei t`.** The goal shows on the details card and filters
+- **No goal column in `pecunia t`.** The goal shows on the details card and filters
   with `--goal ID`, but the list table has none — most rows would have it empty.
   `TestTableHasNoGoalColumn` pins that as a decision rather than an oversight.
 - **`Percent` can overflow** on a goal whose target is a handful of satoshis with

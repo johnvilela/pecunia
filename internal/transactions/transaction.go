@@ -1,5 +1,5 @@
 // Package transactions holds the transaction domain: the model, its storage and
-// its UI. A transaction is the only thing in kakei that moves money, so this is
+// its UI. A transaction is the only thing in pecunia that moves money, so this is
 // the only package whose writes reach past their own table — into the balance of
 // the account or credit card the transaction is filed against.
 package transactions
@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // The two directions money goes. value is always positive, so this is what
 // carries the sign — nothing has to agree on what a negative number meant.
 //
 // KindAdjustment is the exception on both counts: no form ever offers it —
-// only `kakei ac edit` files one, when a recorded balance is put right — and
+// only `pecunia ac edit` files one, when a recorded balance is put right — and
 // its value is signed, because an adjustment is its own direction.
 const (
 	KindIncome     = "income"
@@ -34,7 +34,7 @@ const MaxTags = 5
 // past any real card, and the cap is what stops a typo writing a thousand rows.
 const MaxInstallments = 60
 
-// DateLayout is the one date format kakei reads or writes, everywhere.
+// DateLayout is the one date format pecunia reads or writes, everywhere.
 const DateLayout = "2006-01-02"
 
 // CycleLayout is how the month a recurring bill's payment is for is written.
@@ -207,7 +207,7 @@ func (t Transaction) Validate() error {
 		return errors.New("only a credit card purchase can be split into installments")
 	}
 	// A goal counts one currency and nothing else: adding centavos to satoshis
-	// is not a sum, and there is no rate anywhere in kakei to make it one. An
+	// is not a sum, and there is no rate anywhere in pecunia to make it one. An
 	// empty GoalCurrency fails this too — that is what a caller who only knew
 	// the id leaves behind, and letting it through is the whole hole.
 	if t.Goal.ID != 0 && t.Currency != t.GoalCurrency {

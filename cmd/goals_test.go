@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/db"
-	"kakei/internal/goals"
+	"pecunia/internal/db"
+	"pecunia/internal/goals"
 )
 
-// runGoalsIn points KAKEI_DB at a database of this case's own, captures what
+// runGoalsIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit and the
@@ -19,7 +19,7 @@ import (
 // and are covered through the store instead.
 func runGoalsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -33,7 +33,7 @@ func runGoalsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 // seedGoal puts one goal in the database at path and hands it back.
 func seedGoal(t *testing.T, path string, g goals.Goal) goals.Goal {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +85,7 @@ func TestGoalsHelp(t *testing.T) {
 
 func TestGoalsList(t *testing.T) {
 	t.Run("shows a card per goal, with its bar", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedGoal(t, path, newLaptop())
 		other := newLaptop()
 		other.Name, other.Description = "Holiday", ""
@@ -109,7 +109,7 @@ func TestGoalsList(t *testing.T) {
 	})
 
 	t.Run("--resume shows the table instead", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedGoal(t, path, newLaptop())
 
 		got, err := runGoalsIn(t, path, "--resume")
@@ -127,23 +127,23 @@ func TestGoalsList(t *testing.T) {
 	})
 
 	t.Run("--resume on an empty database says how to start", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		got, err := runGoalsIn(t, path, "--resume")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei g n") {
+		if !strings.Contains(got, "pecunia g n") {
 			t.Errorf("--resume does not say how to make a goal:\n%s", got)
 		}
 	})
 
 	t.Run("an empty database says how to start", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		got, err := runGoalsIn(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei g n") {
+		if !strings.Contains(got, "pecunia g n") {
 			t.Errorf("list does not say how to make a goal:\n%s", got)
 		}
 	})
@@ -151,7 +151,7 @@ func TestGoalsList(t *testing.T) {
 
 func TestGoalsDetails(t *testing.T) {
 	t.Run("an id shows the card", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		g := seedGoal(t, path, newLaptop())
 
 		got, err := runGoalsIn(t, path, strconv.FormatInt(g.ID, 10))
@@ -166,7 +166,7 @@ func TestGoalsDetails(t *testing.T) {
 	})
 
 	t.Run("an unknown id says which", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedGoal(t, path, newLaptop())
 
 		_, err := runGoalsIn(t, path, "404")
@@ -176,7 +176,7 @@ func TestGoalsDetails(t *testing.T) {
 	})
 
 	t.Run("something that is not a number says goals are referenced by id", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedGoal(t, path, newLaptop())
 
 		_, err := runGoalsIn(t, path, "LAPTOP")
@@ -191,7 +191,7 @@ func TestGoalsEditAndDeleteMissing(t *testing.T) {
 	// cases would block on a TTY that is not there.
 	for _, verb := range []string{"edit", "e", "delete", "d"} {
 		t.Run(verb+" with an unknown id errors", func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "kakei.db")
+			path := filepath.Join(t.TempDir(), "pecunia.db")
 			seedGoal(t, path, newLaptop())
 
 			if _, err := runGoalsIn(t, path, verb, "404"); err == nil {
@@ -216,7 +216,7 @@ func TestGoalsTargetHistory(t *testing.T) {
 	moved := func(t *testing.T, path string) goals.Goal {
 		t.Helper()
 		g := seedGoal(t, path, newLaptop())
-		t.Setenv("KAKEI_DB", path)
+		t.Setenv("PECUNIA_DB", path)
 		conn, err := db.Open()
 		if err != nil {
 			t.Fatal(err)
@@ -230,7 +230,7 @@ func TestGoalsTargetHistory(t *testing.T) {
 	}
 
 	t.Run("the single goal shows what the target has been", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		g := moved(t, path)
 
 		got, err := runGoalsIn(t, path, strconv.FormatInt(g.ID, 10))
@@ -245,7 +245,7 @@ func TestGoalsTargetHistory(t *testing.T) {
 	})
 
 	t.Run("the list leaves it out", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		moved(t, path)
 
 		got, err := runGoalsIn(t, path)
@@ -258,7 +258,7 @@ func TestGoalsTargetHistory(t *testing.T) {
 	})
 
 	t.Run("a goal whose target never moved shows no history", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		g := seedGoal(t, path, newLaptop())
 
 		got, err := runGoalsIn(t, path, strconv.FormatInt(g.ID, 10))

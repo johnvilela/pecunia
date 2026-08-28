@@ -1,4 +1,4 @@
-// Package core holds what every kakei module shares: the currencies and the
+// Package core holds what every pecunia module shares: the currencies and the
 // scale their amounts are stored at, the color palette, the 5-character codes
 // and the picker/confirm widgets. It knows nothing about accounts or cards.
 package core

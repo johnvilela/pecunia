@@ -17,7 +17,7 @@ takes a card's bills with it.
 closing dates from its earliest transaction to the cycle still taking charges and
 `INSERT ... ON CONFLICT DO NOTHING`s each one, then refreshes every bill still marked `open`.
 Every read path starts there, so a bill can never be missing when something looks for it and
-there is no `kakei cc close` to forget.
+there is no `pecunia cc close` to forget.
 
 **The total is a snapshot, and the drift is shown rather than hidden.** The user chose the
 frozen total over a live `SUM`. `Ensure` recomputes an open bill's total on every read and
@@ -30,7 +30,7 @@ R$500.00` when they disagree. The trade is stated on screen instead of being dis
 "the bill can be paid from any account, it will generate a normal transaction but this
 transaction has the id of the bill". So `transactions.pays_bill_id`, and `applyBalance` gains
 one branch: an account outcome that names a bill also lowers that bill's card. This is the
-only place in kakei where a transaction moves a balance it does not name — and it buys back
+only place in pecunia where a transaction moves a balance it does not name — and it buys back
 more than it costs, because a payment is then not a card transaction at all and so can never
 show up as spending on the next bill. No exclusion clause anywhere in the totals.
 
@@ -49,7 +49,7 @@ already recorded in the status `Ensure` last wrote, so a payment can never accid
 re-open or close a bill.
 
 **`Owed()` is not `Remaining()`.** Found by running it: an open bill showed its running total
-under a `LEFT` column and turned up in `kakei cc pay`. An open bill is a running total, not a
+under a `LEFT` column and turned up in `pecunia cc pay`. An open bill is a running total, not a
 debt. `Owed()` is `Remaining()` on a closed bill and zero on an open one; it is what the
 column shows and what decides whether a bill is offered for payment.
 
@@ -98,7 +98,7 @@ every month.
 - **A closed bill's total can go stale.** The user's explicit choice; the detail view flags it
   rather than repairing it.
 - **Future cycles have no bill row.** `Ensure` stops at the cycle still taking charges, so
-  installments 3, 4 and 5 of a five-way split are visible in `kakei t --card X --all` but not
+  installments 3, 4 and 5 of a five-way split are visible in `pecunia t --card X --all` but not
   as bills until those months arrive. Generating them would need a fifth status for a cycle
   that has not started.
 - **A card's opening `balance`** — the amount seeded on the card itself, not from any

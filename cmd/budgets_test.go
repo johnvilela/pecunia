@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/budgets"
-	"kakei/internal/db"
-	"kakei/internal/transactions"
+	"pecunia/internal/budgets"
+	"pecunia/internal/db"
+	"pecunia/internal/transactions"
 )
 
-// runBudgetsIn points KAKEI_DB at a database of this case's own, captures what
+// runBudgetsIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both.
 //
 // Only the paths that never open a form are driven from here: new, edit and the
@@ -20,7 +20,7 @@ import (
 // territory and are covered through the store instead.
 func runBudgetsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -35,7 +35,7 @@ func runBudgetsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 // command to set something up.
 func openAt(t *testing.T, path string) *sql.DB {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestBudgetsHelp(t *testing.T) {
 
 func TestBudgetsList(t *testing.T) {
 	t.Run("the table is the list", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 		seedBudget(t, path, "FUEL1", "Fuel", 30000)
 
@@ -149,7 +149,7 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("the month being shown is named", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		got, err := runBudgetsIn(t, path, "--month", "2026-07")
@@ -162,7 +162,7 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("--month narrows the spend to that month", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		b := seedBudget(t, path, "FOOD1", "Food", 80000)
 		spendOn(t, path, b, 54000, "2026-07-10")
 		spendOn(t, path, b, 12000, "2026-08-10")
@@ -180,7 +180,7 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("a broken month is refused", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		if _, err := runBudgetsIn(t, path, "--month", "August"); err == nil {
@@ -189,7 +189,7 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("--month with nothing after it is refused", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		if _, err := runBudgetsIn(t, path, "--month"); err == nil {
@@ -198,7 +198,7 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("an archived budget is left out until --all", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 		if _, err := runBudgetsIn(t, path, "FOOD1", "archive"); err != nil {
 			t.Fatal(err)
@@ -222,12 +222,12 @@ func TestBudgetsList(t *testing.T) {
 	})
 
 	t.Run("an empty database says how to start", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		got, err := runBudgetsIn(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "kakei bg n") {
+		if !strings.Contains(got, "pecunia bg n") {
 			t.Errorf("list does not say how to make a budget:\n%s", got)
 		}
 	})
@@ -235,7 +235,7 @@ func TestBudgetsList(t *testing.T) {
 
 func TestBudgetsDetails(t *testing.T) {
 	t.Run("a code shows the card", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		b := seedBudget(t, path, "FOOD1", "Food", 80000)
 		spendOn(t, path, b, 54000, "2026-08-10")
 
@@ -251,7 +251,7 @@ func TestBudgetsDetails(t *testing.T) {
 	})
 
 	t.Run("the card looks back over the months before it", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		b := seedBudget(t, path, "FOOD1", "Food", 80000)
 		spendOn(t, path, b, 70000, "2026-06-10")
 		spendOn(t, path, b, 54000, "2026-08-10")
@@ -268,7 +268,7 @@ func TestBudgetsDetails(t *testing.T) {
 	})
 
 	t.Run("the list does not drag the history along", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		got, err := runBudgetsIn(t, path)
@@ -281,7 +281,7 @@ func TestBudgetsDetails(t *testing.T) {
 	})
 
 	t.Run("an unknown code says which", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		_, err := runBudgetsIn(t, path, "NOPE1")
@@ -293,7 +293,7 @@ func TestBudgetsDetails(t *testing.T) {
 
 func TestBudgetsArchive(t *testing.T) {
 	t.Run("archive and unarchive both report what happened", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		got, err := runBudgetsIn(t, path, "FOOD1", "archive")
@@ -314,7 +314,7 @@ func TestBudgetsArchive(t *testing.T) {
 	})
 
 	t.Run("the code may come on either side of the command", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		if _, err := runBudgetsIn(t, path, "archive", "FOOD1"); err != nil {
@@ -323,7 +323,7 @@ func TestBudgetsArchive(t *testing.T) {
 	})
 
 	t.Run("an unknown command is named rather than guessed at", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "kakei.db")
+		path := filepath.Join(t.TempDir(), "pecunia.db")
 		seedBudget(t, path, "FOOD1", "Food", 80000)
 
 		_, err := runBudgetsIn(t, path, "FOOD1", "frobnicate")
@@ -338,7 +338,7 @@ func TestBudgetsEditAndDeleteMissing(t *testing.T) {
 	// cases would block on a TTY that is not there.
 	for _, verb := range []string{"edit", "e", "delete", "d", "archive"} {
 		t.Run(verb+" with an unknown code errors", func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "kakei.db")
+			path := filepath.Join(t.TempDir(), "pecunia.db")
 			seedBudget(t, path, "FOOD1", "Food", 80000)
 
 			if _, err := runBudgetsIn(t, path, verb, "NOPE1"); err == nil {

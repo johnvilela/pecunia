@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/cards"
-	"kakei/internal/db"
-	"kakei/internal/logs"
+	"pecunia/internal/cards"
+	"pecunia/internal/db"
+	"pecunia/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file, its own card, and a clock
@@ -20,7 +20,7 @@ import (
 // real one, "the bill that is still open" would be a different row each month.
 func newTestStore(t *testing.T, today string, closingDay, dueDay int) (*Store, cards.Card) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func charge(t *testing.T, s *Store, c cards.Card, date, title string, value int6
 	return id
 }
 
-// payment writes an account outcome that names a bill — what `kakei cc pay`
+// payment writes an account outcome that names a bill — what `pecunia cc pay`
 // produces.
 func payment(t *testing.T, s *Store, billID, value int64, date string) {
 	t.Helper()
@@ -427,7 +427,7 @@ func TestUnpaidLeavesTheOpenBillOut(t *testing.T) {
 // coming from the wall clock is the one that disagrees.
 func TestNewStoreAt(t *testing.T) {
 	t.Run("takes the clock it is given", func(t *testing.T) {
-		t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 		conn, err := db.Open()
 		if err != nil {
 			t.Fatal(err)

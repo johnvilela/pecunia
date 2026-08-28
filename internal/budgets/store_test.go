@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/logs"
-	"kakei/internal/transactions"
+	"pecunia/internal/logs"
+	"pecunia/internal/transactions"
 )
 
 func newTestStore(t *testing.T) (*Store, *sql.DB) {
@@ -286,7 +286,7 @@ func TestSpend(t *testing.T) {
 		btc := account(t, conn, "COLD1", "BTC")
 		fileOn(t, conn, brl, cat, "outcome", 20000, "2026-08-03")
 		// The same integer means eight decimal places over here. Adding them
-		// would be the one sum kakei never makes.
+		// would be the one sum pecunia never makes.
 		fileOn(t, conn, btc, cat, "outcome", 20000, "2026-08-04")
 
 		got, err := s.Get(b.ID, "2026-08")

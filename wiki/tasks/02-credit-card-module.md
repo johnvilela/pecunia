@@ -8,11 +8,11 @@ This module will be responsible for managing user's credit cards. It will have c
 
 ## Commands
 
-list: "kakei credit-card" or "kakei cc"
-create: "kakei credit-card new" or "kakei cc n"
-edit: "kakei credit-card edit {CODE|ID?}" or "kakei cc e {CODE|ID?}"
-delete: "kakei credit-card delete {CODE|ID?}" or "kakei cc d {CODE|ID?}"
-details: "kakei credit-card {CODE|ID?}" or "kakei cc {CODE|ID?}"
+list: "pecunia credit-card" or "pecunia cc"
+create: "pecunia credit-card new" or "pecunia cc n"
+edit: "pecunia credit-card edit {CODE|ID?}" or "pecunia cc e {CODE|ID?}"
+delete: "pecunia credit-card delete {CODE|ID?}" or "pecunia cc d {CODE|ID?}"
+details: "pecunia credit-card {CODE|ID?}" or "pecunia cc {CODE|ID?}"
 
 ## Suggested structure
 

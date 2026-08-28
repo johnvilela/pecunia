@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/core"
-	"kakei/internal/db"
-	"kakei/internal/logs"
+	"pecunia/internal/core"
+	"pecunia/internal/db"
+	"pecunia/internal/logs"
 )
 
 // newTestStore gives the caller its own SQLite file in its own temp dir, so no
@@ -21,7 +21,7 @@ import (
 // only the real migration path builds them.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -307,7 +307,7 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("missing id is ErrNotFound", func(t *testing.T) {
 		// The same bug shipped once in accounts: a silent nil here makes
-		// `kakei cc e` on a deleted card print "updated".
+		// `pecunia cc e` on a deleted card print "updated".
 		s := newTestStore(t)
 		c := nubank()
 		c.ID = 404
@@ -409,7 +409,7 @@ func TestCodeTaken(t *testing.T) {
 }
 
 func TestCodeSpaceIsPerTable(t *testing.T) {
-	// A card and an account may share a code: `kakei cc X` and `kakei ac X`
+	// A card and an account may share a code: `pecunia cc X` and `pecunia ac X`
 	// each look in their own table.
 	s := newTestStore(t)
 	c := nubank()
@@ -550,7 +550,7 @@ func TestBalanceMayNotPassTheLimit(t *testing.T) {
 
 // Same as the accounts case: a transaction always names exactly one account or
 // card, so the card cannot be deleted out from under it. Raw INSERT because
-// importing kakei/internal/transactions here would be an import cycle.
+// importing pecunia/internal/transactions here would be an import cycle.
 func TestDeleteWhileTransactionsPointAtIt(t *testing.T) {
 	t.Run("says what is blocking it", func(t *testing.T) {
 		s := newTestStore(t)

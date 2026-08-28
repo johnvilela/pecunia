@@ -28,7 +28,7 @@ answers are the decisions in it. What the build found that the plan did not:
   beside it, and every month collapsed into one NULL group. Caught by the
   history test on the first run. It groups by the expression now.
 - **Deleting a category quietly took its budgets with it.** The cascade is
-  right — a budget with no category is nothing — but `kakei ct delete` said only
+  right — a budget with no category is nothing — but `pecunia ct delete` said only
   "This cannot be undone." The confirmation counts them now, through
   `budgets.Store.CountForCategory`. Introduced by this migration, so fixed in
   it.
@@ -40,7 +40,7 @@ answers are the decisions in it. What the build found that the plan did not:
   not carry is the verdict — no "on track", no "ahead", no pace line on the
   card. The first draft of the table test conflated the two.
 
-Verified live against the seeded dev database: `kakei bg`, `bg CODE`,
+Verified live against the seeded dev database: `pecunia bg`, `bg CODE`,
 `--month`, `--all`, `archive`/`unarchive`, and the summary section. Six budget
 fixtures were added to `scripts/seed`, one archived and one whose cap has moved,
 so both branches have something to render.
@@ -51,15 +51,15 @@ budgets, and any warning at the transaction form.
 ## Commands
 
 ```
-kakei budget                     this month's budgets and where they stand
-kakei bg                         the alias
-kakei budget new       | bg n    create one
-kakei budget edit  {CODE|ID?}    edit, asking why if the amount moved
-kakei budget delete {CODE|ID?}   delete for good
-kakei budget archive {CODE|ID?}  stop tracking, keep the history
-kakei budget {CODE|ID?}          details: this month, the pace, the amount log
-kakei budget --month YYYY-MM     any month
-kakei budget --all               archived ones too
+pecunia budget                     this month's budgets and where they stand
+pecunia bg                         the alias
+pecunia budget new       | bg n    create one
+pecunia budget edit  {CODE|ID?}    edit, asking why if the amount moved
+pecunia budget delete {CODE|ID?}   delete for good
+pecunia budget archive {CODE|ID?}  stop tracking, keep the history
+pecunia budget {CODE|ID?}          details: this month, the pace, the amount log
+pecunia budget --month YYYY-MM     any month
+pecunia budget --all               archived ones too
 ```
 
 Every `{CODE|ID?}` opens a picker when left out, `-h` on any command prints that
@@ -100,7 +100,7 @@ command's own help, both the way every other module already does it.
 - **A card purchase counts on the day it was charged**, not the day the
   statement is settled. Asked and confirmed. R$200 of food on the card on 15
   August is August's food, even though the money leaves in September — a budget
-  is about what you consumed, and every other date in kakei is the transaction's
+  is about what you consumed, and every other date in pecunia is the transaction's
   own. It also keeps a month's food from mixing this month's cash with last
   month's card.
 
@@ -119,7 +119,7 @@ command's own help, both the way every other module already does it.
 
 - **A budget counts one currency**, the same call goals make and for the same
   reason: centavos and satoshis do not add up and there is no rate anywhere in
-  kakei to make them. Unlike a goal, nothing is linked to a budget, so the
+  pecunia to make them. Unlike a goal, nothing is linked to a budget, so the
   currency cannot be checked at write time — it is filtered on read, through
   the account or card the transaction names.
 
@@ -214,7 +214,7 @@ COALESCE((
 ```
 
 Dates are compared as text with the month's bounds, not `strftime`, so the new
-index is usable — everywhere else in kakei already compares `YYYY-MM-DD` as
+index is usable — everywhere else in pecunia already compares `YYYY-MM-DD` as
 text, and the month bounds are what `monthRange` in `cmd/transactions.go`
 already builds.
 
@@ -334,7 +334,7 @@ today", and is the reason to build the module at all.
 - **Weekly or yearly budgets.** Monthly only. The cycle is already the app's
   unit — recurring bills, card statements and `--month` all speak it.
 - **A total across all budgets.** It would have to add currencies, and nothing
-  in kakei does that.
+  in pecunia does that.
 - **Budgeting uncategorised spend.** It has no category, so no budget catches
   it. Worth a line in the summary if it turns out to be large, but that is a
   separate observation and not a budget.

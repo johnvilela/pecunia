@@ -22,7 +22,7 @@ CREATE TABLE budgets (
   -- of zero is not a budget: a category costing nothing needs no cap.
   amount      INTEGER NOT NULL CHECK (amount > 0),
   -- The budget's own, like a goal's. Only transactions in it are counted, and
-  -- there is no rate anywhere in kakei to bring the others in.
+  -- there is no rate anywhere in pecunia to bring the others in.
   currency    TEXT    NOT NULL,
   -- What is capped. Unlike a recurring bill — which is still a bill without its
   -- category — a budget with no category is nothing at all, so this one goes

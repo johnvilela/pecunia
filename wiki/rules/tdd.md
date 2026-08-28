@@ -21,7 +21,7 @@ after the code, it only proves the code does what it does.
   `CHECK` constraints are half of what is worth testing, and only the real
   migration path builds them.
 - **Every case gets its own database.** The helper pattern is
-  `t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))` then
+  `t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))` then
   `db.Open()`, called **inside** the subtest — not in the parent, or the cases
   go back to sharing state.
 - **No case depends on another.** Order-independent, individually runnable with

@@ -7,14 +7,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/core"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/core"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 // labelWidth lines the totals up under each other. "month" is the longest of
@@ -22,7 +22,7 @@ import (
 const labelWidth = 6
 
 // nothingYet is what an untouched database gets instead of six empty sections.
-const nothingYet = "no accounts yet — create one with: kakei ac n"
+const nothingYet = "no accounts yet — create one with: pecunia ac n"
 
 var titleStyle = lipgloss.NewStyle().Bold(true)
 
@@ -78,7 +78,7 @@ func section(title, body string) string {
 }
 
 // Render is the whole screen. It is a plain print with no alt screen, so
-// `kakei summary | head` works like every other list in kakei.
+// `pecunia summary | head` works like every other list in pecunia.
 func Render(s Summary) string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(s.Title) + "\n")

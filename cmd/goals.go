@@ -7,15 +7,15 @@ import (
 	"strconv"
 	"strings"
 
-	"kakei/internal/core"
-	"kakei/internal/goals"
+	"pecunia/internal/core"
+	"pecunia/internal/goals"
 )
 
 const goalsHelp = `Track goals.
 
 Usage:
-  kakei goals [command] [ID]
-  kakei g     [command] [ID]
+  pecunia goals [command] [ID]
+  pecunia g     [command] [ID]
 
 Commands:
   (none)             list your goals, one card each
@@ -41,25 +41,25 @@ var goalSubHelp = map[string]string{
 	"new": `Create a goal.
 
 Usage:
-  kakei goals new
-  kakei g n
+  pecunia goals new
+  pecunia g n
 
 Opens a form: name, description (optional), kind, currency and target. The
 target is read at the currency you pick, so a Bitcoin goal takes its eight
 decimal places.
 
 Nothing is filed against the goal here. A transaction names the goal it feeds
-from its own form: kakei t n.
+from its own form: pecunia t n.
 `,
 	"edit": `Edit a goal.
 
 Usage:
-  kakei goals edit [ID]
-  kakei g e [ID]
+  pecunia goals edit [ID]
+  pecunia g e [ID]
 
 Opens the create form pre-filled. Without ID, pick from a list first.
 
-Changing the target is logged: the form asks why, and "kakei g ID" shows every
+Changing the target is logged: the form asks why, and "pecunia g ID" shows every
 move the target has made, with the day it happened. A target is a promise about
 the future, and the future moves — a R$5000.00 bill settles for R$3500.00 on an
 offer, and what it used to say is worth keeping. The reason is optional, and is
@@ -74,15 +74,15 @@ progress — can be changed at any time.
 	"delete": `Delete a goal for good.
 
 Usage:
-  kakei goals delete [ID]
-  kakei g d [ID]
+  pecunia goals delete [ID]
+  pecunia g d [ID]
 
 Asks for confirmation. Without ID, pick from a list first. Nothing blocks the
 delete: the transactions that fed the goal keep their money and lose the link.
 `,
 }
 
-var errNoGoals = errors.New("no goals yet — create one with: kakei g n")
+var errNoGoals = errors.New("no goals yet — create one with: pecunia g n")
 
 func runGoals(args []string) error {
 	if len(args) == 0 {
@@ -187,7 +187,7 @@ func listGoals(resume bool) error {
 			return nil
 		}
 		for _, g := range all {
-			// No history here — that is what "kakei g ID" is for, and a screen of
+			// No history here — that is what "pecunia g ID" is for, and a screen of
 			// goals each dragging its own log behind it is not a list.
 			fmt.Fprint(out, goals.Details(g, nil))
 		}

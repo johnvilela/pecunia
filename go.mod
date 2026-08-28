@@ -1,4 +1,4 @@
-module kakei
+module pecunia
 
 go 1.25.0
 

@@ -2,7 +2,7 @@
 // card, everything charged in it, and what has been paid against it.
 //
 // It reads the transactions table directly rather than importing
-// kakei/internal/transactions — that package imports this one, because a payment
+// pecunia/internal/transactions — that package imports this one, because a payment
 // is a transaction that names a bill.
 package bills
 
@@ -10,10 +10,10 @@ import (
 	"errors"
 	"time"
 
-	"kakei/internal/cards"
+	"pecunia/internal/cards"
 )
 
-// dateLayout is the one date format kakei reads or writes, everywhere. It is
+// dateLayout is the one date format pecunia reads or writes, everywhere. It is
 // spelled out here rather than imported from transactions, which imports this
 // package.
 const dateLayout = "2006-01-02"
@@ -120,7 +120,7 @@ func (b Bill) Remaining() int64 {
 
 // Owed is what has to be paid, which is nothing at all while the cycle is still
 // open: an open bill is a running total, not a debt. It is what the list column
-// shows and what decides whether a bill turns up in `kakei cc pay`.
+// shows and what decides whether a bill turns up in `pecunia cc pay`.
 func (b Bill) Owed() int64 {
 	if b.Status == StatusOpen {
 		return 0

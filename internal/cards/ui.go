@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // Label is how a card is named everywhere it appears in a list: its code in its
@@ -223,7 +223,7 @@ func Pick(cards []Card, title string) (Card, error) {
 	return core.Pick(cards, title, pickerRow)
 }
 
-// Table is the static list output — no alt screen, so `kakei cc | grep` works.
+// Table is the static list output — no alt screen, so `pecunia cc | grep` works.
 func Table(cards []Card) string {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).

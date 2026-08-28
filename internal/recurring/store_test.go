@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/logs"
-	"kakei/internal/transactions"
+	"pecunia/internal/logs"
+	"pecunia/internal/transactions"
 )
 
 // world is a database with an account, a card and a category to hang a bill

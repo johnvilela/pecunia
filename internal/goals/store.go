@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"kakei/internal/logs"
+	"pecunia/internal/logs"
 )
 
 type Store struct{ db *sql.DB }

@@ -1,4 +1,4 @@
-// Package logs is kakei's audit trail: one row per logical action, whoever
+// Package logs is pecunia's audit trail: one row per logical action, whoever
 // caused it and however many rows it wrote.
 package logs
 
@@ -18,7 +18,7 @@ const (
 
 // Actor is who this process acts as: the source every store stamps on the
 // rows it writes, except the ones that are always System. The CLI is the
-// user's hands, so User is the default; `kakei mcp` sets it to AI at startup.
+// user's hands, so User is the default; `pecunia mcp` sets it to AI at startup.
 // A process-wide variable and not a parameter, because a whole process is
 // only ever one of them.
 var Actor = User

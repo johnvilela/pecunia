@@ -64,13 +64,13 @@ func TestReleasesSince(t *testing.T) {
 	}
 }
 
-// tarball builds a gzipped tar with a single "kakei" entry.
+// tarball builds a gzipped tar with a single "pecunia" entry.
 func tarball(t *testing.T, content []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	if err := tw.WriteHeader(&tar.Header{Name: "kakei", Mode: 0o755, Size: int64(len(content))}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{Name: "pecunia", Mode: 0o755, Size: int64(len(content))}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tw.Write(content); err != nil {
@@ -86,8 +86,8 @@ func tarball(t *testing.T, content []byte) []byte {
 }
 
 func TestUntarBinary(t *testing.T) {
-	t.Run("extracts the kakei entry with exec permissions", func(t *testing.T) {
-		dst := filepath.Join(t.TempDir(), "kakei.new")
+	t.Run("extracts the pecunia entry with exec permissions", func(t *testing.T) {
+		dst := filepath.Join(t.TempDir(), "pecunia.new")
 		if err := untarBinary(bytes.NewReader(tarball(t, []byte("binary"))), dst); err != nil {
 			t.Fatal(err)
 		}
@@ -116,9 +116,9 @@ func TestUntarBinary(t *testing.T) {
 		if err := gz.Close(); err != nil {
 			t.Fatal(err)
 		}
-		dst := filepath.Join(t.TempDir(), "kakei.new")
+		dst := filepath.Join(t.TempDir(), "pecunia.new")
 		if err := untarBinary(bytes.NewReader(buf.Bytes()), dst); err == nil {
-			t.Error("want error for a tarball with no kakei entry")
+			t.Error("want error for a tarball with no pecunia entry")
 		}
 	})
 }
@@ -156,7 +156,7 @@ func TestUpgrade(t *testing.T) {
 
 	t.Run("upgrades, shows every skipped changelog and migrates", func(t *testing.T) {
 		dir := t.TempDir()
-		target := filepath.Join(dir, "kakei")
+		target := filepath.Join(dir, "pecunia")
 		if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func TestUpgrade(t *testing.T) {
 			{TagName: "v0.9.8", Body: "older notes"},
 		}
 		srv := upgradeServer(t, releases, tarball(t, []byte(script)))
-		assetName := fmt.Sprintf("kakei_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+		assetName := fmt.Sprintf("pecunia_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 		releases[0].Assets = []asset{{Name: assetName, BrowserDownloadURL: srv.URL + "/asset"}}
 
 		oldURL, oldExe := releasesURL, selfExe
@@ -201,14 +201,14 @@ func TestUpgrade(t *testing.T) {
 
 	t.Run("a failed migrate exec defers, never fails the finished upgrade", func(t *testing.T) {
 		dir := t.TempDir()
-		target := filepath.Join(dir, "kakei")
+		target := filepath.Join(dir, "pecunia")
 		if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		releases := []release{{TagName: "v0.9.9", Body: "notes"}}
 		srv := upgradeServer(t, releases, tarball(t, []byte("#!/bin/sh\nexit 1\n")))
-		assetName := fmt.Sprintf("kakei_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+		assetName := fmt.Sprintf("pecunia_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 		releases[0].Assets = []asset{{Name: assetName, BrowserDownloadURL: srv.URL + "/asset"}}
 
 		oldURL, oldExe := releasesURL, selfExe
@@ -220,7 +220,7 @@ func TestUpgrade(t *testing.T) {
 		if err != nil {
 			t.Fatalf("upgrade must survive a migrate failure, got %v", err)
 		}
-		if !strings.Contains(got, "next kakei run") {
+		if !strings.Contains(got, "next pecunia run") {
 			t.Errorf("output = %q, want a deferred-migration note", got)
 		}
 	})
@@ -239,7 +239,7 @@ func TestUpgrade(t *testing.T) {
 }
 
 func TestMigrate(t *testing.T) {
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 
 	var buf bytes.Buffer
 	old := out

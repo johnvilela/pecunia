@@ -4,7 +4,7 @@ tags: [categories, seed, schema, setup, ux]
 
 ## Decision
 
-The category module's starter set is **Go data seeded by `kakei setup`**, not `INSERT` rows in
+The category module's starter set is **Go data seeded by `pecunia setup`**, not `INSERT` rows in
 the migration — and `runSetup` now runs on every invocation instead of bailing out early.
 
 **Where the seed lives.** `internal/categories.Starter` is a `[]Category` beside the store, and
@@ -13,7 +13,7 @@ added. `cmd/setup.go` calls it after `db.Open()`. The migration `004_categories.
 only.
 
 Rejected: putting the 19 `INSERT`s in the migration. It reaches every database exactly once for
-free, including one created by a bare `kakei ct`, and needs no Go — but the starter set stops
+free, including one created by a bare `pecunia ct`, and needs no Go — but the starter set stops
 being assertable with `core.ValidateCode` / `core.ColorByName` without parsing SQL, and every
 `newTestStore` in the repo would start life with 19 rows it has to `DELETE` before the case can
 own its data. Keeping it in Go left the existing test helpers untouched.
@@ -30,7 +30,7 @@ is the intended contract — these are the user's rows from the first run on. Th
 command.
 
 **Codes are hand-written, not generated.** `HOME1`, `FOOD1`, `SLRY1` — deterministic, so
-`kakei ct FOOD1` means the same thing on every install, and assertable in tests.
+`pecunia ct FOOD1` means the same thing on every install, and assertable in tests.
 `core.RandomCode`'s reduced alphabet is generation-only, so hand-written codes containing `O`/`1`
 would still validate ([[gotchas/account-code-validation-vs-generation-alphabet]]).
 
@@ -51,9 +51,9 @@ of in-use categories for free. Nothing was pre-built for it.
 ## Known hole
 
 `db.Open()` creates the database file on *any* command, so someone whose very first command is
-`kakei ct` gets an empty list rather than the starter set — `setup` is what seeds, and they never
+`pecunia ct` gets an empty list rather than the starter set — `setup` is what seeds, and they never
 ran it. Handled in the message rather than the architecture: the empty list reads
-`no categories yet — run: kakei setup, or create one with: kakei ct n`. Move the seed into the
+`no categories yet — run: pecunia setup, or create one with: pecunia ct n`. Move the seed into the
 migration if that turns out to bite.
 
 Links: [[tasks/03-category-module]] · [[decisions/0005-internal-core-shared-kernel]] ·

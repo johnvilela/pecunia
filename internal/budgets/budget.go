@@ -19,15 +19,15 @@ import (
 	"slices"
 	"time"
 
-	"kakei/internal/core"
-	"kakei/internal/transactions"
+	"pecunia/internal/core"
+	"pecunia/internal/transactions"
 )
 
 // CycleLayout is how the month a budget is read for is written, the same
 // spelling a recurring bill's payment uses.
 const CycleLayout = transactions.CycleLayout
 
-// DateLayout is the one date format kakei reads or writes, everywhere.
+// DateLayout is the one date format pecunia reads or writes, everywhere.
 const DateLayout = transactions.DateLayout
 
 // The states one month of a budget can be in. Together they are a function of
@@ -59,7 +59,7 @@ type Budget struct {
 	Amount int64
 	// Currency is the budget's own, like a goal's. Only transactions in it are
 	// counted: centavos and satoshis do not add up, and there is no rate
-	// anywhere in kakei to make them.
+	// anywhere in pecunia to make them.
 	Currency string
 	Category transactions.Ref
 	Active   bool
@@ -106,7 +106,7 @@ func (b Budget) Over() bool { return b.Spent > b.Amount }
 // Pace is what should have been spent by today if the month were spent evenly:
 // the cap, times the days gone, over the days there are.
 //
-// Integer arithmetic, like every other amount in kakei — no float ever touches
+// Integer arithmetic, like every other amount in pecunia — no float ever touches
 // money. A month that has not started paces at nothing and one that is over
 // paces at the whole cap, which is what makes every case downstream a
 // comparison rather than a calendar question.
@@ -177,10 +177,10 @@ func (b Budget) Validate() error {
 	// CurrencyByCode falls back rather than failing — a hand-edited BTC budget
 	// would quietly start reading its satoshis as cents.
 	if !slices.ContainsFunc(core.Currencies, func(c core.Currency) bool { return c.Code == b.Currency }) {
-		return fmt.Errorf("%q is not a currency kakei knows", b.Currency)
+		return fmt.Errorf("%q is not a currency pecunia knows", b.Currency)
 	}
 	// A budget with no category caps nothing at all. This is the one reference
-	// in kakei that is required rather than offered.
+	// in pecunia that is required rather than offered.
 	if b.Category.ID == 0 {
 		return errors.New("a budget caps one category — pick the one it is for")
 	}
@@ -188,7 +188,7 @@ func (b Budget) Validate() error {
 }
 
 // CycleRange is the first and last day of a cycle, which is what the spend
-// query compares against. Dates are compared as text everywhere in kakei:
+// query compares against. Dates are compared as text everywhere in pecunia:
 // YYYY-MM-DD sorts the way it reads, and text is what lets the index be used —
 // strftime on the column would scan every row instead.
 func CycleRange(cycle string) (string, string, error) {

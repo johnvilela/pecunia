@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/accounts"
-	"kakei/internal/core"
-	"kakei/internal/db"
+	"pecunia/internal/accounts"
+	"pecunia/internal/core"
+	"pecunia/internal/db"
 )
 
-// runAccountsIn points KAKEI_DB at a database of this case's own, captures what
+// runAccountsIn points PECUNIA_DB at a database of this case's own, captures what
 // the command writes and returns both. Every case gets its own SQLite file, so
 // nothing here depends on the order tests run in.
 //
@@ -22,7 +22,7 @@ import (
 // territory and are covered through the store instead.
 func runAccountsIn(t *testing.T, dbPath string, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", dbPath)
+	t.Setenv("PECUNIA_DB", dbPath)
 
 	var buf bytes.Buffer
 	old := out
@@ -36,8 +36,8 @@ func runAccountsIn(t *testing.T, dbPath string, args ...string) (string, error) 
 // newTestDB returns the path to an empty, migrated database.
 func newTestDB(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "kakei.db")
-	t.Setenv("KAKEI_DB", path)
+	path := filepath.Join(t.TempDir(), "pecunia.db")
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func newTestDB(t *testing.T) string {
 // seed puts one account in the database at path and hands it back.
 func seed(t *testing.T, path string, a accounts.Account) accounts.Account {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func seed(t *testing.T, path string, a accounts.Account) accounts.Account {
 // freeze flips an account to frozen in the database at path.
 func freeze(t *testing.T, path string, a accounts.Account) {
 	t.Helper()
-	t.Setenv("KAKEI_DB", path)
+	t.Setenv("PECUNIA_DB", path)
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -99,10 +99,10 @@ func TestAccountsHelp(t *testing.T) {
 			// cannot be created and it should still print.
 			got, err := runAccountsIn(t, filepath.Join(t.TempDir(), "unused.db"), tc.args...)
 			if err != nil {
-				t.Fatalf("kakei ac %v = %v", tc.args, err)
+				t.Fatalf("pecunia ac %v = %v", tc.args, err)
 			}
 			if !strings.Contains(got, tc.want) {
-				t.Fatalf("kakei ac %v printed:\n%s\nwant it to mention %q", tc.args, got, tc.want)
+				t.Fatalf("pecunia ac %v printed:\n%s\nwant it to mention %q", tc.args, got, tc.want)
 			}
 		})
 	}
@@ -114,7 +114,7 @@ func TestAccountsList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, "no accounts yet") || !strings.Contains(got, "kakei ac n") {
+		if !strings.Contains(got, "no accounts yet") || !strings.Contains(got, "pecunia ac n") {
 			t.Fatalf("empty list printed:\n%s", got)
 		}
 	})
@@ -163,7 +163,7 @@ func TestAccountsList(t *testing.T) {
 		}
 		for _, want := range []string{"WLLT2", "OLDAC", "❄"} {
 			if !strings.Contains(got, want) {
-				t.Errorf("kakei ac --all is missing %q:\n%s", want, got)
+				t.Errorf("pecunia ac --all is missing %q:\n%s", want, got)
 			}
 		}
 	})
@@ -191,10 +191,10 @@ func TestAccountsDetails(t *testing.T) {
 		for _, ref := range []string{"WLLT2", "wllt2", "1"} {
 			got, err := runAccountsIn(t, path, ref)
 			if err != nil {
-				t.Fatalf("kakei ac %s = %v", ref, err)
+				t.Fatalf("pecunia ac %s = %v", ref, err)
 			}
 			if !strings.Contains(got, a.Name) || !strings.Contains(got, "₿1.50000000") {
-				t.Errorf("kakei ac %s printed:\n%s", ref, got)
+				t.Errorf("pecunia ac %s printed:\n%s", ref, got)
 			}
 		}
 	})
@@ -257,7 +257,7 @@ func TestAccountsWithoutADatabase(t *testing.T) {
 	// A directory where the database file should be: opening it must fail
 	// loudly rather than panic.
 	dir := t.TempDir()
-	path := filepath.Join(dir, "kakei.db")
+	path := filepath.Join(dir, "pecunia.db")
 	if err := os.Mkdir(path, 0o755); err != nil {
 		t.Fatal(err)
 	}

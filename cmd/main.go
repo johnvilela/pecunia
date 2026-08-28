@@ -7,28 +7,28 @@ import (
 	"fmt"
 	"os"
 
-	"kakei/internal/core"
-	"kakei/internal/db"
+	"pecunia/internal/core"
+	"pecunia/internal/db"
 )
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.2.1"
+var version = "0.3.0"
 
 const banner = `
- ___  __    ________  ___  __    _______   ___
-|\  \|\  \ |\   __  \|\  \|\  \ |\  ___ \ |\  \
-\ \  \/  /|\ \  \|\  \ \  \/  /|\ \   __/|\ \  \
- \ \   ___  \ \   __  \ \   ___  \ \  \_|/_\ \  \
-  \ \  \\ \  \ \  \ \  \ \  \\ \  \ \  \_|\ \ \  \
-   \ \__\\ \__\ \__\ \__\ \__\\ \__\ \_______\ \__\
-    \|__| \|__|\|__|\|__|\|__| \|__|\|_______|\|__|
+ ________  _______    ________  ___  ___  ________   ___  ________
+|\   __  \|\  ___ \  |\   ____\|\  \|\  \|\   ___  \|\  \|\   __  \
+\ \  \|\  \ \   __/| \ \  \___|\ \  \\\  \ \  \\ \  \ \  \ \  \|\  \
+ \ \   ____\ \  \_|/__\ \  \    \ \  \\\  \ \  \\ \  \ \  \ \   __  \
+  \ \  \___|\ \  \_|\ \\ \  \____\ \  \\\  \ \  \\ \  \ \  \ \  \ \  \
+   \ \__\    \ \_______\\ \_______\ \_______\ \__\\ \__\ \__\ \__\ \__\
+    \|__|     \|_______| \|_______|\|_______|\|__| \|__|\|__|\|__|\|__|
 
-              personal finance, on your machine
+                   personal finance, on your machine
 `
 
 const help = `Usage:
-  kakei <command> [flags]
+  pecunia <command> [flags]
 
 Commands:
   setup             create the SQLite database (--force to back up and recreate)
@@ -45,14 +45,14 @@ Commands:
   mcp               serve every module to an AI agent over MCP, on stdio
                     (mcp install [AGENT] hooks it up to claude-code, codex,
                     gemini or opencode)
-  upgrade           update kakei to the latest release (-y to skip the prompt)
+  upgrade           update pecunia to the latest release (-y to skip the prompt)
   migrate           apply any pending database migrations
   version           show the version
   help              show this message
 
 Environment:
-  KAKEI_DB   path to the database file
-             (default: ~/.config/kakei/kakei.db)
+  PECUNIA_DB   path to the database file
+             (default: ~/.config/pecunia/pecunia.db)
 `
 
 func main() {
@@ -117,7 +117,7 @@ func run() int {
 		return report("migrate", runMigrate())
 
 	default:
-		fmt.Fprintf(os.Stderr, "kakei: unknown command %q\n\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "pecunia: unknown command %q\n\n", os.Args[1])
 		fmt.Fprint(os.Stderr, help)
 		return 2
 	}
@@ -142,7 +142,7 @@ func report(cmd string, err error) int {
 	case err == nil, errors.Is(err, core.ErrCancelled):
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "kakei %s: %v\n", cmd, err)
+		fmt.Fprintf(os.Stderr, "pecunia %s: %v\n", cmd, err)
 		return 1
 	}
 }

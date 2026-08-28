@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"kakei/internal/cards"
-	"kakei/internal/logs"
+	"pecunia/internal/cards"
+	"pecunia/internal/logs"
 )
 
 // DB is the slice of *sql.DB and *sql.Tx this package needs. Refresh takes one
@@ -328,7 +328,7 @@ func (s *Store) Open(c cards.Card) (Bill, error) {
 	return Bill{}, ErrNotFound
 }
 
-// OldestUnpaid is what `kakei cc pay` offers first: the bill that has been owed
+// OldestUnpaid is what `pecunia cc pay` offers first: the bill that has been owed
 // the longest. Nothing owing is ErrNotFound, not an empty bill.
 func (s *Store) OldestUnpaid(c cards.Card) (Bill, error) {
 	owing, err := s.Unpaid(c)
@@ -342,7 +342,7 @@ func (s *Store) OldestUnpaid(c cards.Card) (Bill, error) {
 }
 
 // Unpaid is every bill that has closed and still owes something, oldest first —
-// what `kakei cc pay` offers to choose from. The open bill is left out: it is
+// what `pecunia cc pay` offers to choose from. The open bill is left out: it is
 // still taking charges, and settling a total that has not stopped moving is not
 // paying a bill.
 func (s *Store) Unpaid(c cards.Card) ([]Bill, error) {

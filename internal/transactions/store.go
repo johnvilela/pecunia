@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"kakei/internal/bills"
-	"kakei/internal/cards"
-	"kakei/internal/logs"
+	"pecunia/internal/bills"
+	"pecunia/internal/cards"
+	"pecunia/internal/logs"
 )
 
 // Scope is how far an edit or a delete reaches through an installment series.
@@ -510,7 +510,7 @@ func (s *Store) refuseFrozen(t Transaction) error {
 		return err
 	}
 	if frozen {
-		return fmt.Errorf("%s is frozen — unfreeze it with `kakei ac %s freeze` before filing money against it",
+		return fmt.Errorf("%s is frozen — unfreeze it with `pecunia ac %s freeze` before filing money against it",
 			code, code)
 	}
 	return nil

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"kakei/internal/transactions"
+	"pecunia/internal/transactions"
 )
 
-// on is a date written the way the rest of kakei writes them.
+// on is a date written the way the rest of pecunia writes them.
 func on(s string) time.Time {
 	d, err := time.Parse(DateLayout, s)
 	if err != nil {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"kakei/internal/db"
+	"pecunia/internal/db"
 )
 
 // newTestDB gives the caller its own SQLite file in its own temp dir, so no two
@@ -15,7 +15,7 @@ import (
 // are most of what the schema is worth, and only the migration path builds them.
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	t.Setenv("KAKEI_DB", filepath.Join(t.TempDir(), "kakei.db"))
+	t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
 	conn, err := db.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func insertGoal(conn *sql.DB, name string, target int64, currency, kind string) 
 }
 
 // seedGoal and seedTransaction write through raw SQL rather than through the
-// stores. This package cannot import kakei/internal/transactions — that package
+// stores. This package cannot import pecunia/internal/transactions — that package
 // imports this one, because a transaction names the goal it feeds — and the
 // same rule holds for its tests, which live in this package too.
 func seedGoal(t *testing.T, conn *sql.DB, name string, target int64, currency, kind string) int64 {

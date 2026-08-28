@@ -10,7 +10,7 @@ This picks up the deferred list from [[decisions/0003-static-stripped-build-scri
 
 ## Version source of truth
 
-The CLI had **no version at all** before this. Now: `var version = "0.1.0"` in `cmd/main.go`, printed by `kakei version` / `-v` / `--version`. The MCP server identity in `cmd/mcp.go` reuses the same var (it was a hardcoded, drifting `"1.0.0"`).
+The CLI had **no version at all** before this. Now: `var version = "0.1.0"` in `cmd/main.go`, printed by `pecunia version` / `-v` / `--version`. The MCP server identity in `cmd/mcp.go` reuses the same var (it was a hardcoded, drifting `"1.0.0"`).
 
 **Releasing = bumping that var in a PR.** No ldflags stamping, no bots, no VERSION file — the checked-in literal is the version. The release workflow greps it out of `cmd/main.go`.
 
@@ -19,7 +19,7 @@ The CLI had **no version at all** before this. Now: `var version = "0.1.0"` in `
 - `.github/workflows/ci.yml` — on `pull_request` to master, job `checks`: `gofmt -l` (must be empty), `go vet ./...`, `go build ./cmd`, `go test ./...`. Mirrors `.githooks/pre-commit` plus tests (the hook's "no tests yet" deferral in [[rules/git-hooks]] was stale — 48 test files). golangci-lint stays deferred per that rule.
 - `.github/workflows/release.yml` — on push to master: greps the version, exits early if tag `v<version>` exists, else cross-compiles 4 tarballs (linux/darwin × amd64/arm64, `CGO_ENABLED=0` + the `build.sh` flags — pure-Go sqlite makes this trivial) and `gh release create` with `--generate-notes`. Merges that don't bump the version release nothing.
 
-Module path is bare `kakei` ([[decisions/0002-flat-cmd-package-layout]] territory), so `go install` can never work — the tarballs are the only distribution.
+Module path is bare `pecunia` ([[decisions/0002-flat-cmd-package-layout]] territory), so `go install` can never work — the tarballs are the only distribution.
 
 ## Branch protection
 
@@ -27,12 +27,12 @@ A repo **ruleset** (id 21690437), not classic protection — classic can't requi
 
 ## Verification (all live)
 
-- `kakei version` → `0.1.0`; suite green locally.
+- `pecunia version` → `0.1.0`; suite green locally.
 - Setup commit `7ce910f` was the last direct push to master (ruleset created only after it landed — ordering matters, the ruleset would have blocked its own setup commit).
 - Release run created v0.1.0 with all 4 tarballs; the linux_amd64 one was downloaded, extracted and prints `0.1.0`.
 - A probe push to master was rejected with GH013: "Changes must be made through a pull request" + "Required status check 'checks' is expected".
 
-One flake note: the very first `go test ./...` after the edits failed in `kakei/cmd` and never reproduced across 6 re-runs (full suite and package-level). Not chased; if CI ever fails the same way, it's a pre-existing flake, not the workflow.
+One flake note: the very first `go test ./...` after the edits failed in `pecunia/cmd` and never reproduced across 6 re-runs (full suite and package-level). Not chased; if CI ever fails the same way, it's a pre-existing flake, not the workflow.
 
 ## Skipped
 

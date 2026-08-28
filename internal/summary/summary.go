@@ -10,13 +10,13 @@ import (
 	"database/sql"
 	"time"
 
-	"kakei/internal/accounts"
-	"kakei/internal/bills"
-	"kakei/internal/budgets"
-	"kakei/internal/cards"
-	"kakei/internal/goals"
-	"kakei/internal/recurring"
-	"kakei/internal/transactions"
+	"pecunia/internal/accounts"
+	"pecunia/internal/bills"
+	"pecunia/internal/budgets"
+	"pecunia/internal/cards"
+	"pecunia/internal/goals"
+	"pecunia/internal/recurring"
+	"pecunia/internal/transactions"
 )
 
 // Period is the window a summary covers, both ends inclusive. A day is a period
@@ -27,7 +27,7 @@ type Period struct{ From, To string } // YYYY-MM-DD
 func (p Period) Day() bool { return p.From == p.To }
 
 // Contains is whether a date falls in the window. Dates are compared as text
-// everywhere in kakei: YYYY-MM-DD sorts the same way it reads, and a string
+// everywhere in pecunia: YYYY-MM-DD sorts the same way it reads, and a string
 // carries no timezone to disagree about.
 func (p Period) Contains(date string) bool { return p.From <= date && date <= p.To }
 
@@ -52,7 +52,7 @@ type Summary struct {
 	// In and Out are keyed by currency code and both hold positive figures —
 	// the direction is the field, not the sign. There is no combined total,
 	// here or anywhere: centavos and satoshis do not add up, and there is no
-	// rate in kakei to make them.
+	// rate in pecunia to make them.
 	In, Out map[string]int64
 	// MTD is what has gone out since the 1st. Nil on a month summary, where the
 	// totals above already are the month.
@@ -61,13 +61,13 @@ type Summary struct {
 	Due  Board // payable now, or already late
 	Soon Board // lands inside the next seven days, today excluded
 
-	Accounts []accounts.Account // frozen ones left out, as `kakei ac` leaves them
+	Accounts []accounts.Account // frozen ones left out, as `pecunia ac` leaves them
 	Cards    []cards.Card
 	Goals    []goals.Goal
 	// Budgets are read for the month the window falls in, whatever the window
 	// is: a budget is a cap on a month, so a day summary shows the month its day
 	// belongs to rather than a day's worth of one. Archived ones are left out,
-	// as `kakei bg` leaves them.
+	// as `pecunia bg` leaves them.
 	Budgets []budgets.Budget
 }
 
@@ -132,7 +132,7 @@ func Collect(conn *sql.DB, p Period, today time.Time) (Summary, error) {
 // collectLedger reads the window's transactions and totals them. On a day
 // summary it reads from the 1st instead, which is what makes the month-to-date
 // figure free: the rows are already here, and there is no aggregate query
-// anywhere in kakei to ask for it a second way.
+// anywhere in pecunia to ask for it a second way.
 func (s *Summary) collectLedger(conn *sql.DB) error {
 	from := s.Period.From
 	if s.Period.Day() {
@@ -183,7 +183,7 @@ func (s *Summary) collectBalances(conn *sql.DB) error {
 		return err
 	}
 	for _, a := range accs {
-		// Frozen accounts are out of play, and `kakei ac` hides them too.
+		// Frozen accounts are out of play, and `pecunia ac` hides them too.
 		if !a.IsFrozen {
 			s.Accounts = append(s.Accounts, a)
 		}
@@ -241,7 +241,7 @@ func (s *Summary) collectDue(conn *sql.DB) error {
 	}
 
 	// ponytail: one Unpaid per card, and every one of them writes — statements
-	// are generated on read. `kakei cc bill` already walks every card the same
+	// are generated on read. `pecunia cc bill` already walks every card the same
 	// way, so a summary is no more expensive than a command that ships.
 	store := bills.NewStoreAt(conn, func() time.Time { return s.Today })
 	for _, c := range s.Cards {

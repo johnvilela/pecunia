@@ -9,7 +9,7 @@
 -- to what, by whom, when.
 CREATE TABLE logs (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- Who caused it: the user at the terminal, kakei itself (generated card
+  -- Who caused it: the user at the terminal, pecunia itself (generated card
   -- bills, the starter categories), or — reserved, nothing writes it yet — an
   -- AI on the other end of an integration.
   source     TEXT    NOT NULL CHECK (source IN ('user', 'system', 'ai')),

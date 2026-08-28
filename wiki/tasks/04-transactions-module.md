@@ -8,11 +8,11 @@ This module will be responsible for managing user's transactions. It will have c
 
 ## Commands
 
-list: "kakei transactions {DATE || DATE RANGE || TAG || Title}" or "kakei t"
-create: "kakei transactions new" or "kakei t n"
-edit: "kakei transactions edit {ID?}" or "kakei t e {ID?}"
-delete: "kakei transactions delete {ID?}" or "kakei t d {ID?}"
-details: "kakei transactions {ID?}" or "kakei t {ID?}"
+list: "pecunia transactions {DATE || DATE RANGE || TAG || Title}" or "pecunia t"
+create: "pecunia transactions new" or "pecunia t n"
+edit: "pecunia transactions edit {ID?}" or "pecunia t e {ID?}"
+delete: "pecunia transactions delete {ID?}" or "pecunia t d {ID?}"
+details: "pecunia transactions {ID?}" or "pecunia t {ID?}"
 
 ## Suggested structure
 
@@ -54,7 +54,7 @@ original spec, all written up in [[decisions/0008-transaction-double-entry-tags-
   rollback means neither the row nor the balance survives the refusal.
 - **Filters are flags, not positional.** `{DATE | RANGE | TAG | Title}` cannot express filtering
   by category, account or card, so every filter is a flag and the one positional argument is an
-  id. A bare `kakei t` is the current month, with a footer naming the scope.
+  id. A bare `pecunia t` is the current month, with a footer naming the scope.
 - **The tags autocomplete is a filterable multi-select over the tags already in use**, plus a
   free-text input for new ones. `huh`'s input suggestions match the whole value, so they could
   only ever complete the first tag of a list.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"kakei/internal/logs"
+	"pecunia/internal/logs"
 )
 
 // Transfer is money moving between two accounts you own, as one thing. It is

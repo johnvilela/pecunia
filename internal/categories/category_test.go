@@ -3,7 +3,7 @@ package categories
 import (
 	"testing"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 func TestCol(t *testing.T) {

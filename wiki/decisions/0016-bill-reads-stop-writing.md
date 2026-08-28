@@ -5,7 +5,7 @@ tags: [bills, credit-card, transactions, sqlite, performance, decisions]
 ## Decision
 
 Closes gap #2 of [[decisions/0013-data-integrity-fixes-and-known-gaps]]: every
-bill read (`kakei s`, `kakei cc bill`, `kakei bg`) wrote — `bills.Ensure` ran
+bill read (`pecunia s`, `pecunia cc bill`, `pecunia bg`) wrote — `bills.Ensure` ran
 its insert loop and `refreshOpen` rewrote `total, status, updated_at` for every
 open bill, unconditionally, on every read. Root cause: writes kept *payments*
 fresh (`refreshBills` → `bills.Refresh`) but a card *charge* never updated its
@@ -17,7 +17,7 @@ starts with one SELECT for the current cycle's row — its standing means every
 earlier cycle stands too, since this loop is the only creator and fills
 forward — and skips generation entirely when found. A read now writes only on
 the first read after a closing date passes: the new cycle's row, and the old
-bill's open→closed flip. The world changed; kakei records it.
+bill's open→closed flip. The world changed; pecunia records it.
 
 **A charge refreshes its own bill inside the write tx.** `bills.Charged(db,
 cardID, date)` — the charges' counterpart to `Refresh` — resolves the covering
@@ -43,8 +43,8 @@ freeze is untouched.
 TDD both steps. The staleness tests stamp `updated_at = '2000-01-01'` and
 count surviving sentinels across reads (datetime-second granularity makes a
 plain before/after compare a false pass). Live on a reseeded dev build:
-`kakei s`, `cc bill` and `bg` run back-to-back leave `card_bills`
-byte-identical, and `kakei l --entity card_bill` grows only when a bill really
+`pecunia s`, `cc bill` and `bg` run back-to-back leave `card_bills`
+byte-identical, and `pecunia l --entity card_bill` grows only when a bill really
 appears. Commits: `fix(bills): stop reads writing when nothing changed`,
 `fix(bills): refresh a charge's bill at write time, not on read`.
 

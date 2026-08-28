@@ -4,7 +4,7 @@ tags: [tui, huh, validation, bug]
 
 ## What happened
 
-User asked "Does the seed on dev db updated with cards?" while verifying, a card turned up in the dev DB with no name — `[PXQ55]`. Root cause: under a pty whose stdin hits EOF, `huh`'s `form.Run()` returns `nil` without ever running the field validators, including the "name is required" check. The create command then happily inserted a row with a blank name. This affected both `kakei cc n` and `kakei ac n` — pre-existing in `accounts` from the original module, just first surfaced now, not introduced by the credit-card work.
+User asked "Does the seed on dev db updated with cards?" while verifying, a card turned up in the dev DB with no name — `[PXQ55]`. Root cause: under a pty whose stdin hits EOF, `huh`'s `form.Run()` returns `nil` without ever running the field validators, including the "name is required" check. The create command then happily inserted a row with a blank name. This affected both `pecunia cc n` and `pecunia ac n` — pre-existing in `accounts` from the original module, just first surfaced now, not introduced by the credit-card work.
 
 ## Fix
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"kakei/internal/core"
+	"pecunia/internal/core"
 )
 
 // The renderers below are the only part of ui.go that runs without a TTY —
