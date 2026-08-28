@@ -54,7 +54,8 @@ func runSetup(force bool) error {
 	// A declined or TTY-less prompt (a script, a test) is a no either way,
 	// which is why the error is dropped. "kakei mcp install" re-offers it.
 	if ok, _ := core.Confirm("Hook kakei up to an AI agent?",
-		"Registers this binary's MCP server. Re-run anytime: kakei mcp install"); ok {
+		"Registers this binary's MCP server. Re-run anytime: kakei mcp install",
+		"Yes, install"); ok {
 		return runMCPInstall(nil)
 	}
 	return nil

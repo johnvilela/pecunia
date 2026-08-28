@@ -242,7 +242,7 @@ func deleteCard(s *cards.Store, args []string) error {
 	}
 	ok, err := core.Confirm(
 		fmt.Sprintf("Delete %s (%s)?", c.Code, c.Name),
-		"This cannot be undone.")
+		"This cannot be undone.", "Yes, delete")
 	if err != nil {
 		return err
 	}

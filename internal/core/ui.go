@@ -78,11 +78,11 @@ func CurrencyOptions() []huh.Option[string] {
 	return opts
 }
 
-func Confirm(title, description string) (bool, error) {
+func Confirm(title, description, affirmative string) (bool, error) {
 	ok := false
 	err := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title(title).Description(description).
-			Affirmative("Yes, delete").Negative("Cancel").Value(&ok),
+			Affirmative(affirmative).Negative("Cancel").Value(&ok),
 	)).WithTheme(huh.ThemeCharm()).Run()
 	if errors.Is(err, huh.ErrUserAborted) {
 		return false, nil

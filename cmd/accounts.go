@@ -254,7 +254,7 @@ func deleteAccount(s *accounts.Store, args []string) error {
 	}
 	ok, err := core.Confirm(
 		fmt.Sprintf("Delete %s (%s)?", a.Code, a.Name),
-		"This cannot be undone.")
+		"This cannot be undone.", "Yes, delete")
 	if err != nil {
 		return err
 	}
