@@ -271,24 +271,26 @@ type recurringFixture struct {
 // recurringFixtures cover every state the board renders: one overdue, one still
 // upcoming, one settled, one on a credit card and one archived.
 //
-// The two days are picked around the 1st and the 28th rather than today, so the
-// same fixtures land in different states depending on when the seeder is run —
-// which is the point of looking at a dev database.
+// The open/due windows tile the whole month — ALUGL due on the 1st is overdue
+// from the 2nd, ENERG/WATER/NFLIX are open back to back through the 30th, and
+// SEGUR opens on the last day — so the board shows every state whatever day the
+// seeder runs. Only two dates fall short, and can't not: nothing can be overdue
+// on the 1st, and nothing upcoming on the month's last day.
 var recurringFixtures = []recurringFixture{
 	{
 		Bill: recurring.Bill{Code: "ENERG", Name: "Energia", Description: "Neoenergia",
-			Color: "amber", Expected: 21490, OpenDay: 5, DueDay: 15, Tags: []string{"casa", "fixo"}},
+			Color: "amber", Expected: 21490, OpenDay: 1, DueDay: 15, Tags: []string{"casa", "fixo"}},
 		Account: "INTER", Category: "UTILS", PaidCycles: 3, Vary: 1830,
 	},
 	{
 		Bill: recurring.Bill{Code: "ALUGL", Name: "Aluguel", Color: "red",
-			Expected: 180000, OpenDay: 1, DueDay: 10, Tags: []string{"casa"}},
+			Expected: 180000, OpenDay: 1, DueDay: 1, Tags: []string{"casa"}},
 		Account: "NUBON", Category: "HOME1", PaidCycles: 2,
 	},
 	{
 		// On the card, and cheap enough that it never troubles NUCRD's limit.
 		Bill: recurring.Bill{Code: "NFLIX", Name: "Netflix", Description: "plano família",
-			Color: "violet", Expected: 5590, OpenDay: 22, DueDay: 28, Tags: []string{"lazer"}},
+			Color: "violet", Expected: 5590, OpenDay: 22, DueDay: 30, Tags: []string{"lazer"}},
 		Card: "NUCRD", Category: "ENTER", PaidCycles: 4,
 	},
 	{
@@ -301,7 +303,7 @@ var recurringFixtures = []recurringFixture{
 	{
 		// No expected amount: a bill nobody has seen a number for yet.
 		Bill: recurring.Bill{Code: "WATER", Name: "Água", Color: "cyan",
-			OpenDay: 12, DueDay: 20},
+			OpenDay: 12, DueDay: 21},
 		Account: "INTER", Category: "UTILS",
 	},
 	{
