@@ -680,20 +680,23 @@ func TestSeedRecurring(t *testing.T) {
 			onCard = onCard || b.IsCard()
 		}
 		// A dev database whose board is all one colour is not worth looking at,
-		// and every state has its own row rendering to check.
+		// and every state has its own row rendering to check. The fixtures'
+		// windows tile the month so this holds whatever day the test runs.
 		want := []string{
-			recurring.StatusOverdue, recurring.StatusOpen,
-			recurring.StatusUpcoming, recurring.StatusPaid, recurring.StatusArchived,
+			recurring.StatusOpen, recurring.StatusPaid, recurring.StatusArchived,
 		}
+		today := time.Now()
 		// Except on the month's last day: a cycle opening today is open, not
 		// upcoming, and no open day lands later than the last day — so that one
 		// date cannot render upcoming for any bill whatsoever.
-		today := time.Now()
-		if today.Month() != today.AddDate(0, 0, 1).Month() {
-			want = []string{
-				recurring.StatusOverdue, recurring.StatusOpen,
-				recurring.StatusPaid, recurring.StatusArchived,
-			}
+		if today.Month() == today.AddDate(0, 0, 1).Month() {
+			want = append(want, recurring.StatusUpcoming)
+		}
+		// And except on the 1st: a seeded bill owes only for the month it was
+		// created in, and no due date lands before the 1st — so nothing can be
+		// overdue yet.
+		if today.Day() != 1 {
+			want = append(want, recurring.StatusOverdue)
 		}
 		for _, w := range want {
 			if !states[w] {
