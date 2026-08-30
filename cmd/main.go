@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.3.0"
+var version = "0.4.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
@@ -31,7 +31,9 @@ const help = `Usage:
   pecunia <command> [flags]
 
 Commands:
-  setup             create the SQLite database (--force to back up and recreate)
+  setup             create the SQLite database (--force to back up and
+                    recreate; --skills to install finance skills into your
+                    AI agents)
   summary | s       where you stand today (--date, --month)
   accounts | ac     manage accounts (new, edit, delete, freeze, details)
   credit-card | cc  manage credit cards (new, edit, delete, bill, pay)
@@ -77,8 +79,9 @@ func run() int {
 	case "setup":
 		fs := flag.NewFlagSet("setup", flag.ExitOnError)
 		force := fs.Bool("force", false, "back up the existing database and create a new one")
+		skills := fs.Bool("skills", false, "install pecunia's finance skills into your AI agents")
 		fs.Parse(os.Args[2:])
-		return report("setup", runSetup(*force))
+		return report("setup", runSetup(*force, *skills))
 
 	case "summary", "s":
 		return report("summary", runSummary(os.Args[2:]))
