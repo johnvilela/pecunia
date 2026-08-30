@@ -44,7 +44,8 @@ what an agent did.
 
 "install" registers this binary with an agent so nothing has to be
 hand-edited. AGENT is one of ` + agentList + `; leaving it out opens a
-picker.
+picker. "pecunia setup --skills" installs finance skills alongside, so the
+agent knows how to use these tools well.
 
 Amounts everywhere are integers in minor units (cents; satoshis for BTC).
 `

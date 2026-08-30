@@ -13,7 +13,7 @@ func TestRunSetup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "pecunia.db")
 	t.Setenv("PECUNIA_DB", path)
 
-	if err := runSetup(false); err != nil {
+	if err := runSetup(false, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -25,7 +25,7 @@ func TestRunSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runSetup(false); err != nil {
+	if err := runSetup(false, false); err != nil {
 		t.Fatal(err)
 	}
 	if after, _ := os.ReadFile(path); string(after) != string(before) {
@@ -33,7 +33,7 @@ func TestRunSetup(t *testing.T) {
 	}
 
 	// --force moves the old file aside and leaves a fresh one behind.
-	if err := runSetup(true); err != nil {
+	if err := runSetup(true, false); err != nil {
 		t.Fatal(err)
 	}
 	backups, err := filepath.Glob(path + ".*.bak")
@@ -65,7 +65,7 @@ func TestRunSetupSeedsCategories(t *testing.T) {
 
 	t.Run("a new database starts with the starter set", func(t *testing.T) {
 		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
-		if err := runSetup(false); err != nil {
+		if err := runSetup(false, false); err != nil {
 			t.Fatal(err)
 		}
 		if got := countCategories(t); got != len(categories.Starter) {
@@ -75,7 +75,7 @@ func TestRunSetupSeedsCategories(t *testing.T) {
 
 	t.Run("setup on an existing database tops up what is missing", func(t *testing.T) {
 		t.Setenv("PECUNIA_DB", filepath.Join(t.TempDir(), "pecunia.db"))
-		if err := runSetup(false); err != nil {
+		if err := runSetup(false, false); err != nil {
 			t.Fatal(err)
 		}
 
@@ -95,7 +95,7 @@ func TestRunSetupSeedsCategories(t *testing.T) {
 
 		// A database that predates the module must not need --force, which would
 		// mean backing up real data just to get categories.
-		if err := runSetup(false); err != nil {
+		if err := runSetup(false, false); err != nil {
 			t.Fatal(err)
 		}
 		if got := countCategories(t); got != len(categories.Starter) {

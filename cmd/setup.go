@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"pecunia/internal/db"
 )
 
-func runSetup(force bool) error {
+func runSetup(force, skills bool) error {
 	path, err := db.Path()
 	if err != nil {
 		return err
@@ -51,12 +52,26 @@ func runSetup(force bool) error {
 	if n > 0 {
 		fmt.Printf("seeded %d categories\n", n)
 	}
+	// The explicit flag installs without prompting, the way an agent argument
+	// does for "pecunia mcp install".
+	if skills {
+		return installSkills()
+	}
 	// A declined or TTY-less prompt (a script, a test) is a no either way,
 	// which is why the error is dropped. "pecunia mcp install" re-offers it.
 	if ok, _ := core.Confirm("Hook pecunia up to an AI agent?",
 		"Registers this binary's MCP server. Re-run anytime: pecunia mcp install",
 		"Yes, install"); ok {
-		return runMCPInstall(nil)
+		// Backing out of the agent picker shouldn't take the skills offer
+		// down with it.
+		if err := runMCPInstall(nil); err != nil && !errors.Is(err, core.ErrCancelled) {
+			return err
+		}
+	}
+	if ok, _ := core.Confirm("Teach your agent to manage your money?",
+		"Installs pecunia's finance skills for claude-code, codex, gemini and opencode. Re-run anytime: pecunia setup --skills",
+		"Yes, install"); ok {
+		return installSkills()
 	}
 	return nil
 }
