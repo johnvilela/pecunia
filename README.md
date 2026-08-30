@@ -55,7 +55,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `setup [--force]` | — | Create the SQLite database and seed starter categories, then offer to hook pecunia up to an AI agent. `--force` backs up the existing database and creates a fresh one |
+| `setup [--force] [--skills]` | — | Create the SQLite database and seed starter categories, then offer to hook pecunia up to an AI agent. `--force` backs up the existing database and creates a fresh one; `--skills` installs the finance skills into your AI agents |
 | `summary [--date YYYY-MM-DD] [--month]` | `s` | Where you stand on one screen: in and out, what needs paying, account and card balances, goal progress. The flags stack: `--month --date 2026-07-04` is that day's whole month |
 | `accounts [new\|edit\|delete\|freeze] [CODE\|ID]` | `ac` | Manage accounts. Bare `CODE\|ID` shows one in detail; `--all`/`-a` includes frozen accounts |
 | `credit-card [new\|edit\|delete\|bill\|pay] [CODE\|ID]` | `cc` | Manage credit cards. `bill [ref] [YYYY-MM]` lists bills or shows one, `pay` pays one |
@@ -88,6 +88,8 @@ Every command opens an interactive picker or form when you leave arguments out, 
 | `pecunia_logs` | Read the audit trail |
 
 Reads and writes go through the same stores the CLI uses, and every agent write is logged with source `ai` — `pecunia logs --source ai` shows exactly what an agent did. Amounts everywhere are integers in minor units (cents; satoshis for BTC).
+
+`pecunia setup --skills` installs four finance skills alongside — `pecunia-overview` (where you stand, with alerts and tips), `pecunia-budget` (caps built from your real spending), `pecunia-import` (statements from PDF/CSV/JSON, without duplicates) and `pecunia-health` (money leaks, ranked by impact) — into `~/.agents/skills` and `~/.claude/skills`, where all four supported agents read them.
 
 ## Data
 
