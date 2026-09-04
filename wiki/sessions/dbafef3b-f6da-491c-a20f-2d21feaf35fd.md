@@ -1,0 +1,31 @@
+---
+tags: [omni, mcp, ai, coach, go]
+lastUsed: 2026-09-04
+---
+
+## What happened
+
+User: add `/pecunia-coach` to the Omni plugin — an LLM-driven financial coach using whatever LLM Omni is configured with, reading the day's situation (bills due/overdue, card spend, account balances, goals), asking 3-5 questions, writing a plan via Omni's plan feature, updating that same plan on re-run, offering a twice-daily check-in routine, and a `--forget` flag to wipe the plan and its reminders. Full design and implementation write-up: [[decisions/0024-pecunia-coach-and-omni-prompt-commands]].
+
+### Exploration: two repos, in parallel
+
+Two Explore agents ran concurrently, one per repo:
+
+- **Pecunia side** confirmed the Omni plugin is entirely `cmd/omni.go` (manifest, `omni-manifest`, `omni-skills`, Telegram-command dispatch) plus `cmd/mcp.go`'s nine tools, and — critically — that Omni's own plugin execution contract (`pluginReply` in Omni's `server/plugin.go`) just execs the manifest's `argv` and relays stdout, 60s cap, **no LLM anywhere in a plugin command**. Also mapped every ready-made data source a coach could reuse: `internal/summary.Collect`, `collectAlerts`/`alertLines`, `plainSummary`/`plainBills`/`plainCC`/`plainGoals`/`plainBudgets` in `cmd/omni.go`, and the domain math already living in each module (`recurring.Bill.Current`, `budgets.Budget.Pace/Drift/Status`, `goals.Goal.Progress`). Found one real gap: no spend-by-category aggregate query exists anywhere.
+- **Omni side** mapped how `/agent` sessions actually run an LLM turn (`runClaudeAgent`/`runCodexAgent` in `server/agent.go`, MCP/skills wired per-workspace at install time), how Plans work (a markdown page per plan in the *memoria global wiki* at `omni-bot/plans/<slug>.md`, frontmatter `status: active|done`, written by the LLM via `TOOL:plan_save`, `plan_start` registering a daily 09:00 cron for a `#long`-tagged plan), and how Routines work (they're called crons — `crons(id, schedule, kind, text)`, kinds `message|prompt|agent`, created by the LLM via `TOOL:cron_add/edit/delete`). Conclusion: **plugins have no direct API to either** — only `/agent`, `/plan`, `/task` sessions can reach them.
+
+### Plan agent: three corrections, one flagged blind spot
+
+A Plan agent turned the exploration into an implementation plan, verifying every cited fact against both repos before finalizing it. It confirmed the direction (extend Omni's plugin manifest with a `prompt` field that starts an agent session instead of exec'ing) but made three corrections to the initial draft: no approval-gate mirroring is needed, since agent sessions are already yolo by design (Omni's own decision page: "Agent sessions stay yolo by design — their tools run inside the vendor CLI and are not interceptable"); the plans-directory question resolves via a context block Omni appends to the session's first message, not a placeholder; and `--forget` should identify its own crons by a fixed text marker (`[pecunia-coach]`) rather than tracked ids. It flagged one accepted blind spot: `applyAgentTools`'s confirmation lines replace the raw `TOOL:` lines in Omni's own chat history, but the vendor CLI's own transcript keeps the original — so a coach session can't reliably self-audit which cron ids it just created *within the same run*. Cross-run `--forget` still works, since every run gets a fresh job list.
+
+### Built: Omni's prompt-type plugin commands (PR #2)
+
+On branch `feat/prompt-commands`: `pluginCommand` gained a `Prompt` field (exactly one of `Argv`/`Prompt` required at manifest validation); `pluginReply` branches a prompt command into a fresh agent session (mirroring the `/agent` command path) instead of exec; the session's first message is the declared prompt + the owner's raw trailing words + Omni's own plans-dir and scheduled-jobs context; `applyAgentTools` extended to also honor `cron_add`/`cron_edit`/`cron_delete`, ungated. Version bumped to v0.25.0, `PLUGINS.md` and the plugin-system wiki decision updated. `gofmt`/`go vet`/`go test -race ./...` clean (one drive-by `gofmt -w` on three unrelated files landed as its own `style: gofmt` commit first). Pushed, opened as **PR #2** ("feat: prompt-type plugin commands run agent sessions"), and a CI watch (`gh pr checks 2 --watch`) was started — its outcome is not shown in this session's own record.
+
+### Built: pecunia's /pecunia-coach (not yet pushed)
+
+On branch `feat/coach-command`: a new `pecunia_situation` MCP tool composed entirely from existing renderers (no new formatting logic) — `internal/summary.Collect`, the recurring-bills list, `collectCC` (newly extracted out of `runOmniCC`), and `collectAlerts`. The 8th Omni-manifest entry, `pecunia_coach`, carries a `Prompt` instead of an `Argv` — its prompt tells the agent to call `pecunia_situation` first, keep exactly one plan page at a fixed path, interview the user on first run, update the plan and give 1-3 tips on later runs, offer a marker-tagged twice-daily cron, and handle `--forget` by deleting the page and every marker-tagged cron. `omniCmd` was converted from positional struct literals to named fields to make room for the new field. Skill file and README updated; version bumped 0.5.0 → 0.6.0.
+
+Verified live against a rebuilt `dev` binary: `./dev omni-manifest` showed all 8 commands, the new one with no argv and a non-empty prompt; a manual MCP JSON-RPC smoke test (`initialize` → `tools/call pecunia_situation`) was run against `./dev mcp`. `gofmt`/`go vet`/`go test ./...` clean. Committed locally in three commits (`feat(coach)`, `docs`, `chore: bump version to 0.6.0`) — **the branch was not pushed and no PR was opened within this session**, unlike the Omni side. The session's final actions were polling a background memoria-consolidation job before applying it and pushing; whether that push and PR-open happened afterward is not confirmed by this digest.
+
+Links: [[decisions/0024-pecunia-coach-and-omni-prompt-commands]] · [[decisions/0023-pecunia-is-an-omni-plugin]] · [[decisions/0017-mcp-server-exposes-every-module-as-a-tool]] · [[decisions/0012-summary-composes-existing-stores]]

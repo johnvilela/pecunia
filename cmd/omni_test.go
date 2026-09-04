@@ -235,8 +235,8 @@ func TestManifest(t *testing.T) {
 	if m.MCP.Command != "pecunia" || len(m.MCP.Args) != 1 || m.MCP.Args[0] != "mcp" {
 		t.Errorf("mcp entry is %+v", m.MCP)
 	}
-	if len(m.Commands) != 7 {
-		t.Fatalf("got %d commands; want 7", len(m.Commands))
+	if len(m.Commands) != 8 {
+		t.Fatalf("got %d commands; want 8", len(m.Commands))
 	}
 	for _, c := range m.Commands {
 		if !cmdName.MatchString(c.Name) {
@@ -249,9 +249,20 @@ func TestManifest(t *testing.T) {
 		if len(c.Description) == 0 || len(c.Description) > 256 {
 			t.Errorf("%s description is %d chars; want 1-256", c.Name, len(c.Description))
 		}
+		// Omni's contract: exactly one of argv and prompt.
+		if c.Prompt != "" {
+			if len(c.Argv) != 0 {
+				t.Errorf("%s declares both argv and prompt", c.Name)
+			}
+			continue
+		}
 		if len(c.Argv) < 2 || c.Argv[0] != "pecunia" || c.Argv[1] != "omni" {
 			t.Errorf("%s argv is %v; want pecunia omni ...", c.Name, c.Argv)
 		}
+	}
+	coach := m.Commands[len(m.Commands)-1]
+	if coach.Name != "pecunia_coach" || coach.Prompt != coachPrompt {
+		t.Errorf("last command is %q with prompt %d chars; want pecunia_coach carrying coachPrompt", coach.Name, len(coach.Prompt))
 	}
 }
 

@@ -111,6 +111,8 @@ That wires the MCP server and the skills (all of the above, plus `pecunia-omni`)
 | `/pecunia-alerts` | Only problems — overdue bills, budgets over cap, cards near their limit. Silent when all is well, which makes it a free daily nudge as an Omni scheduled task |
 | `/pecunia-add AMOUNT TITLE [@ACCOUNT] [#CATEGORY]` | Quick expense, e.g. `/pecunia-add 12.50 lunch #food`. With one account the `@CODE` is optional; with more, pecunia asks rather than guesses |
 
+One command does use the LLM — `/pecunia-coach` starts an agent session that reads your situation (via the `pecunia_situation` MCP tool), interviews you, keeps a single coaching plan in Omni's plan pages and offers twice-daily check-in reminders. Words after the command are a quick update for the coach; `/pecunia-coach --forget` wipes the plan and its reminders. Requires omni ≥ v0.25.0 — older installs reject the manifest.
+
 ## Data
 
 Everything lives in a single SQLite file:

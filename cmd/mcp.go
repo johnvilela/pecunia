@@ -92,6 +92,9 @@ func mcpServer(conn *sql.DB) *mcp.Server {
 	tool(s, conn, "pecunia_summary",
 		"Where the user stands: totals in and out, what is due or coming up, account and card balances, goals and budgets — for one day or a whole month. "+moneyNote,
 		summaryDo)
+	tool(s, conn, "pecunia_situation",
+		"The owner's current financial situation as one plain-text snapshot: cash flow today and month-to-date, alerts, account balances, credit cards with open statements and limit usage, recurring bills with due/overdue status, goals and budgets. Read-only. "+moneyNote,
+		situationDo)
 	tool(s, conn, "pecunia_logs",
 		"The audit trail, newest first: who (user, system or ai) did what to which row, with field-level diffs on edits.",
 		logsDo)
