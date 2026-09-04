@@ -51,6 +51,10 @@ instead of re-computing it yourself:
 - `/pecunia-add AMOUNT TITLE [@ACCOUNT] [#CATEGORY]` — quick expense, e.g.
   `/pecunia-add 12.50 lunch #food`. With one account the @CODE is optional;
   writes it makes are the user's own, not source "ai".
+- `/pecunia-coach` — the one LLM command: an agent session that reads the
+  situation, keeps a single coaching plan and gives tips. Words after the
+  command are a quick update for the coach; `--forget` wipes the plan and
+  its reminders. Needs omni ≥ v0.25.0.
 
 ## what stays yours
 

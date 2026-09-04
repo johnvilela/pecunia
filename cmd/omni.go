@@ -45,10 +45,13 @@ type omniMCP struct {
 	Args    []string `json:"args"`
 }
 
+// A command declares exactly one of Argv (omni execs it) and Prompt (omni
+// runs it as an agent session — needs omni ≥ v0.25.0).
 type omniCmd struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Argv        []string `json:"argv"`
+	Argv        []string `json:"argv,omitempty"`
+	Prompt      string   `json:"prompt,omitempty"`
 }
 
 func manifest() omniManifest {
@@ -59,13 +62,14 @@ func manifest() omniManifest {
 		MCP:         omniMCP{Command: "pecunia", Args: []string{"mcp"}},
 		Skills:      true,
 		Commands: []omniCmd{
-			{"pecunia_resume", "Where you stand: balances, money in and out, and any alerts. Add a period: today, yesterday, week, last week, month, last month, YYYY-MM or YYYY-MM-DD.", []string{"pecunia", "omni", "resume"}},
-			{"pecunia_goals", "Goals and how far along each one is.", []string{"pecunia", "omni", "goals"}},
-			{"pecunia_bills", "Recurring bills and where this cycle stands: upcoming, open, overdue or paid.", []string{"pecunia", "omni", "bills"}},
-			{"pecunia_cc", "Credit cards: limit, balance, available and the current statement.", []string{"pecunia", "omni", "cc"}},
-			{"pecunia_alerts", "Only problems: overdue bills, budgets over cap, cards near their limit. Prints nothing when all is well.", []string{"pecunia", "omni", "alerts"}},
-			{"pecunia_budget", "This month's budgets against what was actually spent.", []string{"pecunia", "omni", "budget"}},
-			{"pecunia_add", "Quick expense: amount then title, e.g. 12.50 lunch. @CODE picks the account, #CODE the category.", []string{"pecunia", "omni", "add"}},
+			{Name: "pecunia_resume", Description: "Where you stand: balances, money in and out, and any alerts. Add a period: today, yesterday, week, last week, month, last month, YYYY-MM or YYYY-MM-DD.", Argv: []string{"pecunia", "omni", "resume"}},
+			{Name: "pecunia_goals", Description: "Goals and how far along each one is.", Argv: []string{"pecunia", "omni", "goals"}},
+			{Name: "pecunia_bills", Description: "Recurring bills and where this cycle stands: upcoming, open, overdue or paid.", Argv: []string{"pecunia", "omni", "bills"}},
+			{Name: "pecunia_cc", Description: "Credit cards: limit, balance, available and the current statement.", Argv: []string{"pecunia", "omni", "cc"}},
+			{Name: "pecunia_alerts", Description: "Only problems: overdue bills, budgets over cap, cards near their limit. Prints nothing when all is well.", Argv: []string{"pecunia", "omni", "alerts"}},
+			{Name: "pecunia_budget", Description: "This month's budgets against what was actually spent.", Argv: []string{"pecunia", "omni", "budget"}},
+			{Name: "pecunia_add", Description: "Quick expense: amount then title, e.g. 12.50 lunch. @CODE picks the account, #CODE the category.", Argv: []string{"pecunia", "omni", "add"}},
+			{Name: "pecunia_coach", Description: "Your financial coach: reads your situation, keeps one plan, gives tips. Words after the command are a quick update; --forget wipes the plan and its reminders.", Prompt: coachPrompt},
 		},
 	}
 }
@@ -449,35 +453,44 @@ type ccInfo struct {
 
 func runOmniCC() error {
 	return withConn(func(conn *sql.DB) error {
-		cs, err := cards.NewStore(conn).List()
+		infos, err := collectCC(conn)
 		if err != nil {
 			return err
-		}
-		store := bills.NewStore(conn)
-		infos := make([]ccInfo, len(cs))
-		for i, c := range cs {
-			infos[i].Card = c
-			open, err := store.Open(c)
-			switch {
-			case err == nil:
-				if infos[i].Live, err = store.LiveTotal(open); err != nil {
-					return err
-				}
-				infos[i].Open = &open
-			case !errors.Is(err, bills.ErrNotFound):
-				return err
-			}
-			unpaid, err := store.Unpaid(c)
-			if err != nil {
-				return err
-			}
-			for _, b := range unpaid {
-				infos[i].Owed += b.Owed()
-			}
 		}
 		fmt.Fprint(out, plainCC(infos))
 		return nil
 	})
+}
+
+// collectCC reads every card with its statements — what plainCC renders.
+func collectCC(conn *sql.DB) ([]ccInfo, error) {
+	cs, err := cards.NewStore(conn).List()
+	if err != nil {
+		return nil, err
+	}
+	store := bills.NewStore(conn)
+	infos := make([]ccInfo, len(cs))
+	for i, c := range cs {
+		infos[i].Card = c
+		open, err := store.Open(c)
+		switch {
+		case err == nil:
+			if infos[i].Live, err = store.LiveTotal(open); err != nil {
+				return nil, err
+			}
+			infos[i].Open = &open
+		case !errors.Is(err, bills.ErrNotFound):
+			return nil, err
+		}
+		unpaid, err := store.Unpaid(c)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range unpaid {
+			infos[i].Owed += b.Owed()
+		}
+	}
+	return infos, nil
 }
 
 func plainCC(infos []ccInfo) string {
