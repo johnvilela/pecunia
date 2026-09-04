@@ -34,6 +34,7 @@ func TestSkillFiles(t *testing.T) {
 	want := map[string]bool{
 		"pecunia-overview.md": true, "pecunia-budget.md": true,
 		"pecunia-import.md": true, "pecunia-health.md": true,
+		"pecunia-omni.md": true,
 	}
 	if len(entries) != len(want) {
 		t.Fatalf("embedded %d skills; want %d", len(entries), len(want))

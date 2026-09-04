@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.4.0"
+var version = "0.5.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
@@ -112,6 +112,18 @@ func run() int {
 
 	case "mcp":
 		return report("mcp", runMCP(os.Args[2:]))
+
+	// The Omni plugin contract: omni-manifest and omni-skills are what Omni
+	// calls at install time, omni is what its Telegram commands run. Machine
+	// faces, so none of them are in the help text.
+	case "omni-manifest":
+		return report("omni-manifest", runOmniManifest())
+
+	case "omni-skills":
+		return report("omni-skills", runOmniSkills(os.Args[2:]))
+
+	case "omni":
+		return report("omni", runOmni(os.Args[2:]))
 
 	case "upgrade":
 		return report("upgrade", runUpgrade(os.Args[2:]))

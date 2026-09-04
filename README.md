@@ -91,6 +91,26 @@ Reads and writes go through the same stores the CLI uses, and every agent write 
 
 `pecunia setup --skills` installs four finance skills alongside — `pecunia-overview` (where you stand, with alerts and tips), `pecunia-budget` (caps built from your real spending), `pecunia-import` (statements from PDF/CSV/JSON, without duplicates) and `pecunia-health` (money leaks, ranked by impact) — into `~/.agents/skills` and `~/.claude/skills`, where all four supported agents read them.
 
+## Omni plugin
+
+Pecunia is an [Omni](https://github.com/johnvilela/omni) plugin — the binary itself answers Omni's plugin contract, so on the Omni host:
+
+```sh
+omni plugins install johnvilela/pecunia
+```
+
+That wires the MCP server and the skills (all of the above, plus `pecunia-omni`) into Omni agent sessions, and registers Telegram commands that print your data instantly, with no LLM involved:
+
+| Command | What it shows |
+|---------|---------------|
+| `/pecunia-resume [period]` | Balances, money in and out, and any alerts. Periods: `today`, `yesterday`, `week`, `last week`, `month`, `last month`, `YYYY-MM`, `YYYY-MM-DD` |
+| `/pecunia-goals` | Every goal and its progress |
+| `/pecunia-bills` | Recurring bills and where this cycle stands |
+| `/pecunia-cc` | Cards: limit, used, available, the open statement |
+| `/pecunia-budget` | This month's caps against actual spend |
+| `/pecunia-alerts` | Only problems — overdue bills, budgets over cap, cards near their limit. Silent when all is well, which makes it a free daily nudge as an Omni scheduled task |
+| `/pecunia-add AMOUNT TITLE [@ACCOUNT] [#CATEGORY]` | Quick expense, e.g. `/pecunia-add 12.50 lunch #food`. With one account the `@CODE` is optional; with more, pecunia asks rather than guesses |
+
 ## Data
 
 Everything lives in a single SQLite file:
