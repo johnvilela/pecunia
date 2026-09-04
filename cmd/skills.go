@@ -34,7 +34,13 @@ func installSkills() error {
 	if err != nil {
 		return err
 	}
+	installed := 0
 	for _, e := range entries {
+		// pecunia-omni teaches the Telegram commands, which only exist where
+		// pecunia runs as an Omni plugin — omni-skills ships it, setup does not.
+		if e.Name() == "pecunia-omni.md" {
+			continue
+		}
 		data, err := skillFS.ReadFile("skills/" + e.Name())
 		if err != nil {
 			return err
@@ -48,7 +54,8 @@ func installSkills() error {
 				return err
 			}
 		}
+		installed++
 	}
-	fmt.Fprintf(out, "installed %d skills to ~/.agents/skills and ~/.claude/skills\n", len(entries))
+	fmt.Fprintf(out, "installed %d skills to ~/.agents/skills and ~/.claude/skills\n", installed)
 	return nil
 }
