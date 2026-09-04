@@ -71,4 +71,16 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [8a34db89](sessions/8a34db89-ce6a-4525-a01c-052289ef8b89.md) — master locked to PR-only with CI checks and release-on-merge (PR #1, merged), then the `pecunia upgrade` self-update command (PR #2, open at session end)
 - [52842417](sessions/52842417-3730-4f49-af46-f9654d86c3c8.md) — install script + README overhaul (PR #3, open for manual review)
 - [85b098e4](sessions/85b098e4-8278-4b05-8279-fbda23de2fcd.md) — status check; date-dependent seed test fixed (PR #5, merged); `pecunia setup --skills` built (PR #6, open, would cut v0.4.0)
-- [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin` (not yet opened as a PR)
+- [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin`, opened as PR #8, CI confirmed green, merge dispatched but unconfirmed
+
+### rules/commit-messages.md
+
+See [[rules/commit-messages]] for the full page (unchanged by this update).
+
+### rules/git-hooks.md
+
+See [[rules/git-hooks]] for the full page (unchanged by this update).
+
+### rules/tdd.md
+
+See [[rules/tdd]] for the full page (unchanged by this update).
