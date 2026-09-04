@@ -435,7 +435,7 @@ func seedRecurringPayments(conn *sql.DB) (int, error) {
 			}
 			t := transactions.Transaction{
 				Title: b.Name, Value: value, Kind: transactions.KindOutcome,
-				Date:     paidOn.AddDate(0, 0, 2).Format(recurring.DateLayout),
+				Date:     paidOn.Format(recurring.DateLayout),
 				Category: b.Category, Account: b.Account, Card: b.Card,
 				Tags: b.Tags, Recurring: transactions.Ref{ID: b.ID}, Cycle: occ.Cycle,
 			}
