@@ -154,3 +154,15 @@ Committed on branch `fix/seed-recurring-tiling` as `068e79a` — `fix(seed): til
 Note: an existing dev `pecunia.dev.db` keeps the old windows, since the seeder skips codes that already exist — delete and reseed to see the new coverage locally.
 
 Links: [[sessions/85b098e4-8278-4b05-8279-fbda23de2fcd]] · [[decisions/0011-recurring-bills-derived-from-payments]] · [[decisions/0022-setup-skills-installs-ai-agent-finance-skills]] · [[rules/tdd]]
+
+## Update: a duplicated day offset re-broke the future-date clamp
+
+Session: [[sessions/e22cf9b6-6521-4261-b791-0815460c124e]].
+
+PR #7's CI failed on `TestSeedRecurring/nothing_is_dated_into_the_future`: "Internet is dated 2026-09-05, which has not happened yet" (today was 2026-09-04). Root cause in `seedRecurringPayments`: `paidOn` was already computed with `paidOn.AddDate(0, 0, 2)` and clamped (`if paidOn.After(now) { paidOn = now }`), but the `Transaction` literal's `Date` field re-applied `paidOn.AddDate(0, 0, 2)` a second time when formatting — pushing the date past `now` and defeating the clamp it had just passed.
+
+Triggered by the `INTNT` (Internet) fixture (`OpenDay: 1, PaidNow: true`): its current cycle opens the 1st, +2 = the 3rd (not after "now" on the 4th, so the clamp didn't fire), then the second +2 pushed it to the 5th — tomorrow. Date-dependent, so it only started failing once the calendar lined up wrong — the same shape of bug as the fixture-window gap above, in a different function.
+
+Fix: drop the second `AddDate(0, 0, 2)` — `Date: paidOn.Format(recurring.DateLayout)`. One-line diff, verified against `go test ./scripts/seed/` and the full suite. Committed `b05fd8c` — `fix(seed): drop double day offset that dated payments into the future`, pushed straight to the open PR's branch (`feat/setup-skills`), which turned the PR's CI green.
+
+Links: [[sessions/e22cf9b6-6521-4261-b791-0815460c124e]]

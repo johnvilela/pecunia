@@ -32,6 +32,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0020-upgrade-command-self-updates-and-migrates](decisions/0020-upgrade-command-self-updates-and-migrates.md) — `pecunia upgrade` fetches GitHub releases, shows every skipped changelog, rename-swaps the binary and execs the new build's `migrate`; `-y` skips only the prompt; `core.Confirm` grew an affirmative-label param
 - [0021-install-script-and-readme-overhaul](decisions/0021-install-script-and-readme-overhaul.md) — `scripts/install.sh` (in-repo build or curl-pipeable release download with checksums), README rewritten from real help strings
 - [0022-setup-skills-installs-ai-agent-finance-skills](decisions/0022-setup-skills-installs-ai-agent-finance-skills.md) — `pecunia setup --skills` installs four finance skills (overview, budget, import, health) into `~/.agents/skills` and `~/.claude/skills`, covering all four supported agents
+- [0023-pecunia-is-an-omni-plugin](decisions/0023-pecunia-is-an-omni-plugin.md) — pecunia answers the Omni plugin contract itself (manifest, embedded skills, `pecunia omni <sub>` Telegram commands including `/pecunia-add`), no separate plugin repo
 
 ## Gotchas — bugs that already bit once
 
@@ -70,3 +71,4 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [8a34db89](sessions/8a34db89-ce6a-4525-a01c-052289ef8b89.md) — master locked to PR-only with CI checks and release-on-merge (PR #1, merged), then the `pecunia upgrade` self-update command (PR #2, open at session end)
 - [52842417](sessions/52842417-3730-4f49-af46-f9654d86c3c8.md) — install script + README overhaul (PR #3, open for manual review)
 - [85b098e4](sessions/85b098e4-8278-4b05-8279-fbda23de2fcd.md) — status check; date-dependent seed test fixed (PR #5, merged); `pecunia setup --skills` built (PR #6, open, would cut v0.4.0)
+- [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin` (not yet opened as a PR)
