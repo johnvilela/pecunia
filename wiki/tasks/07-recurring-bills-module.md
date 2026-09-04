@@ -131,3 +131,26 @@ Full session (resumed): [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]].
 Resolves the open question this page and [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]] both left hanging — three separate "commit this" requests whose outcome went unconfirmed. On a later, resumed session the user asked to "/git-commit separate the bill form the summary", since the recurring-bills module and the summary module ([[tasks/08-summary-module]]) had been built back to back in the same uncommitted working tree. Landed as `46a7efa` — `feat(bill): add recurring monthly bills tracked from their payments`, wiki as `d4b4735` — `docs(wiki): record the recurring bills module`. Because `cmd/main.go` carried both modules' dispatch cases, the summary case was removed, the bill commit made, then the case restored before the summary work was committed separately. `core.MoneyLine` and the owed-total fix ([[decisions/0012-summary-composes-existing-stores]]) rode in this commit rather than the summary one, since `internal/recurring/ui.go` calls `core.MoneyLine` and `internal/recurring/` had no prior commit to diff against.
 
 Links: [[sessions/b4318b40-e452-4a98-bf96-2a937fcccfdc]] · [[sessions/5321cd80-4dd0-4dea-85c3-391b008334d2]] · [[decisions/0012-summary-composes-existing-stores]] · [[tasks/08-summary-module]]
+
+## Update: fixture windows retiled to cover every board state on any day
+
+Session: [[sessions/85b098e4-8278-4b05-8279-fbda23de2fcd]].
+
+The dev-seed test `TestSeedRecurring` (the fixture-coverage case) failed depending on the day of the month: on days 29-30 of a 31-day month no fixture's window produced an `open` bill (the 22-28 window had gone overdue, the day-31 fixture hadn't opened yet), and on days 1-10 no fixture was `overdue` (seeded bills only owe for the month they are created in — past cycles don't exist for them). The test had only carved out an exception for the month's literal last day.
+
+Root-cause fix, not a day-29 patch: retiled every fixture's open/due window in `scripts/seed/main.go` so all five states render on any day of any month:
+
+- **ALUGL** (rent) due on the 1st → overdue from the 2nd through month-end
+- **ENERG** opens the 1st (was the 5th) → open days 1-15
+- **WATER** due the 21st (was the 20th), **NFLIX** due the 30th (was the 28th) → together with ENERG, open covers days 1-30
+- **SEGUR** opens the month's last day (upcoming)
+
+The test now excepts only the two dates that are mathematically impossible: upcoming on the month's last day (already excepted), and overdue on the 1st (new — no due date lands before the 1st).
+
+Verified: full suite green, `gofmt`/`go vet` clean, and a scratch script simulated the window arithmetic over every day of 2026-2028 (short months, the 2028 leap year included) confirming zero coverage gaps.
+
+Committed on branch `fix/seed-recurring-tiling` as `068e79a` — `fix(seed): tile recurring windows so every state renders daily` — then opened as PR #5, a CI prerequisite for [[decisions/0022-setup-skills-installs-ai-agent-finance-skills]]'s PR #6 (both touch `scripts/seed`, and master's suite was red on this test on several days of the month). The user approved and merged PR #5.
+
+Note: an existing dev `pecunia.dev.db` keeps the old windows, since the seeder skips codes that already exist — delete and reseed to see the new coverage locally.
+
+Links: [[sessions/85b098e4-8278-4b05-8279-fbda23de2fcd]] · [[decisions/0011-recurring-bills-derived-from-payments]] · [[decisions/0022-setup-skills-installs-ai-agent-finance-skills]] · [[rules/tdd]]
