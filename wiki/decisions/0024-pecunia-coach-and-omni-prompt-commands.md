@@ -24,9 +24,9 @@ A Plan agent then verified every cited fact against both repos before finalizing
 - The session's first message: the declared `Prompt` + `Owner's message: <raw trailing words>` (not word-split, unlike the exec path, so punctuation in a quick update survives) +, when memoria is set up, a line naming the plan-pages directory + the always-appended scheduled-jobs block (current cron list plus the `TOOL:cron_add/edit/delete` contract).
 - `applyAgentTools` (`server/media.go`) extended to also honor `cron_add`/`cron_edit`/`cron_delete` lines in an agent's reply (it previously only handled `task_start` and `send_file`), reusing the existing tool executors — no new gate, since agent-session tools are already ungated by design.
 - Version bumped to v0.25.0; `PLUGINS.md` gained a "Prompt commands" section; the `plugin-system` wiki decision got an appended section.
-- Pushed and opened as **PR #2** ("feat: prompt-type plugin commands run agent sessions"). A CI watch was started (`gh pr checks 2 --watch`) but its outcome is not confirmed by this session's record.
+- Pushed and opened as **PR #2** ("feat: prompt-type plugin commands run agent sessions").
 
-## Pecunia side: /pecunia-coach (branch `feat/coach-command`, not pushed)
+## Pecunia side: /pecunia-coach (branch `feat/coach-command`)
 
 - New `pecunia_situation` MCP tool (`cmd/mcp.go`), read-only, returning one plain-text snapshot assembled by `situationDo`/`plainSituation` (new `cmd/coach.go`): today's cash flow and month-to-date, alerts, accounts, cards with open-statement/limit-usage, recurring bills' due/overdue status, goals, budgets. Composed entirely from existing renderers (`plainSummary`, `plainBills`, `plainCC`, `plainGoals`, `plainBudgets`, `collectAlerts`) — no new formatting logic, the same "compose existing stores" call [[decisions/0012-summary-composes-existing-stores]] already made for `pecunia summary`.
 - `collectCC` was extracted out of `runOmniCC` in `cmd/omni.go` into its own function so `coach.go` can reuse it without duplicating the loop.
@@ -35,16 +35,22 @@ A Plan agent then verified every cited fact against both repos before finalizing
 - Skill `cmd/skills/pecunia-omni.md` and `README.md` updated to mention the command; it requires Omni ≥ v0.25.0, since older Omni's manifest validation rejects a command with no `argv`.
 - Version bumped 0.5.0 → 0.6.0.
 - Live-verified against a rebuilt `dev` binary: `./dev omni-manifest` showed all 8 commands, the new one with no argv and a non-empty prompt; a manual MCP JSON-RPC smoke test (`initialize` → `tools/call pecunia_situation`) was run against `./dev mcp`. `gofmt`/`go vet`/`go test ./...` stayed clean through the build.
-- Committed locally in three commits (`feat(coach): pecunia_situation MCP tool and the /pecunia-coach prompt command`, `docs: document /pecunia-coach in the readme`, `chore: bump version to 0.6.0`) — **the branch was not pushed and no PR was opened within this session**, unlike the Omni side.
+- Committed locally in three commits (`feat(coach): pecunia_situation MCP tool and the /pecunia-coach prompt command`, `docs: document /pecunia-coach in the readme`, `chore: bump version to 0.6.0`). The session then polled a background memoria-consolidation job, applied it, and committed the resulting wiki pages (decision 0024, this session's own page, the index) as a fourth commit — `docs(wiki): consolidate coach session — decision 0024, session page, index` — before pushing the branch and opening **PR #9**, "feat(coach): /pecunia-coach LLM financial coach". `gh pr checks 9 --watch` completed with exit code 0, confirming CI green.
 
 ## Sequencing dependency
 
-Omni's v0.25.0 (PR #2) has to merge and the running server has to upgrade before pecunia's `feat/coach-command` manifest can install anywhere — its `Prompt` field fails validation on older Omni.
+Omni's v0.25.0 (PR #2) has to merge and the running server has to upgrade before pecunia's PR #9 (`feat/coach-command`) can be merged and its manifest installed anywhere — its `Prompt` field fails validation on older Omni.
+
+## Update: both PRs' CI confirmed green; merging left to the user
+
+After PR #9 opened, the session committed one more wiki-page update, pushed again, and re-ran `gh pr checks 9 --watch` — still exit code 0. The session's closing report to the user stated both PRs' CI came back green: omni **PR #2** ("feat: prompt-type plugin commands run agent sessions", v0.25.0) and pecunia **PR #9** ("feat(coach): /pecunia-coach LLM financial coach", v0.6.0) — resolving the earlier open question about PR #2's own CI outcome.
+
+**Merging PR #2 was blocked by the permission classifier** — the agent could not merge it, so the rollout is manual and order-dependent, per the session's own closing instructions to the user: merge omni PR #2 first (releases v0.25.0) → upgrade the running Omni server → merge pecunia PR #9 (releases v0.6.0) → `omni plugins install johnvilela/pecunia` → try `/pecunia-coach` in Telegram. Older Omni rejects pecunia's new manifest (the `Prompt` field) at install time, which is why the order matters.
 
 ## Known holes
 
 - **In-session cron-id blind spot**: a coach run cannot reliably self-audit the cron ids it just created within that same run, since `applyAgentTools`'s confirmation text replaces the raw `TOOL:` lines in Omni's history while the vendor CLI's own transcript keeps the original. Cross-run `--forget` is unaffected — it reads a fresh job list every time.
-- `--forget` is enforced by the LLM following the prompt, not by code — a misfire leaves a stray plan page or cron the user can clean up via `/crons` or a re-run.
+- `--forget` and the single-plan rule are enforced by the LLM following the prompt, not by code — a misfire leaves a stray plan page or cron the user can clean up via `/crons` or a re-run.
 - Without memoria configured, the coach has no plans-dir line and runs stateless — the prompt explicitly covers this case.
 
 Links: [[decisions/0023-pecunia-is-an-omni-plugin]] · [[decisions/0017-mcp-server-exposes-every-module-as-a-tool]] · [[decisions/0012-summary-composes-existing-stores]] · [[decisions/0002-flat-cmd-package-layout]] · [[sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd]]

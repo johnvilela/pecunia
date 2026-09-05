@@ -33,7 +33,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0021-install-script-and-readme-overhaul](decisions/0021-install-script-and-readme-overhaul.md) — `scripts/install.sh` (in-repo build or curl-pipeable release download with checksums), README rewritten from real help strings
 - [0022-setup-skills-installs-ai-agent-finance-skills](decisions/0022-setup-skills-installs-ai-agent-finance-skills.md) — `pecunia setup --skills` installs four finance skills (overview, budget, import, health) into `~/.agents/skills` and `~/.claude/skills`, covering all four supported agents
 - [0023-pecunia-is-an-omni-plugin](decisions/0023-pecunia-is-an-omni-plugin.md) — pecunia answers the Omni plugin contract itself (manifest, embedded skills, `pecunia omni <sub>` Telegram commands including `/pecunia-add`), no separate plugin repo
-- [0024-pecunia-coach-and-omni-prompt-commands](decisions/0024-pecunia-coach-and-omni-prompt-commands.md) — `/pecunia-coach`, an LLM financial coach; required extending Omni's plugin manifest with a `prompt`-type command that runs a full agent session instead of exec
+- [0024-pecunia-coach-and-omni-prompt-commands](decisions/0024-pecunia-coach-and-omni-prompt-commands.md) — `/pecunia-coach`, an LLM financial coach; required extending Omni's plugin manifest with a `prompt`-type command that runs a full agent session instead of exec; both PRs (omni #2, pecunia #9) confirmed CI green, merge left to the user
 
 ## Gotchas — bugs that already bit once
 
@@ -73,7 +73,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [52842417](sessions/52842417-3730-4f49-af46-f9654d86c3c8.md) — install script + README overhaul (PR #3, open for manual review)
 - [85b098e4](sessions/85b098e4-8278-4b05-8279-fbda23de2fcd.md) — status check; date-dependent seed test fixed (PR #5, merged); `pecunia setup --skills` built (PR #6, open, would cut v0.4.0)
 - [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin`, opened as PR #8, CI confirmed green, merge dispatched but unconfirmed
-- [dbafef3b](sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd.md) — `/pecunia-coach`, an LLM financial coach: extended Omni's plugin contract with prompt-type commands that run a full agent session (PR #2 on omni, CI watch outcome unconfirmed), then built pecunia's `pecunia_situation` MCP tool and the coach's manifest entry/prompt (committed locally on `feat/coach-command`, not yet pushed)
+- [dbafef3b](sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd.md) — `/pecunia-coach`, an LLM financial coach: extended Omni's plugin contract with prompt-type commands that run a full agent session (PR #2 on omni), then built pecunia's `pecunia_situation` MCP tool and the coach's manifest entry/prompt (PR #9) — both PRs' CI confirmed green at session close, but merging PR #2 was blocked by the permission classifier, so the rollout order (merge omni #2 → upgrade omni → merge pecunia #9 → reinstall plugin) was handed to the user
 
 ## rules/commit-messages.md
 
