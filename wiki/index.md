@@ -2,6 +2,10 @@
 
 Map of the project memory. Read this first, then grep `wiki/` or follow the links. Pages carry YAML `tags:` frontmatter for topic lookup.
 
+## Concepts — architecture and ideas to revisit
+
+- [remote-access-to-canonical-sqlite](concepts/remote-access-to-canonical-sqlite.md) — keep SQLite authoritative on the Omni host; reach Pecunia through SSH/private networking, with snapshots or a service only if later requirements need them
+
 ## Rules — conventions every session must follow
 
 - [tdd](rules/tdd.md) — the red/green cycle used for all module work
@@ -74,6 +78,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [85b098e4](sessions/85b098e4-8278-4b05-8279-fbda23de2fcd.md) — status check; date-dependent seed test fixed (PR #5, merged); `pecunia setup --skills` built (PR #6, open, would cut v0.4.0)
 - [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin`, opened as PR #8, CI confirmed green, merge dispatched but unconfirmed
 - [dbafef3b](sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd.md) — `/pecunia-coach`, an LLM financial coach: extended Omni's plugin contract with prompt-type commands that run a full agent session (PR #2 on omni, CI watch outcome unconfirmed), then built pecunia's `pecunia_situation` MCP tool and the coach's manifest entry/prompt (committed locally on `feat/coach-command`, not yet pushed)
+- [01a06f2e](sessions/01a06f2e-dd93-79e0-a20e-68e928f4ca5a.md) — discussion-only: remote access architecture for the canonical SQLite DB (old-PC-as-authority via SSH/private network), written up as [[concepts/remote-access-to-canonical-sqlite]], nothing implemented
 
 ## rules/commit-messages.md
 
