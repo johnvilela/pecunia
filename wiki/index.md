@@ -38,6 +38,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0022-setup-skills-installs-ai-agent-finance-skills](decisions/0022-setup-skills-installs-ai-agent-finance-skills.md) — `pecunia setup --skills` installs four finance skills (overview, budget, import, health) into `~/.agents/skills` and `~/.claude/skills`, covering all four supported agents
 - [0023-pecunia-is-an-omni-plugin](decisions/0023-pecunia-is-an-omni-plugin.md) — pecunia answers the Omni plugin contract itself (manifest, embedded skills, `pecunia omni <sub>` Telegram commands including `/pecunia-add`), no separate plugin repo
 - [0024-pecunia-coach-and-omni-prompt-commands](decisions/0024-pecunia-coach-and-omni-prompt-commands.md) — `/pecunia-coach`, an LLM financial coach; required extending Omni's plugin manifest with a `prompt`-type command that runs a full agent session instead of exec
+- [0025-notes-as-markdown-files-with-a-computed-priority](decisions/0025-notes-as-markdown-files-with-a-computed-priority.md) — `pecunia notes`: one markdown file per note + a SQLite index row; base priority never rewritten, effective 0–100 score computed on every read (target, reads/edits, linked-entity activity, decay); hand-rolled front matter subset, editor opened on the body, lazy re-index + `sync`, `pecunia_notes` MCP tool, `/pecunia-notes`
 
 ## Gotchas — bugs that already bit once
 
