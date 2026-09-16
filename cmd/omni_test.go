@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"pecunia/internal/budgets"
 	"pecunia/internal/cards"
 	"pecunia/internal/goals"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/summary"
 )
@@ -200,6 +202,52 @@ func TestPlainGoals(t *testing.T) {
 	}
 }
 
+func TestPlainNotes(t *testing.T) {
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.Local)
+	ns := []notes.Note{
+		{ID: 3, Title: "Get a better health care", Priority: "low", Status: "open", Target: "2026-12-16",
+			Tags: []string{"health", "insurance"}, Score: 74, Level: "high"},
+		{ID: 5, Title: "Renegociar o cartão", Priority: "high", Status: "doing", Target: "2026-09-13", Score: 60, Level: "high"},
+		{ID: 7, Title: "Ideia", Priority: "medium", Status: "open", Score: 40, Level: "medium"},
+	}
+	got := plainNotes(ns, now)
+	for _, want := range []string{
+		"📝 Notes",
+		"• #3 LOW→HIGH 74 · Get a better health care · due 2026-12-16 (in 91 days) · #health #insurance",
+		"• #5 HIGH 60 · Renegociar o cartão · doing · due 2026-09-13 (3 days overdue)",
+		"• #7 MEDIUM 40 · Ideia",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notes do not contain %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "\x1b") {
+		t.Error("notes contain ANSI escapes")
+	}
+	if got := plainNotes(nil, now); !strings.Contains(got, "No open notes") {
+		t.Errorf("empty list says %q", got)
+	}
+}
+
+func TestNotesFilterWords(t *testing.T) {
+	cases := []struct {
+		args     []string
+		priority string
+		search   string
+	}{
+		{nil, "", ""},
+		{[]string{"high"}, "high", ""},
+		{[]string{"Critical"}, "critical", ""},
+		{[]string{"health", "care"}, "", "health care"},
+	}
+	for _, tc := range cases {
+		f := notesFilterWords(tc.args)
+		if f.Priority != tc.priority || f.Search != tc.search {
+			t.Errorf("notesFilterWords(%v) = %q/%q; want %q/%q", tc.args, f.Priority, f.Search, tc.priority, tc.search)
+		}
+	}
+}
+
 func TestPlainBills(t *testing.T) {
 	bs := []recurring.Bill{
 		omniBill("Internet", 12000, nil),
@@ -235,8 +283,13 @@ func TestManifest(t *testing.T) {
 	if m.MCP.Command != "pecunia" || len(m.MCP.Args) != 1 || m.MCP.Args[0] != "mcp" {
 		t.Errorf("mcp entry is %+v", m.MCP)
 	}
-	if len(m.Commands) != 8 {
-		t.Fatalf("got %d commands; want 8", len(m.Commands))
+	if len(m.Commands) != 9 {
+		t.Fatalf("got %d commands; want 9", len(m.Commands))
+	}
+	if !slices.ContainsFunc(m.Commands, func(c omniCmd) bool {
+		return c.Name == "pecunia_notes" && slices.Equal(c.Argv, []string{"pecunia", "omni", "notes"})
+	}) {
+		t.Error("no pecunia_notes command running pecunia omni notes")
 	}
 	for _, c := range m.Commands {
 		if !cmdName.MatchString(c.Name) {

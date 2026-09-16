@@ -18,6 +18,7 @@ import (
 	"pecunia/internal/categories"
 	"pecunia/internal/core"
 	"pecunia/internal/goals"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/summary"
 	"pecunia/internal/transactions"
@@ -69,6 +70,7 @@ func manifest() omniManifest {
 			{Name: "pecunia_alerts", Description: "Only problems: overdue bills, budgets over cap, cards near their limit. Prints nothing when all is well.", Argv: []string{"pecunia", "omni", "alerts"}},
 			{Name: "pecunia_budget", Description: "This month's budgets against what was actually spent.", Argv: []string{"pecunia", "omni", "budget"}},
 			{Name: "pecunia_add", Description: "Quick expense: amount then title, e.g. 12.50 lunch. @CODE picks the account, #CODE the category.", Argv: []string{"pecunia", "omni", "add"}},
+			{Name: "pecunia_notes", Description: "Open notes, highest effective priority first. Add a level (low, medium, high, critical) to keep only those, or any other words to search titles and bodies.", Argv: []string{"pecunia", "omni", "notes"}},
 			{Name: "pecunia_coach", Description: "Your financial coach: reads your situation, keeps one plan, gives tips. Words after the command are a quick update; --forget wipes the plan and its reminders.", Prompt: coachPrompt},
 		},
 	}
@@ -112,7 +114,7 @@ func runOmniSkills(args []string) error {
 
 func runOmni(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: pecunia omni resume|goals|bills|cc|alerts|budget|add")
+		return errors.New("usage: pecunia omni resume|goals|bills|cc|alerts|budget|notes|add")
 	}
 	// Telegram appends whatever the user typed after the command; only resume
 	// and add have a use for it, the rest ignore it.
@@ -129,10 +131,12 @@ func runOmni(args []string) error {
 		return runOmniAlerts()
 	case "budget":
 		return runOmniBudget()
+	case "notes":
+		return runOmniNotes(args[1:])
 	case "add":
 		return runOmniAdd(args[1:])
 	default:
-		return fmt.Errorf("unknown omni subcommand %q — resume, goals, bills, cc, alerts, budget or add", args[0])
+		return fmt.Errorf("unknown omni subcommand %q — resume, goals, bills, cc, alerts, budget, notes or add", args[0])
 	}
 }
 
@@ -373,6 +377,65 @@ func plainGoals(gs []goals.Goal) string {
 			line += " ✅"
 		}
 		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+// runOmniNotes is /pecunia-notes: the open notes by effective priority. A
+// level word narrows to that level; anything else is searched for.
+func runOmniNotes(args []string) error {
+	return withNotes(func(_ *sql.DB, s *notes.Store) error {
+		ns, err := s.List(notesFilterWords(args))
+		if err != nil {
+			return err
+		}
+		fmt.Fprint(out, plainNotes(ns, time.Now()))
+		return nil
+	})
+}
+
+// notesFilterWords reads the words after the command: one level word is a
+// level filter, anything else is a search.
+func notesFilterWords(args []string) notes.Filter {
+	phrase := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
+	if slices.Contains(notes.Priorities, phrase) {
+		return notes.Filter{Priority: phrase}
+	}
+	return notes.Filter{Search: phrase}
+}
+
+func plainNotes(ns []notes.Note, now time.Time) string {
+	if len(ns) == 0 {
+		return "No open notes — create one with: pecunia notes new\n"
+	}
+	lines := []string{"📝 Notes"}
+	for _, n := range ns {
+		level := strings.ToUpper(n.Level)
+		if n.Level != n.Priority {
+			level = strings.ToUpper(n.Priority) + "→" + level
+		}
+		parts := []string{fmt.Sprintf("#%d %s %d", n.ID, level, n.Score), n.Title}
+		if n.Status != notes.StatusOpen {
+			parts = append(parts, n.Status)
+		}
+		if days, ok := n.DaysToTarget(now); ok {
+			var rel string
+			switch {
+			case days < 0:
+				rel = fmt.Sprintf("%d days overdue", -days)
+			case days == 0:
+				rel = "today"
+			case days == 1:
+				rel = "tomorrow"
+			default:
+				rel = fmt.Sprintf("in %d days", days)
+			}
+			parts = append(parts, fmt.Sprintf("due %s (%s)", n.Target, rel))
+		}
+		if len(n.Tags) > 0 {
+			parts = append(parts, "#"+strings.Join(n.Tags, " #"))
+		}
+		lines = append(lines, "• "+strings.Join(parts, " · "))
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
