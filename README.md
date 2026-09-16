@@ -62,6 +62,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 | `category [new\|edit\|delete] [CODE\|ID]` | `ct` | Manage categories |
 | `transactions [new\|transfer\|edit\|delete] [ID]` | `t` | Record and review transactions. Default list is this month; filters combine: `--all`, `--transfers`, `--date`, `--month`, `--from`, `--to`, `--tag`, `--search`, `--category`, `--account`, `--card`, `--goal` |
 | `goals [new\|edit\|delete] [ID]` | `g` | Track goals. `--resume` prints a compact table without progress bars |
+| `notes [new\|edit\|delete\|sync] [ID]` | `n` | Notes with a priority that moves — markdown files edited in your own `$EDITOR`. Bare `ID` shows one; `--path ID` prints its file. Filters: `--all`, `--status`, `--priority`, `--min-score`, `--tag`, `--search`, `--due`, `--overdue`, `--account`, `--card`, `--goal` |
 | `bill [new\|pay\|edit\|delete\|archive\|unarchive] [CODE]` | `b` | Recurring bills — the ones that come round every month. `--all` includes archived |
 | `budget [new\|edit\|delete\|archive\|unarchive] [CODE]` | `bg` | Monthly caps per category. `--month YYYY-MM` shows another month, `--all` includes archived |
 | `logs [--entity NAME] [--id N] [--action NAME] [--source NAME] [--from DATE] [--to DATE] [--limit N]` | `l` | Audit trail, newest first — every create, edit and delete, whether it came from you, the system or an AI agent |
@@ -85,6 +86,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 | `pecunia_goals` | Track goals |
 | `pecunia_recurring_bills` | Manage recurring bills |
 | `pecunia_budgets` | Manage monthly caps per category |
+| `pecunia_notes` | The owner's notes, with their effective priority; read and write bodies |
 | `pecunia_logs` | Read the audit trail |
 
 Reads and writes go through the same stores the CLI uses, and every agent write is logged with source `ai` — `pecunia logs --source ai` shows exactly what an agent did. Amounts everywhere are integers in minor units (cents; satoshis for BTC).
@@ -108,6 +110,7 @@ That wires the MCP server and the skills (all of the above, plus `pecunia-omni`)
 | `/pecunia-bills` | Recurring bills and where this cycle stands |
 | `/pecunia-cc` | Cards: limit, used, available, the open statement |
 | `/pecunia-budget` | This month's caps against actual spend |
+| `/pecunia-notes [level \| words]` | Open notes, highest effective priority first. A level word keeps only that level; other words search titles and bodies |
 | `/pecunia-alerts` | Only problems — overdue bills, budgets over cap, cards near their limit. Silent when all is well, which makes it a free daily nudge as an Omni scheduled task |
 | `/pecunia-add AMOUNT TITLE [@ACCOUNT] [#CATEGORY]` | Quick expense, e.g. `/pecunia-add 12.50 lunch #food`. With one account the `@CODE` is optional; with more, pecunia asks rather than guesses |
 
@@ -121,6 +124,10 @@ Everything lives in a single SQLite file:
 2. `~/.config/pecunia/pecunia.db` on Linux, `~/Library/Application Support/pecunia/pecunia.db` on macOS
 
 The file is created `0600` and migrations apply automatically on every run. Amounts are stored as integers in minor units, and currencies are never added together — there is no exchange rate anywhere in pecunia.
+
+Notes are the one thing that lives outside it: each is a markdown file in `notes/` beside the database (`$PECUNIA_NOTES` overrides), with its title, priority, status, target, tags and links in a YAML front matter block and the body yours. SQLite keeps only the index — counters, the file's mtime — so you can edit the files with anything and the next `pecunia n` picks the change up (`pecunia n sync` adopts files you dropped in).
+
+The priority you write in a note never changes by itself. Beside it pecunia shows an effective one, worked out on every read from the base, how near the target is, how often you open the note, activity on the accounts, cards or goals it names, and how long it has sat untouched — so a LOW note surfaces as HIGH when its time comes, and a HIGH one sinks once forgotten.
 
 ## Technology used
 

@@ -14,6 +14,7 @@ import (
 	"pecunia/internal/core"
 	"pecunia/internal/db"
 	"pecunia/internal/goals"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/transactions"
 )
@@ -907,5 +908,87 @@ func TestOverSpendFixturesAreDatedToday(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("no fixture spends against LSURE, so the Lazer budget can never go over")
+	}
+}
+
+func TestSeedNotes(t *testing.T) {
+	// Notes name an account and a goal, so those go in first.
+	prepare := func(t *testing.T) *sql.DB {
+		t.Helper()
+		conn := newTestConn(t)
+		t.Setenv("PECUNIA_NOTES", "")
+		if _, err := seed(accounts.NewStore(conn)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seedGoals(conn); err != nil {
+			t.Fatal(err)
+		}
+		return conn
+	}
+
+	t.Run("inserts every fixture, files included", func(t *testing.T) {
+		conn := prepare(t)
+		n, err := seedNotes(conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(noteFixtures) {
+			t.Fatalf("seedNotes inserted %d; want %d", n, len(noteFixtures))
+		}
+		dir, _ := notes.Dir()
+		all, err := notes.NewStore(conn, dir).List(notes.Filter{All: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(noteFixtures) {
+			t.Fatalf("database holds %d notes; want %d", len(all), len(noteFixtures))
+		}
+		byTitle := map[string]notes.Note{}
+		for _, n := range all {
+			if n.Problem != "" {
+				t.Errorf("%s: %s", n.Title, n.Problem)
+			}
+			byTitle[n.Title] = n
+		}
+		// The low note near its target, read a few times, about a busy account
+		// outranks the high one left alone for months: that is the point of
+		// the fixtures.
+		low, high := byTitle["Melhorar o plano de saúde"], byTitle["Renegociar o cartão do Itaú"]
+		if low.Score <= high.Score {
+			t.Errorf("low note scores %d, high note %d; want the low one on top", low.Score, high.Score)
+		}
+		if low.Level == notes.PriorityLow || high.Level == notes.PriorityHigh {
+			t.Errorf("levels did not move: low reads %s, high reads %s", low.Level, high.Level)
+		}
+		if len(high.Goals) != 1 || len(low.Accounts) != 1 {
+			t.Errorf("links missing: %v / %v", high.Goals, low.Accounts)
+		}
+	})
+
+	t.Run("running twice changes nothing", func(t *testing.T) {
+		conn := prepare(t)
+		if _, err := seedNotes(conn); err != nil {
+			t.Fatal(err)
+		}
+		n, err := seedNotes(conn)
+		if err != nil {
+			t.Fatalf("second seed: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("second seed inserted %d; want 0", n)
+		}
+	})
+}
+
+func TestNoteFixturesAreValid(t *testing.T) {
+	for _, f := range noteFixtures {
+		if err := f.Note.Validate(); err != nil {
+			t.Errorf("%s: %v", f.Note.Title, err)
+		}
+		if f.When != "" {
+			if _, err := notes.ParseWhen(f.When, time.Now()); err != nil {
+				t.Errorf("%s: %v", f.Note.Title, err)
+			}
+		}
 	}
 }

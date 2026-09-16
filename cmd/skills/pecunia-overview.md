@@ -35,7 +35,10 @@ Pull, in this order:
    this cycle.
 5. `pecunia_budgets` — each cap against what was actually spent.
 6. `pecunia_goals` — progress toward each target.
-7. `pecunia_transactions` for the current and previous months — only when you
+7. `pecunia_notes` — the owner's open notes, highest effective priority first;
+   mention the top few when they bear on what you found (a note about an
+   account that is bleeding, a target due this week).
+8. `pecunia_transactions` for the current and previous months — only when you
    need to explain a number, not wholesale.
 
 ## what to report

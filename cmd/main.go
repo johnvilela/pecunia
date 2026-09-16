@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.6.0"
+var version = "0.7.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
@@ -40,6 +40,7 @@ Commands:
   category | ct     manage categories (new, edit, delete, details)
   transactions | t  record and review transactions (new, edit, delete)
   goals | g         track goals (new, edit, delete, details)
+  notes | n         notes with a priority that moves (new, edit, delete, sync)
   bill | b          recurring bills (new, pay, edit, delete, archive)
   budget | bg       monthly caps per category (new, edit, delete, archive)
   logs | l          what happened, newest first (--entity, --id, --action,
@@ -53,8 +54,10 @@ Commands:
   help              show this message
 
 Environment:
-  PECUNIA_DB   path to the database file
-             (default: ~/.config/pecunia/pecunia.db)
+  PECUNIA_DB     path to the database file
+                 (default: ~/.config/pecunia/pecunia.db)
+  PECUNIA_NOTES  directory for note files
+                 (default: notes/ beside the database)
 `
 
 func main() {
@@ -100,6 +103,9 @@ func run() int {
 
 	case "goals", "g":
 		return report("goals", runGoals(os.Args[2:]))
+
+	case "notes", "n":
+		return report("notes", runNotes(os.Args[2:]))
 
 	case "bill", "b":
 		return report("bill", runRecurring(os.Args[2:]))

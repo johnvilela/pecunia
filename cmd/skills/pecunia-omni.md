@@ -32,7 +32,10 @@ cheaper one that does it.
   stored. They are recomputed from the ledger on every read, so nothing can
   drift from the record.
 - Entities are addressed by 5-character codes (accounts, cards, categories,
-  bills, budgets); goals go by id.
+  bills, budgets); goals and notes go by id.
+- A note carries two priorities: the base the owner wrote, which you never
+  rewrite, and an effective one pecunia computes from the base, the target,
+  how often the owner opens it, and activity on what it names. Quote both.
 
 ## the Telegram commands
 
@@ -48,6 +51,10 @@ instead of re-computing it yourself:
 - `/pecunia-budget` — this month's caps against actual spend.
 - `/pecunia-alerts` — only problems; silent when all is well. Suggest it to
   the user as an Omni scheduled task for a daily nudge that costs nothing.
+- `/pecunia-notes [level | words]` — the owner's open notes, highest effective
+  priority first. A level word (low, medium, high, critical) keeps only that
+  level; other words search titles and bodies. The same notes are
+  `pecunia_notes` over MCP, where you can read a body or write one.
 - `/pecunia-add AMOUNT TITLE [@ACCOUNT] [#CATEGORY]` — quick expense, e.g.
   `/pecunia-add 12.50 lunch #food`. With one account the @CODE is optional;
   writes it makes are the user's own, not source "ai".

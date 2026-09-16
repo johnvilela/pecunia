@@ -69,6 +69,18 @@ func TestLogsCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("a note is an entity", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "pecunia.db")
+		seedLog(t, path, "user", "edited", "note", 3)
+		got, err := runLogsIn(t, path, "--entity", "note", "--id", "3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "note") {
+			t.Errorf("--entity note found nothing:\n%s", got)
+		}
+	})
+
 	t.Run("an id without its entity is refused", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "pecunia.db")
 		if _, err := runLogsIn(t, path, "--id", "3"); err == nil {
