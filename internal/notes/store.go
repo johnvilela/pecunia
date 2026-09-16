@@ -136,23 +136,11 @@ func (s *Store) List(f Filter) ([]Note, error) {
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, " AND ")
 	}
-	rows, err := s.db.Query(query+` ORDER BY n.id`, args...)
+	all, err := s.rows(query+` ORDER BY n.id`, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var all []Note
-	for rows.Next() {
-		n, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, n)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
+	s.refresh(all, now)
 
 	if q := strings.ToLower(strings.TrimSpace(f.Search)); q != "" {
 		var kept []Note
@@ -192,19 +180,47 @@ func (s *Store) List(f Filter) ([]Note, error) {
 	return all, nil
 }
 
+// Get is one note, brought up to date with its file and scored.
 func (s *Store) Get(id int64) (Note, error) {
+	n, err := s.row(id)
+	if err != nil {
+		return n, err
+	}
+	now := time.Now()
+	ns := []Note{n}
+	s.refresh(ns, now)
+	if err := s.score(ns, now); err != nil {
+		return n, err
+	}
+	return ns[0], nil
+}
+
+// row is one note as the database has it, nothing read from the file.
+func (s *Store) row(id int64) (Note, error) {
 	n, err := scan(s.db.QueryRow(`SELECT `+columns+` FROM notes n WHERE n.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return n, ErrNotFound
 	}
+	return n, err
+}
+
+// rows runs a query over columns and scans the lot, closing the cursor before
+// returning so the connection is free for whatever comes next.
+func (s *Store) rows(query string, args ...any) ([]Note, error) {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return n, err
+		return nil, err
 	}
-	ns := []Note{n}
-	if err := s.score(ns, time.Now()); err != nil {
-		return n, err
+	defer rows.Close()
+	var all []Note
+	for rows.Next() {
+		n, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, n)
 	}
-	return ns[0], nil
+	return all, rows.Err()
 }
 
 // score fills Score and Level on every note, one activity query for the lot.
