@@ -418,7 +418,9 @@ func (s *Store) Update(n Note, body string) error {
 	if err := n.Validate(); err != nil {
 		return err
 	}
-	old, err := s.Get(n.ID)
+	// The row, not Get: the caller is handing over the new state, and a
+	// refresh here would count the editor's write as an edit of its own.
+	old, err := s.row(n.ID)
 	if err != nil {
 		return err
 	}
@@ -485,7 +487,7 @@ func short(hash string) string {
 // goes first so a file that will not go leaves nothing pointing at it; the
 // error names the file, and sync would adopt it as a new note if it stayed.
 func (s *Store) Delete(id int64) error {
-	n, err := s.Get(id)
+	n, err := s.row(id)
 	if err != nil {
 		return err
 	}

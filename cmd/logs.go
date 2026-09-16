@@ -20,7 +20,7 @@ Usage:
 
 Flags:
   --entity NAME     one kind of thing: account, card, category, transaction,
-                    transfer, goal, recurring, budget or card_bill
+                    transfer, goal, recurring, budget, card_bill or note
   --id N            one thing in particular (asks for --entity: an id is only
                     an id of something)
   --action NAME     created, edited or deleted
@@ -42,7 +42,7 @@ record of ever having had one.
 // here, where a typo can actually happen.
 var logEntities = []string{
 	"account", "card", "category", "transaction", "transfer",
-	"goal", "recurring", "budget", "card_bill",
+	"goal", "recurring", "budget", "card_bill", "note",
 }
 
 func runLogs(args []string) error {

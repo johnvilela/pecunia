@@ -34,6 +34,9 @@ func Dir() (string, error) {
 // Path is where a note's file is.
 func (s *Store) Path(n Note) string { return filepath.Join(s.dir, n.Path) }
 
+// Dir is the directory the files live in.
+func (s *Store) Dir() string { return s.dir }
+
 // Body reads a note's body back from its file.
 func (s *Store) Body(n Note) (string, error) {
 	doc, err := ParseFile(s.Path(n))
