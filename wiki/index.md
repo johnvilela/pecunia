@@ -80,6 +80,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [e22cf9b6](sessions/e22cf9b6-6521-4261-b791-0815460c124e.md) — fixed a date-dependent CI failure on PR #7 (a second day-offset re-broke the seed script's future-date clamp), then built the Omni plugin end to end on `feat/omni-plugin`, opened as PR #8, CI confirmed green, merge dispatched but unconfirmed
 - [dbafef3b](sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd.md) — `/pecunia-coach`, an LLM financial coach: extended Omni's plugin contract with prompt-type commands that run a full agent session (PR #2 on omni, CI watch outcome unconfirmed), then built pecunia's `pecunia_situation` MCP tool and the coach's manifest entry/prompt (committed locally on `feat/coach-command`, not yet pushed)
 - [01a06f2e](sessions/01a06f2e-dd93-79e0-a20e-68e928f4ca5a.md) — discussion-only: remote access architecture for the canonical SQLite DB (old-PC-as-authority via SSH/private network), written up as [[concepts/remote-access-to-canonical-sqlite]], nothing implemented
+- [b410d49d](sessions/b410d49d-989f-41e2-bffb-553cf0bbf03e.md) — `pecunia notes` module built end to end on `feat/notes`: markdown files + SQLite index, computed priority score, editor integration, MCP tool, `/pecunia-notes` Omni command, seed fixtures; opened as PR #11
 
 ## rules/commit-messages.md
 
