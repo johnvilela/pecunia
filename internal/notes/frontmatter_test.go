@@ -106,6 +106,26 @@ func TestParse(t *testing.T) {
 		}
 	})
 
+	t.Run("an escaped quote does not end the quotes", func(t *testing.T) {
+		d, err := Parse([]byte("---\ntitle: \"Say \\\" # hash\" # real comment\ntarget: \"2026-12-16\" # in 3 months\n---\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Title != `Say " # hash` {
+			t.Errorf("title = %q", d.Title)
+		}
+		if d.Target != "2026-12-16" || d.TargetPhrase != "in 3 months" {
+			t.Errorf("target/phrase = %q/%q", d.Target, d.TargetPhrase)
+		}
+		d, err = Parse([]byte("---\ntitle: x\ntags: [\"a \\\" , b\", c]\n---\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(d.Tags, []string{`a " , b`, "c"}) {
+			t.Errorf("tags = %q", d.Tags)
+		}
+	})
+
 	t.Run("a hash inside a word is not a comment", func(t *testing.T) {
 		d, err := Parse([]byte("---\ntitle: Issue#12\n---\n"))
 		if err != nil {

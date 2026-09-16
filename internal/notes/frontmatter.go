@@ -150,10 +150,13 @@ func Parse(src []byte) (Doc, error) {
 // is a title, `"Hash # here"` is a quoted one.
 func stripComment(s string) (value, comment string) {
 	quote := rune(0)
+	escaped := false // the rune before was a backslash inside double quotes
 	for i, r := range s {
 		switch {
+		case escaped:
+			escaped = false
 		case quote == '"' && r == '\\':
-			continue
+			escaped = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
@@ -195,6 +198,7 @@ func unquote(s string) string {
 func splitList(s string) []string {
 	out := []string{}
 	quote := rune(0)
+	escaped := false
 	start := 0
 	flush := func(end int) {
 		if item := unquote(strings.TrimSpace(s[start:end])); item != "" {
@@ -203,6 +207,10 @@ func splitList(s string) []string {
 	}
 	for i, r := range s {
 		switch {
+		case escaped:
+			escaped = false
+		case quote == '"' && r == '\\':
+			escaped = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
