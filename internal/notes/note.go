@@ -70,7 +70,9 @@ type Note struct {
 	Cards    []string
 	Goals    []int64
 	// Path is the file's name inside the notes directory, never a full path.
+	// Mtime and BodyHash are the file as last indexed — see Store.refresh.
 	Path     string
+	Mtime    int64
 	BodyHash string
 	// The counters the score reads. Reads are shows at the terminal; edits are
 	// editor sessions that changed the file (and external edits sync picks up).
