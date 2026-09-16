@@ -39,13 +39,14 @@ func levelStyle(level string) lipgloss.Style {
 
 // Priority is the base and the effective level side by side, with the score:
 // "LOW → HIGH 74". When they agree the arrow goes — "LOW 20" — since a note
-// that reads as it was filed has nothing to explain.
+// that reads as it was filed has nothing to explain. A done or dropped note
+// scores nothing and says only what it was filed as: "was CRITICAL, now LOW"
+// is not what finishing something means.
 func Priority(n Note) string {
-	out := levelStyle(n.Level).Render(strings.ToUpper(n.Level))
-	if n.Level != n.Priority && n.Level != "" {
-		out = strings.ToUpper(n.Priority) + core.DimStyle.Render(" → ") + out
+	if !n.Open() {
+		return priorityCell(n)
 	}
-	return out + " " + core.DimStyle.Render(strconv.Itoa(n.Score))
+	return priorityCell(n) + " " + core.DimStyle.Render(strconv.Itoa(n.Score))
 }
 
 // Due is the target and how far off it is: "2026-12-16  in 91d",
@@ -128,7 +129,7 @@ func Table(ns []Note, now time.Time) string {
 			id += lipgloss.NewStyle().Foreground(lipgloss.Color(core.ColorByName("red").Hex)).Render(problemMark)
 			problems = append(problems, problemMark+" "+strconv.FormatInt(n.ID, 10)+": "+n.Problem)
 		}
-		t.Row(id, priorityCell(n), strconv.Itoa(n.Score), n.Status, n.Title, dueStyled(n, now), tags(n))
+		t.Row(id, priorityCell(n), scoreCell(n), n.Status, n.Title, dueStyled(n, now), tags(n))
 	}
 	out := t.Render()
 	if len(problems) > 0 {
@@ -139,11 +140,22 @@ func Table(ns []Note, now time.Time) string {
 
 // priorityCell is Priority without the score, which has a column of its own.
 func priorityCell(n Note) string {
+	if !n.Open() {
+		return core.DimStyle.Render(strings.ToUpper(n.Priority))
+	}
 	out := levelStyle(n.Level).Render(strings.ToUpper(n.Level))
 	if n.Level != n.Priority && n.Level != "" {
 		out = strings.ToUpper(n.Priority) + core.DimStyle.Render(" → ") + out
 	}
 	return out
+}
+
+// scoreCell is the score, or a dash for a note that is out of play.
+func scoreCell(n Note) string {
+	if !n.Open() {
+		return core.DimStyle.Render("—")
+	}
+	return strconv.Itoa(n.Score)
 }
 
 // Links is what a note is about, spelled for a person: names with their codes.

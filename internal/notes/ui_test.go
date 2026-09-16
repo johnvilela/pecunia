@@ -23,6 +23,14 @@ func TestPriority(t *testing.T) {
 			}
 		}
 	})
+	t.Run("a closed note shows its base alone, no score", func(t *testing.T) {
+		n := scored(health(), 0)
+		n.Status = StatusDone
+		got := Priority(n)
+		if !strings.Contains(got, "LOW") || strings.Contains(got, "→") || strings.Contains(got, "0") {
+			t.Errorf("Priority() = %q", got)
+		}
+	})
 	t.Run("a note where it stayed shows one", func(t *testing.T) {
 		got := Priority(scored(health(), 20))
 		if !strings.Contains(got, "LOW") || strings.Contains(got, "→") || !strings.Contains(got, "20") {
@@ -54,7 +62,11 @@ func TestTable(t *testing.T) {
 	a := scored(health(), 74)
 	b := scored(Note{ID: 5, Title: "Renegociar o cartão", Priority: PriorityHigh, Status: StatusDoing,
 		Target: "2026-09-13", Tags: []string{"bank"}, Problem: "5-renegociar.md: line 3: unknown key \"priorty\""}, 60)
-	got := Table([]Note{a, b}, now)
+	c := scored(Note{ID: 8, Title: "Old one", Priority: PriorityCritical, Status: StatusDone}, 0)
+	got := Table([]Note{a, b, c}, now)
+	if strings.Contains(got, "CRITICAL → LOW") {
+		t.Errorf("a done note reads as moved:\n%s", got)
+	}
 	for _, want := range []string{
 		"PRIORITY", "SCORE", "TITLE", "TARGET", "TAGS",
 		"3", "Get a better health care", "LOW", "→", "HIGH", "74", "in 91d", "#health", "#insurance",

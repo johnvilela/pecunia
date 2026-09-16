@@ -463,15 +463,24 @@ func (s *Store) Update(n Note, body string) error {
 		logs.F("priority", old.Priority, n.Priority),
 		logs.F("status", old.Status, n.Status),
 		logs.F("target", old.Target, n.Target),
-		logs.F("tags", old.Tags, n.Tags),
-		logs.F("accounts", old.Accounts, n.Accounts),
-		logs.F("cards", old.Cards, n.Cards),
-		logs.F("goals", old.Goals, n.Goals),
+		logs.F("tags", nonNil(old.Tags), nonNil(n.Tags)),
+		logs.F("accounts", nonNil(old.Accounts), nonNil(n.Accounts)),
+		logs.F("cards", nonNil(old.Cards), nonNil(n.Cards)),
+		logs.F("goals", nonNil(old.Goals), nonNil(n.Goals)),
 		logs.F("body", short(old.BodyHash), short(hash)),
 	)); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// nonNil is what a list looks like in the trail: [] rather than null, so an
+// emptied list reads as one.
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }
 
 // short is enough of a hash to say "the body moved" in the trail without
