@@ -24,6 +24,7 @@ import (
 	"pecunia/internal/core"
 	"pecunia/internal/goals"
 	"pecunia/internal/logs"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/summary"
 	"pecunia/internal/transactions"
@@ -37,8 +38,8 @@ Usage:
 
 Speaks MCP on stdin/stdout — point an MCP client (Claude Code, Claude
 Desktop, …) at "pecunia mcp" and it gets one tool per module: accounts, credit
-cards, categories, transactions, goals, recurring bills, budgets, summary and
-logs. Reads and writes go through the same stores the CLI uses, and every
+cards, categories, transactions, goals, recurring bills, budgets, notes,
+summary and logs. Reads and writes go through the same stores the CLI uses, and every
 write is logged with source "ai" so "pecunia logs --source ai" shows exactly
 what an agent did.
 
@@ -89,6 +90,9 @@ func mcpServer(conn *sql.DB) *mcp.Server {
 	tool(s, conn, "pecunia_budgets",
 		"Manage monthly caps per category: list, get, create, update, set_active, delete, history. "+moneyNote,
 		budgetsDo)
+	tool(s, conn, "pecunia_notes",
+		"The owner's notes — a thought with a priority that moves: list (filters), get, create, update, delete, sync. Each note is a markdown file beside the database with its metadata in front matter; SQLite keeps the index. Beside the base priority the owner wrote, every note carries an effective score and level computed from that base, how near its target is, how often the owner reads or edits it, activity on the accounts, cards or goals it names, and how long it has been left alone. get does not count as the owner reading it.",
+		notesDo)
 	tool(s, conn, "pecunia_summary",
 		"Where the user stands: totals in and out, what is due or coming up, account and card balances, goals and budgets — for one day or a whole month. "+moneyNote,
 		summaryDo)
@@ -994,4 +998,152 @@ func logsDo(conn *sql.DB, in logsIn) (any, error) {
 		Entity: in.Entity, EntityID: in.EntityID, Action: in.Action,
 		Source: in.Source, From: in.From, To: in.To, Limit: in.Limit,
 	})
+}
+
+type notesIn struct {
+	Action   string    `json:"action" jsonschema:"one of: list, get, create, update, delete, sync"`
+	ID       int64     `json:"id,omitempty" jsonschema:"note id, for get, update and delete"`
+	All      bool      `json:"all,omitempty" jsonschema:"list: include done and dropped"`
+	Status   *string   `json:"status,omitempty" jsonschema:"open, doing, done or dropped; list: only this status; create/update: set it"`
+	Priority *string   `json:"priority,omitempty" jsonschema:"low, medium, high or critical; list: the effective level to keep; create/update: the base priority (default medium)"`
+	MinScore int       `json:"min_score,omitempty" jsonschema:"list: effective score at least this (0-100)"`
+	Tag      *string   `json:"tag,omitempty" jsonschema:"list: notes carrying this tag"`
+	Search   *string   `json:"search,omitempty" jsonschema:"list: text in the title or the body"`
+	Due      *string   `json:"due,omitempty" jsonschema:"list: target on or before this day or phrase"`
+	Overdue  bool      `json:"overdue,omitempty" jsonschema:"list: target already passed"`
+	Account  *string   `json:"account,omitempty" jsonschema:"list: about this account (id or code)"`
+	Card     *string   `json:"card,omitempty" jsonschema:"list: about this credit card (id or code)"`
+	Goal     *int64    `json:"goal,omitempty" jsonschema:"list: about this goal"`
+	Title    *string   `json:"title,omitempty"`
+	Target   *string   `json:"target,omitempty" jsonschema:"YYYY-MM-DD, DD/MM/YYYY, YYYY-MM, today, tomorrow, next week|month|year, in N days|weeks|months|years; empty clears it"`
+	Tags     *[]string `json:"tags,omitempty" jsonschema:"up to five; lowercased"`
+	Accounts *[]string `json:"accounts,omitempty" jsonschema:"account codes the note is about"`
+	Cards    *[]string `json:"cards,omitempty" jsonschema:"credit card codes the note is about"`
+	Goals    *[]int64  `json:"goals,omitempty" jsonschema:"goal ids the note is about"`
+	Body     *string   `json:"body,omitempty" jsonschema:"the markdown body; update keeps the current one when omitted"`
+}
+
+// noteDetail is what get returns: the note, where its score came from, the
+// body and where the file is.
+type noteDetail struct {
+	Note      notes.Note      `json:"note"`
+	Breakdown notes.Breakdown `json:"breakdown"`
+	Body      string          `json:"body"`
+	Path      string          `json:"path"`
+}
+
+func notesDo(conn *sql.DB, in notesIn) (any, error) {
+	dir, err := notes.Dir()
+	if err != nil {
+		return nil, err
+	}
+	s := notes.NewStore(conn, dir)
+	now := time.Now()
+
+	// apply copies the patchable fields onto n, resolving the target.
+	apply := func(n *notes.Note) error {
+		set(&n.Title, in.Title)
+		if in.Priority != nil {
+			n.Priority = strings.ToLower(strings.TrimSpace(*in.Priority))
+		}
+		if in.Status != nil {
+			n.Status = strings.ToLower(strings.TrimSpace(*in.Status))
+		}
+		if in.Target != nil {
+			iso, err := notes.ParseWhen(*in.Target, now)
+			if err != nil {
+				return fmt.Errorf("target: %w", err)
+			}
+			n.Target, n.TargetPhrase = iso, ""
+			if phrase := strings.TrimSpace(*in.Target); phrase != iso {
+				n.TargetPhrase = phrase
+			}
+		}
+		if in.Tags != nil {
+			n.Tags = transactions.NormalizeTags(*in.Tags)
+		}
+		if in.Accounts != nil {
+			n.Accounts = *in.Accounts
+		}
+		if in.Cards != nil {
+			n.Cards = *in.Cards
+		}
+		if in.Goals != nil {
+			n.Goals = *in.Goals
+		}
+		return nil
+	}
+
+	switch in.Action {
+	case "list":
+		f := notes.Filter{All: in.All, Status: str(in.Status), Priority: str(in.Priority), MinScore: in.MinScore,
+			Tag: str(in.Tag), Search: str(in.Search), Overdue: in.Overdue}
+		if in.Due != nil {
+			if f.DueBy, err = notes.ParseWhen(*in.Due, now); err != nil {
+				return nil, fmt.Errorf("due: %w", err)
+			}
+		}
+		if in.Account != nil {
+			a, err := accounts.NewStore(conn).Resolve(*in.Account)
+			if err != nil {
+				return nil, fmt.Errorf("no account matching %q", *in.Account)
+			}
+			f.Account = a.ID
+		}
+		if in.Card != nil {
+			c, err := cards.NewStore(conn).Resolve(*in.Card)
+			if err != nil {
+				return nil, fmt.Errorf("no credit card matching %q", *in.Card)
+			}
+			f.Card = c.ID
+		}
+		if in.Goal != nil {
+			f.Goal = *in.Goal
+		}
+		return s.List(f)
+	case "get":
+		n, err := s.Get(in.ID)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := s.Body(n)
+		act, err := s.Activity([]int64{n.ID}, now)
+		if err != nil {
+			return nil, err
+		}
+		return noteDetail{Note: n, Breakdown: notes.Explain(n, act[n.ID], now), Body: body, Path: s.Path(n)}, nil
+	case "create":
+		n := notes.Note{Priority: notes.PriorityMedium, Status: notes.StatusOpen}
+		if err := apply(&n); err != nil {
+			return nil, err
+		}
+		if err := s.Create(&n, str(in.Body)); err != nil {
+			return nil, err
+		}
+		return n, nil
+	case "update":
+		n, err := s.Get(in.ID)
+		if err != nil {
+			return nil, err
+		}
+		body, err := s.Body(n)
+		if err != nil && in.Body == nil {
+			return nil, fmt.Errorf("the body could not be read (%w); send one to replace it", err)
+		}
+		if in.Body != nil {
+			body = *in.Body
+		}
+		if err := apply(&n); err != nil {
+			return nil, err
+		}
+		if err := s.Update(n, body); err != nil {
+			return nil, err
+		}
+		return s.Get(n.ID)
+	case "delete":
+		return map[string]int64{"deleted": in.ID}, s.Delete(in.ID)
+	case "sync":
+		return s.Sync()
+	}
+	return nil, fmt.Errorf("unknown action %q — one of list, get, create, update, delete, sync", in.Action)
 }

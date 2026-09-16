@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"pecunia/internal/db"
 	"pecunia/internal/goals"
 	"pecunia/internal/logs"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/summary"
 	"pecunia/internal/transactions"
@@ -386,4 +388,124 @@ func TestMCPServerRegistersEveryTool(t *testing.T) {
 	if s == nil {
 		t.Fatal("no server")
 	}
+}
+
+func TestMCPNotes(t *testing.T) {
+	newNote := func(t *testing.T, conn *sql.DB, title string, extra notesIn) notes.Note {
+		t.Helper()
+		in := extra
+		in.Action, in.Title = "create", sp(title)
+		out, err := notesDo(conn, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.(notes.Note)
+	}
+
+	t.Run("create lists and gets, logged as ai, without counting a read", func(t *testing.T) {
+		conn := mcpConn(t)
+		t.Setenv("PECUNIA_NOTES", "")
+		n := newNote(t, conn, "Get a better health care", notesIn{
+			Priority: sp("low"), Target: sp("in 3 months"), Tags: &[]string{"Health"}, Body: sp("# Why\n\nBecause."),
+		})
+		if n.ID == 0 || n.Priority != "low" || n.TargetPhrase != "in 3 months" || n.Target == "" ||
+			strings.Join(n.Tags, ",") != "health" || n.Score == 0 || n.Level == "" {
+			t.Fatalf("create came back %+v", n)
+		}
+		out, err := notesDo(conn, notesIn{Action: "list"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := out.([]notes.Note); len(got) != 1 {
+			t.Fatalf("listed %d notes", len(got))
+		}
+		out, err = notesDo(conn, notesIn{Action: "get", ID: n.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := out.(noteDetail)
+		if got.Note.ID != n.ID || got.Body != "# Why\n\nBecause." || got.Breakdown.Base != 20 ||
+			!strings.HasSuffix(got.Path, n.Path) {
+			t.Fatalf("get came back %+v", got)
+		}
+		if got.Note.ReadCount != 0 {
+			t.Errorf("an agent's get counted as a read")
+		}
+		trail, err := logs.List(conn, logs.Filter{Entity: "note"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(trail) != 1 || trail[0].Source != logs.AI {
+			t.Fatalf("trail %+v — want one row from ai", trail)
+		}
+	})
+
+	t.Run("update patches the fields sent and keeps the body unless one is sent", func(t *testing.T) {
+		conn := mcpConn(t)
+		t.Setenv("PECUNIA_NOTES", "")
+		n := newNote(t, conn, "Health care", notesIn{Body: sp("the body")})
+		out, err := notesDo(conn, notesIn{Action: "update", ID: n.ID, Priority: sp("high"), Status: sp("doing")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := out.(notes.Note)
+		if got.Priority != "high" || got.Status != "doing" || got.Title != "Health care" || got.EditCount != 1 {
+			t.Fatalf("update came back %+v", got)
+		}
+		detail, _ := notesDo(conn, notesIn{Action: "get", ID: n.ID})
+		if detail.(noteDetail).Body != "the body" {
+			t.Errorf("the body was lost: %q", detail.(noteDetail).Body)
+		}
+		if _, err := notesDo(conn, notesIn{Action: "update", ID: n.ID, Body: sp("new body"), Target: sp("")}); err != nil {
+			t.Fatal(err)
+		}
+		detail, _ = notesDo(conn, notesIn{Action: "get", ID: n.ID})
+		if detail.(noteDetail).Body != "new body" {
+			t.Errorf("the body was not replaced: %q", detail.(noteDetail).Body)
+		}
+	})
+
+	t.Run("list filters and delete", func(t *testing.T) {
+		conn := mcpConn(t)
+		t.Setenv("PECUNIA_NOTES", "")
+		a := newNote(t, conn, "Open one", notesIn{Priority: sp("high")})
+		newNote(t, conn, "Done one", notesIn{Status: sp("done")})
+		out, err := notesDo(conn, notesIn{Action: "list", All: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := out.([]notes.Note); len(got) != 2 {
+			t.Fatalf("--all listed %d", len(got))
+		}
+		out, _ = notesDo(conn, notesIn{Action: "list", Priority: sp("high")})
+		if got := out.([]notes.Note); len(got) != 1 || got[0].ID != a.ID {
+			t.Fatalf("priority high listed %+v", got)
+		}
+		out, _ = notesDo(conn, notesIn{Action: "list", Search: sp("done")})
+		if got := out.([]notes.Note); len(got) != 0 {
+			t.Fatalf("search over open notes listed %+v", got)
+		}
+		out, err = notesDo(conn, notesIn{Action: "delete", ID: a.ID})
+		if err != nil || out.(map[string]int64)["deleted"] != a.ID {
+			t.Fatalf("delete = %v, %v", out, err)
+		}
+		if _, err := notesDo(conn, notesIn{Action: "get", ID: a.ID}); !errors.Is(err, notes.ErrNotFound) {
+			t.Fatalf("get after delete = %v", err)
+		}
+	})
+
+	t.Run("sync and a bad action", func(t *testing.T) {
+		conn := mcpConn(t)
+		t.Setenv("PECUNIA_NOTES", "")
+		out, err := notesDo(conn, notesIn{Action: "sync"})
+		if err != nil || !out.(notes.Report).Empty() {
+			t.Fatalf("sync = %+v, %v", out, err)
+		}
+		if _, err := notesDo(conn, notesIn{Action: "archive"}); err == nil || !strings.Contains(err.Error(), "unknown action") {
+			t.Fatalf("archive = %v", err)
+		}
+		if _, err := notesDo(conn, notesIn{Action: "create", Title: sp("x"), Target: sp("soon")}); err == nil {
+			t.Fatal("a bad target was accepted")
+		}
+	})
 }
