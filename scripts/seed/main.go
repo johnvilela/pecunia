@@ -17,6 +17,7 @@ import (
 	"pecunia/internal/categories"
 	"pecunia/internal/db"
 	"pecunia/internal/goals"
+	"pecunia/internal/notes"
 	"pecunia/internal/recurring"
 	"pecunia/internal/transactions"
 )
@@ -142,6 +143,105 @@ func seedGoals(conn *sql.DB) (int, error) {
 		}
 		if err := s.Create(&f); err != nil {
 			return n, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
+// noteFixture is one sample note: the note, its body, and what the store
+// cannot be asked to write — a target phrase resolved at seed time, a goal by
+// name, a past to be backdated into, reads already on the counter — so the
+// list shows the score doing its job on day one.
+type noteFixture struct {
+	Note     notes.Note
+	Body     string
+	When     string // target phrase, resolved when seeded
+	Goal     string // goal name, since a goal has no code
+	Backdate string // a datetime modifier ("-150 days") for the stamps
+	Reads    int
+}
+
+// noteFixtures cover the four levels and both directions the score moves in:
+// a LOW note with a near target, a few reads and a busy account climbs; a
+// HIGH one left alone for months sinks; a bare medium one with no body shows
+// the empty branch; a critical one already done is hidden by default.
+var noteFixtures = []noteFixture{
+	{
+		Note: notes.Note{Title: "Melhorar o plano de saúde", Priority: notes.PriorityLow, Status: notes.StatusOpen,
+			Tags: []string{"saúde", "seguro"}, Accounts: []string{"INTER"}},
+		Body:  "## Por quê\n\nO plano atual não cobre o hospital mais perto de casa.\n\n## Opções\n\n- Amil\n- Bradesco Saúde\n",
+		When:  "in 20 days",
+		Reads: 6,
+	},
+	{
+		Note:     notes.Note{Title: "Renegociar o cartão do Itaú", Priority: notes.PriorityHigh, Status: notes.StatusDoing},
+		Body:     "Ligar para o banco e pedir desconto à vista.\n",
+		Goal:     "Quitar o Itaú",
+		Backdate: "-150 days",
+	},
+	{
+		Note: notes.Note{Title: "Ideia: trocar de banco", Priority: notes.PriorityMedium, Status: notes.StatusOpen},
+	},
+	{
+		Note: notes.Note{Title: "Cancelar a assinatura antiga", Priority: notes.PriorityCritical, Status: notes.StatusDone,
+			Tags: []string{"assinatura"}},
+		Body: "Feito em agosto.\n",
+	},
+}
+
+// seedNotes inserts the fixtures that are not there yet, by title, files and
+// all. It runs after the accounts and goals it links to.
+func seedNotes(conn *sql.DB) (int, error) {
+	dir, err := notes.Dir()
+	if err != nil {
+		return 0, err
+	}
+	s := notes.NewStore(conn, dir)
+	existing, err := s.List(notes.Filter{All: true})
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	for _, n := range existing {
+		seen[n.Title] = true
+	}
+
+	n := 0
+	for _, f := range noteFixtures {
+		if seen[f.Note.Title] {
+			continue
+		}
+		note := f.Note
+		if f.When != "" {
+			if note.Target, err = notes.ParseWhen(f.When, time.Now()); err != nil {
+				return n, fmt.Errorf("%s: %w", note.Title, err)
+			}
+			note.TargetPhrase = f.When
+		}
+		if f.Goal != "" {
+			g, err := goalByName(conn, f.Goal)
+			if err != nil {
+				return n, fmt.Errorf("%s: %w", note.Title, err)
+			}
+			note.Goals = []int64{g.ID}
+		}
+		if err := s.Create(&note, f.Body); err != nil {
+			return n, fmt.Errorf("%s: %w", note.Title, err)
+		}
+		// The store never writes the past or a read it did not see, so the
+		// fixtures that need one get it straight from SQL.
+		if f.Backdate != "" {
+			if _, err := conn.Exec(
+				`UPDATE notes SET created_at = datetime('now', ?), updated_at = datetime('now', ?) WHERE id = ?`,
+				f.Backdate, f.Backdate, note.ID); err != nil {
+				return n, err
+			}
+		}
+		if f.Reads > 0 {
+			if _, err := conn.Exec(`UPDATE notes SET read_count = ? WHERE id = ?`, f.Reads, note.ID); err != nil {
+				return n, err
+			}
 		}
 		n++
 	}
@@ -810,7 +910,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
+	nt, err := seedNotes(conn)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		os.Exit(1)
+	}
 	path, _ := db.Path()
-	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills, %d recurring payment(s), %d of %d budgets and %d transfer(s) into %s\n",
-		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, bg, len(budgetFixtures), mv, path)
+	fmt.Printf("seeded %d of %d accounts, %d of %d credit cards, %d of %d categories, %d of %d goals, %d of %d transactions, %d target change(s), %d bill payment(s), %d of %d recurring bills, %d recurring payment(s), %d of %d budgets, %d transfer(s) and %d of %d notes into %s\n",
+		n, len(fixtures), c, len(cardFixtures), ct, len(categories.Starter), g, len(goalFixtures), tx, txRows(), moved, paid, rb, len(recurringFixtures), rp, bg, len(budgetFixtures), mv, nt, len(noteFixtures), path)
 }
