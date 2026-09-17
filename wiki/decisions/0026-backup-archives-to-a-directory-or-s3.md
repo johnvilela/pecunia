@@ -28,4 +28,8 @@ tags: [backup, s3, age, systemd, toml, encryption]
 
 `internal/backup` is TDD throughout ([[rules/tdd]]): a `providerSuite` run against both providers, a fake S3 in `httptest` that checks the content hash and paginates, real SQLite files for every archive case. `backup.Systemctl` and `backup.HaveSystemd` are the seams the command tests swap so no test installs a real timer.
 
-Links: [[decisions/0025-notes-as-markdown-files-with-a-computed-priority]] (what the notes directory is) · [[concepts/remote-access-to-canonical-sqlite]] (backup is not sync; the canonical copy stays where it is)
+## Status: merged as PR #12 (2026-09-17), v0.8.0
+
+Branch `feat/backup`, PR #12 "feat(backup): back the database and notes up to a directory or S3", CI green, approved and merged by the user. Dropbox follows in its own PR on `feat/backup-dropbox`; Google Drive after that.
+
+Links: [[decisions/0025-notes-as-markdown-files-with-a-computed-priority]] (what the notes directory is) · [[concepts/remote-access-to-canonical-sqlite]] (backup is not sync; the canonical copy stays where it is) · [[sessions/ef2f43c3-8c61-4064-b047-63b0197a9abc]]

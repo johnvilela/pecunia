@@ -1,3 +1,7 @@
+---
+tags: [wiki, index]
+---
+
 # Wiki index
 
 Map of the project memory. Read this first, then grep `wiki/` or follow the links. Pages carry YAML `tags:` frontmatter for topic lookup.
@@ -39,7 +43,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [0023-pecunia-is-an-omni-plugin](decisions/0023-pecunia-is-an-omni-plugin.md) — pecunia answers the Omni plugin contract itself (manifest, embedded skills, `pecunia omni <sub>` Telegram commands including `/pecunia-add`), no separate plugin repo
 - [0024-pecunia-coach-and-omni-prompt-commands](decisions/0024-pecunia-coach-and-omni-prompt-commands.md) — `/pecunia-coach`, an LLM financial coach; required extending Omni's plugin manifest with a `prompt`-type command that runs a full agent session instead of exec
 - [0025-notes-as-markdown-files-with-a-computed-priority](decisions/0025-notes-as-markdown-files-with-a-computed-priority.md) — `pecunia notes`: one markdown file per note + a SQLite index row; base priority never rewritten, effective 0–100 score computed on every read (target, reads/edits, linked-entity activity, decay); hand-rolled front matter subset, editor opened on the body, lazy re-index + `sync`, `pecunia_notes` MCP tool, `/pecunia-notes`
-- [0026-backup-archives-to-a-directory-or-s3](decisions/0026-backup-archives-to-a-directory-or-s3.md) — `pecunia backup`: VACUUM INTO snapshot + notes in a tar.gz, optional age encryption, local or hand-rolled S3 provider, systemd user timer from `N/day`/`N/week`, restore moves live files aside as .bak
+- [0026-backup-archives-to-a-directory-or-s3](decisions/0026-backup-archives-to-a-directory-or-s3.md) — `pecunia backup`: VACUUM INTO snapshot + notes in a tar.gz, optional age encryption, local or hand-rolled S3 provider, systemd user timer from `N/day`/`N/week`, restore moves live files aside as .bak — opened as PR #12, CI confirmed green
 
 ## Gotchas — bugs that already bit once
 
@@ -82,6 +86,7 @@ Map of the project memory. Read this first, then grep `wiki/` or follow the link
 - [dbafef3b](sessions/dbafef3b-f6da-491c-a20f-2d21feaf35fd.md) — `/pecunia-coach`, an LLM financial coach: extended Omni's plugin contract with prompt-type commands that run a full agent session (PR #2 on omni, CI watch outcome unconfirmed), then built pecunia's `pecunia_situation` MCP tool and the coach's manifest entry/prompt (committed locally on `feat/coach-command`, not yet pushed)
 - [01a06f2e](sessions/01a06f2e-dd93-79e0-a20e-68e928f4ca5a.md) — discussion-only: remote access architecture for the canonical SQLite DB (old-PC-as-authority via SSH/private network), written up as [[concepts/remote-access-to-canonical-sqlite]], nothing implemented
 - [b410d49d](sessions/b410d49d-989f-41e2-bffb-553cf0bbf03e.md) — `pecunia notes` module built end to end on `feat/notes`: markdown files + SQLite index, computed priority score, editor integration, MCP tool, `/pecunia-notes` Omni command, seed fixtures; opened as PR #11
+- [ef2f43c3](sessions/ef2f43c3-8c61-4064-b047-63b0197a9abc.md) — rescued a `git pull` stuck mid-rebase (conflict in `wiki/index.md`, resolved by keeping both session lines and `git rebase --skip`), then built `pecunia backup` end to end: directory/S3 archives, optional age encryption, systemd-timer scheduling, opened as PR #12 with CI confirmed green — see [[decisions/0026-backup-archives-to-a-directory-or-s3]]
 
 ## rules/commit-messages.md
 
