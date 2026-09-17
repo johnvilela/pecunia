@@ -235,6 +235,7 @@ func (d *Dropbox) List() ([]Object, error) {
 type Auth struct {
 	URL      string
 	verifier string
+	redirect string // the redirect URI the code was issued for, where one was used
 }
 
 // BeginAuth starts the consent flow. No redirect URI: Dropbox then shows the
@@ -244,20 +245,29 @@ func (d *Dropbox) BeginAuth() (Auth, error) {
 	if d.AppKey == "" {
 		return Auth{}, errors.New("dropbox.app_key is empty — make an app at dropbox.com/developers/apps first")
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	verifier, challenge, err := pkce()
+	if err != nil {
 		return Auth{}, err
 	}
-	verifier := base64.RawURLEncoding.EncodeToString(raw)
-	sum := sha256.Sum256([]byte(verifier))
 	q := url.Values{
 		"client_id":             {d.AppKey},
 		"response_type":         {"code"},
 		"token_access_type":     {"offline"},
-		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
+		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 	}
 	return Auth{URL: dropboxAuthorize + "?" + q.Encode(), verifier: verifier}, nil
+}
+
+// pkce is a fresh verifier and its S256 challenge (RFC 7636).
+func pkce() (verifier, challenge string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(verifier))
+	return verifier, base64.RawURLEncoding.EncodeToString(sum[:]), nil
 }
 
 // FinishAuth trades the code the owner pasted for the refresh token.

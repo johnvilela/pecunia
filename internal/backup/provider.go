@@ -36,6 +36,8 @@ func OpenProvider(cfg Config) (Provider, error) {
 		return &S3{cfg.S3}, nil
 	case "dropbox":
 		return NewDropbox(cfg.Dropbox), nil
+	case "gdrive":
+		return NewGDrive(cfg.GDrive), nil
 	}
 	return nil, fmt.Errorf("provider %q — one of %s", cfg.Provider, strings.Join(Providers, ", "))
 }
