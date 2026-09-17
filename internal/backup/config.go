@@ -23,6 +23,7 @@ type Config struct {
 	Passphrase string // encrypts the archive when set
 	S3         S3Config
 	Local      LocalConfig
+	Dropbox    DropboxConfig
 }
 
 type S3Config struct {
@@ -38,8 +39,19 @@ type LocalConfig struct {
 	Dir string
 }
 
+// DropboxConfig is an app the owner made at dropbox.com/developers and the
+// refresh token "pecunia backup setup" got by sending them through its
+// consent page once. Short-lived access tokens are minted from it on every
+// run and never stored.
+type DropboxConfig struct {
+	Folder       string // where the archives go, "/Apps/pecunia" by default
+	AppKey       string
+	AppSecret    string // optional: PKCE covers a CLI, the secret is only sent when set
+	RefreshToken string
+}
+
 // Providers are the ones this build knows, in the order they are offered.
-var Providers = []string{"local", "s3"}
+var Providers = []string{"local", "s3", "dropbox"}
 
 var ErrNoConfig = errors.New("no backup configured — run pecunia backup setup")
 
@@ -87,6 +99,9 @@ func Load() (Config, error) {
 	if v := os.Getenv("PECUNIA_BACKUP_S3_SECRET_KEY"); v != "" {
 		cfg.S3.SecretKey = v
 	}
+	if v := os.Getenv("PECUNIA_BACKUP_DROPBOX_REFRESH_TOKEN"); v != "" {
+		cfg.Dropbox.RefreshToken = v
+	}
 	return cfg, nil
 }
 
@@ -126,6 +141,15 @@ func (c Config) Validate() error {
 		case c.S3.Endpoint == "" && c.S3.Region == "":
 			return errors.New("s3.region is empty — needed without an endpoint")
 		}
+	case "dropbox":
+		switch {
+		case c.Dropbox.AppKey == "":
+			return errors.New("dropbox.app_key is empty")
+		case c.Dropbox.RefreshToken == "":
+			return errors.New("dropbox.refresh_token is empty — run pecunia backup setup --provider dropbox (or set PECUNIA_BACKUP_DROPBOX_REFRESH_TOKEN)")
+		case c.Dropbox.Folder != "" && !strings.HasPrefix(c.Dropbox.Folder, "/"):
+			return errors.New("dropbox.folder must start with /")
+		}
 	default:
 		return fmt.Errorf("provider %q — one of %s", c.Provider, strings.Join(Providers, ", "))
 	}
@@ -159,6 +183,11 @@ func Render(c Config) []byte {
 	str("secret_key", c.S3.SecretKey)
 	b.WriteString("\n[local]\n")
 	str("dir", c.Local.Dir)
+	b.WriteString("\n[dropbox]\n")
+	str("folder", c.Dropbox.Folder)
+	str("app_key", c.Dropbox.AppKey)
+	str("app_secret", c.Dropbox.AppSecret)
+	str("refresh_token", c.Dropbox.RefreshToken)
 	return []byte(b.String())
 }
 
@@ -185,7 +214,7 @@ func Parse(raw []byte) (Config, error) {
 				return fail(n, "unclosed section")
 			}
 			section = strings.TrimSpace(line[1:end])
-			if section != "s3" && section != "local" {
+			if section != "s3" && section != "local" && section != "dropbox" {
 				return fail(n, "unknown section %q", section)
 			}
 			continue
@@ -261,6 +290,14 @@ func (c *Config) set(key string, val any) error {
 		return str(&c.S3.SecretKey)
 	case "local.dir":
 		return str(&c.Local.Dir)
+	case "dropbox.folder":
+		return str(&c.Dropbox.Folder)
+	case "dropbox.app_key":
+		return str(&c.Dropbox.AppKey)
+	case "dropbox.app_secret":
+		return str(&c.Dropbox.AppSecret)
+	case "dropbox.refresh_token":
+		return str(&c.Dropbox.RefreshToken)
 	}
 	return fmt.Errorf("unknown key %q", key)
 }

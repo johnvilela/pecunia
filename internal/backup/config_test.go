@@ -26,6 +26,12 @@ secret_key = "s3cr3t"
 
 [local]
 dir = "/mnt/usb/pecunia"
+
+[dropbox]
+folder = "/Apps/pecunia"
+app_key = "key"
+app_secret = "sec"
+refresh_token = "rt"
 `
 
 func TestParseConfig(t *testing.T) {
@@ -36,8 +42,9 @@ func TestParseConfig(t *testing.T) {
 		}
 		want := Config{
 			Provider: "s3", Every: "2/day", Keep: 14, Passphrase: `hunter "two"`,
-			S3:    S3Config{Bucket: "my-bucket", Prefix: "pecunia", Region: "us-east-1", Endpoint: "https://s3.example.com", AccessKey: "AKIA", SecretKey: "s3cr3t"},
-			Local: LocalConfig{Dir: "/mnt/usb/pecunia"},
+			S3:      S3Config{Bucket: "my-bucket", Prefix: "pecunia", Region: "us-east-1", Endpoint: "https://s3.example.com", AccessKey: "AKIA", SecretKey: "s3cr3t"},
+			Local:   LocalConfig{Dir: "/mnt/usb/pecunia"},
+			Dropbox: DropboxConfig{Folder: "/Apps/pecunia", AppKey: "key", AppSecret: "sec", RefreshToken: "rt"},
 		}
 		if cfg != want {
 			t.Fatalf("got %+v\nwant %+v", cfg, want)
@@ -70,7 +77,7 @@ func TestParseConfig(t *testing.T) {
 
 	bad := []struct{ name, in, want string }{
 		{"unknown key", "provider = \"s3\"\nprovder = \"x\"\n", "line 2: unknown key \"provder\""},
-		{"unknown section", "[dropbox]\ntoken = \"x\"\n", "line 1: unknown section \"dropbox\""},
+		{"unknown section", "[gdrive]\ntoken = \"x\"\n", "line 1: unknown section \"gdrive\""},
 		{"unknown key in section", "[s3]\nbuckt = \"x\"\n", "line 2: unknown key \"s3.buckt\""},
 		{"duplicate key", "keep = 1\nkeep = 2\n", "line 2: duplicate key \"keep\""},
 		{"number for a string", "provider = 3\n", "line 1: provider wants a quoted string"},
@@ -92,7 +99,10 @@ func TestParseConfig(t *testing.T) {
 func TestValidate(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{"no provider", "every = \"1/day\"\n", "provider"},
-		{"unknown provider", "provider = \"dropbox\"\n", "provider \"dropbox\" — one of local, s3"},
+		{"unknown provider", "provider = \"gdrive\"\n", "provider \"gdrive\" — one of local, s3, dropbox"},
+		{"dropbox without app key", "provider = \"dropbox\"\n[dropbox]\nrefresh_token = \"rt\"\n", "dropbox.app_key"},
+		{"dropbox without refresh token", "provider = \"dropbox\"\n[dropbox]\napp_key = \"k\"\n", "dropbox.refresh_token"},
+		{"dropbox folder must start with a slash", "provider = \"dropbox\"\n[dropbox]\napp_key = \"k\"\nrefresh_token = \"rt\"\nfolder = \"pecunia\"\n", "dropbox.folder"},
 		{"local without dir", "provider = \"local\"\n", "local.dir"},
 		{"s3 without bucket", "provider = \"s3\"\n[s3]\nregion = \"x\"\naccess_key = \"a\"\nsecret_key = \"b\"\n", "s3.bucket"},
 		{"s3 without keys", "provider = \"s3\"\n[s3]\nbucket = \"b\"\nregion = \"x\"\n", "s3.access_key"},
@@ -111,6 +121,13 @@ func TestValidate(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("dropbox with a key and a token is enough", func(t *testing.T) {
+		cfg, _ := Parse([]byte("provider = \"dropbox\"\n[dropbox]\napp_key = \"k\"\nrefresh_token = \"rt\"\n"))
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	t.Run("s3 wants no region when an endpoint is set", func(t *testing.T) {
 		cfg, _ := Parse([]byte("provider = \"s3\"\n[s3]\nbucket = \"b\"\nendpoint = \"https://x\"\naccess_key = \"a\"\nsecret_key = \"b\"\n"))
@@ -187,11 +204,12 @@ func TestLoadSave(t *testing.T) {
 		t.Setenv("PECUNIA_BACKUP_PASSPHRASE", "env-pw")
 		t.Setenv("PECUNIA_BACKUP_S3_ACCESS_KEY", "env-ak")
 		t.Setenv("PECUNIA_BACKUP_S3_SECRET_KEY", "env-sk")
+		t.Setenv("PECUNIA_BACKUP_DROPBOX_REFRESH_TOKEN", "env-rt")
 		got, err := Load()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Passphrase != "env-pw" || got.S3.AccessKey != "env-ak" || got.S3.SecretKey != "env-sk" {
+		if got.Passphrase != "env-pw" || got.S3.AccessKey != "env-ak" || got.S3.SecretKey != "env-sk" || got.Dropbox.RefreshToken != "env-rt" {
 			t.Fatalf("got %+v", got)
 		}
 	})

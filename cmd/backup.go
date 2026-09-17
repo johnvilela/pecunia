@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -30,7 +31,7 @@ Commands:
   schedule [EVERY]  run on a timer: 2/day, 3/week, daily, weekly — or off
 
 Setup flags (all optional; with none, a form asks):
-  --provider P      local or s3
+  --provider P      local, s3 or dropbox
   --dir PATH        local: the directory
   --bucket B        s3: the bucket
   --prefix P        s3: key prefix inside the bucket (default pecunia)
@@ -38,9 +39,18 @@ Setup flags (all optional; with none, a form asks):
   --endpoint URL    s3: an S3-compatible service — MinIO, R2, B2
   --access-key K    s3: the access key
   --secret-key K    s3: the secret key
+  --app-key K       dropbox: the app key from dropbox.com/developers/apps
+  --app-secret S    dropbox: the app secret (optional)
+  --folder /PATH    dropbox: the folder (default /Apps/pecunia)
+  --refresh-token T dropbox: skip the consent flow with a token you already have
   --every EVERY     schedule, as above
   --keep N          archives to keep on the provider; 0 keeps them all
   --passphrase P    encrypt the archives (age); empty leaves them plain
+
+Dropbox: make an app (scoped access, app folder or full Dropbox, with the
+files.content.write, files.content.read and files.metadata.read permissions)
+and give setup its app key. Setup prints a URL to approve the app at, asks
+for the code Dropbox shows, and keeps the refresh token it gets back.
 
 An archive is pecunia-<moment>.tar.gz: a consistent snapshot of pecunia.db
 and every file under the notes directory. With a passphrase it is an age
@@ -89,6 +99,8 @@ func target(cfg backup.Config) string {
 			t += " at " + cfg.S3.Endpoint
 		}
 		return t
+	case "dropbox":
+		return "Dropbox " + cfg.Dropbox.Folder
 	}
 	return cfg.Provider
 }
@@ -155,6 +167,10 @@ func backupSetup(args []string) error {
 	fs.StringVar(&cfg.S3.Endpoint, "endpoint", cfg.S3.Endpoint, "")
 	fs.StringVar(&cfg.S3.AccessKey, "access-key", cfg.S3.AccessKey, "")
 	fs.StringVar(&cfg.S3.SecretKey, "secret-key", cfg.S3.SecretKey, "")
+	fs.StringVar(&cfg.Dropbox.AppKey, "app-key", cfg.Dropbox.AppKey, "")
+	fs.StringVar(&cfg.Dropbox.AppSecret, "app-secret", cfg.Dropbox.AppSecret, "")
+	fs.StringVar(&cfg.Dropbox.Folder, "folder", cfg.Dropbox.Folder, "")
+	fs.StringVar(&cfg.Dropbox.RefreshToken, "refresh-token", cfg.Dropbox.RefreshToken, "")
 	fs.StringVar(&cfg.Every, "every", cfg.Every, "")
 	fs.IntVar(&cfg.Keep, "keep", cfg.Keep, "")
 	fs.StringVar(&cfg.Passphrase, "passphrase", cfg.Passphrase, "")
@@ -169,6 +185,16 @@ func backupSetup(args []string) error {
 	if cfg.Provider == "s3" && cfg.S3.Prefix == "" && !flagSet(fs, "prefix") {
 		cfg.S3.Prefix = "pecunia"
 	}
+	if cfg.Provider == "dropbox" {
+		if cfg.Dropbox.Folder == "" {
+			cfg.Dropbox.Folder = "/Apps/pecunia"
+		}
+		if cfg.Dropbox.RefreshToken == "" {
+			if err := dropboxConsent(&cfg); err != nil {
+				return err
+			}
+		}
+	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -181,6 +207,46 @@ func backupSetup(args []string) error {
 		return installSchedule(cfg)
 	}
 	fmt.Fprintln(out, "no schedule yet — pecunia backup schedule 1/day, or pecunia backup run for one now")
+	return nil
+}
+
+// askCode shows the owner the URL and takes the code Dropbox gives them;
+// swapped in tests, where there is no terminal and no Dropbox.
+var askCode = func(url string) (string, error) {
+	fmt.Fprintf(out, "Open this in a browser, approve pecunia, and paste the code it shows:\n\n  %s\n\n", url)
+	var code string
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewInput().Title("Code").Value(&code).Validate(func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return errors.New("the code Dropbox showed")
+			}
+			return nil
+		}),
+	)).WithTheme(huh.ThemeCharm()).Run()
+	return code, formErr(err)
+}
+
+// dropboxConsent sends the owner through Dropbox's consent page once and
+// keeps the refresh token that comes back. The app key has to be there
+// first — without it there is nothing to approve.
+func dropboxConsent(cfg *backup.Config) error {
+	if cfg.Dropbox.AppKey == "" {
+		return errors.New("dropbox.app_key is empty — make an app at dropbox.com/developers/apps and pass --app-key")
+	}
+	d := backup.NewDropbox(cfg.Dropbox)
+	auth, err := d.BeginAuth()
+	if err != nil {
+		return err
+	}
+	code, err := askCode(auth.URL)
+	if err != nil {
+		return err
+	}
+	cfg.Dropbox.RefreshToken, err = d.FinishAuth(auth, code)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Dropbox approved — the refresh token is in backup.toml")
 	return nil
 }
 
@@ -217,6 +283,7 @@ func setupForm(cfg backup.Config) (backup.Config, error) {
 		huh.NewSelect[string]().Title("Where").Options(
 			huh.NewOption("a directory (external drive, a synced folder)", "local"),
 			huh.NewOption("an S3 bucket (AWS, MinIO, R2, B2)", "s3"),
+			huh.NewOption("Dropbox", "dropbox"),
 		).Value(&cfg.Provider),
 		huh.NewInput().Title("How often").Description("2/day, 3/week, daily, weekly — or empty for no timer").Value(&cfg.Every).Validate(every),
 		huh.NewInput().Title("Keep").Description("archives to keep; 0 keeps them all").Value(&keep).Validate(digits),
@@ -231,6 +298,15 @@ func setupForm(cfg backup.Config) (backup.Config, error) {
 	switch cfg.Provider {
 	case "local":
 		fields = []huh.Field{huh.NewInput().Title("Directory").Value(&cfg.Local.Dir)}
+	case "dropbox":
+		if cfg.Dropbox.Folder == "" {
+			cfg.Dropbox.Folder = "/Apps/pecunia"
+		}
+		fields = []huh.Field{
+			huh.NewInput().Title("App key").Description("from dropbox.com/developers/apps").Value(&cfg.Dropbox.AppKey),
+			huh.NewInput().Title("App secret").Description("optional").EchoMode(huh.EchoModePassword).Value(&cfg.Dropbox.AppSecret),
+			huh.NewInput().Title("Folder").Description("inside your Dropbox, or the app folder").Value(&cfg.Dropbox.Folder),
+		}
 	case "s3":
 		if cfg.S3.Prefix == "" {
 			cfg.S3.Prefix = "pecunia"
@@ -280,7 +356,7 @@ func backupRun() error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "sent %s (%s) to %s\n", res.Name, size(res.Size), target(cfg))
+	fmt.Fprintf(out, "sent %s (%s) to %s\n", res.Name, backup.Size(res.Size), target(cfg))
 	for _, name := range res.Pruned {
 		fmt.Fprintf(out, "pruned %s\n", name)
 	}
@@ -306,7 +382,7 @@ func backupList() error {
 		if backup.Encrypted(o.Name) {
 			enc = "  encrypted"
 		}
-		fmt.Fprintf(out, "%s  %s  %8s%s\n", o.Name, at.Local().Format("2006-01-02 15:04"), size(o.Size), enc)
+		fmt.Fprintf(out, "%s  %s  %8s%s\n", o.Name, at.Local().Format("2006-01-02 15:04"), backup.Size(o.Size), enc)
 	}
 	return nil
 }
@@ -408,14 +484,4 @@ func installSchedule(cfg backup.Config) error {
 	}
 	fmt.Fprintf(out, "every %s — timer installed (OnCalendar=%s)\n", e, e.OnCalendar())
 	return nil
-}
-
-func size(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	}
-	return strconv.FormatInt(n, 10) + " B"
 }
