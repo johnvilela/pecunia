@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.8.0"
+var version = "0.9.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
