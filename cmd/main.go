@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.7.0"
+var version = "0.8.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
@@ -48,6 +48,8 @@ Commands:
   mcp               serve every module to an AI agent over MCP, on stdio
                     (mcp install [AGENT] hooks it up to claude-code, codex,
                     gemini or opencode)
+  backup            copy the database and the notes to a directory or an S3
+                    bucket (setup, run, list, restore, schedule)
   upgrade           update pecunia to the latest release (-y to skip the prompt)
   migrate           apply any pending database migrations
   version           show the version
@@ -130,6 +132,9 @@ func run() int {
 
 	case "omni":
 		return report("omni", runOmni(os.Args[2:]))
+
+	case "backup":
+		return report("backup", runBackup(os.Args[2:]))
 
 	case "upgrade":
 		return report("upgrade", runUpgrade(os.Args[2:]))
