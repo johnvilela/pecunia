@@ -67,6 +67,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 | `budget [new\|edit\|delete\|archive\|unarchive] [CODE]` | `bg` | Monthly caps per category. `--month YYYY-MM` shows another month, `--all` includes archived |
 | `logs [--entity NAME] [--id N] [--action NAME] [--source NAME] [--from DATE] [--to DATE] [--limit N]` | `l` | Audit trail, newest first — every create, edit and delete, whether it came from you, the system or an AI agent |
 | `mcp` / `mcp install [AGENT]` | — | Serve every module to an AI agent over MCP on stdio; `install` registers it with claude-code, codex, gemini or opencode |
+| `backup [setup\|run\|list\|restore\|schedule]` | — | Copy the database and the notes to a directory or an S3 bucket, encrypted if you give a passphrase, on a systemd timer if you give a schedule. See [Backup](#backup) |
 | `upgrade [-y]` | — | Check GitHub for a newer release, show the changelog, replace the binary in place and migrate the database. `-y` skips the prompt |
 | `migrate` | — | Apply any pending database migrations (also happens automatically on every run) |
 | `version` | `-v` | Show the version |
@@ -128,6 +129,25 @@ The file is created `0600` and migrations apply automatically on every run. Amou
 Notes are the one thing that lives outside it: each is a markdown file in `notes/` beside the database (`$PECUNIA_NOTES` overrides), with its title, priority, status, target, tags and links in a YAML front matter block and the body yours. SQLite keeps only the index — counters, the file's mtime — so you can edit the files with anything and the next `pecunia n` picks the change up (`pecunia n sync` adopts files you dropped in).
 
 The priority you write in a note never changes by itself. Beside it pecunia shows an effective one, worked out on every read from the base, how near the target is, how often you open the note, activity on the accounts, cards or goals it names, and how long it has sat untouched — so a LOW note surfaces as HIGH when its time comes, and a HIGH one sinks once forgotten.
+
+## Backup
+
+`pecunia backup setup` asks where the archives go — a directory (an external drive, a folder another tool syncs) or an S3 bucket (AWS, or anything that speaks S3: MinIO, Cloudflare R2, Backblaze B2 with an endpoint) — how often, how many to keep, and whether to encrypt them. Every answer is also a flag, for scripts:
+
+```sh
+pecunia backup setup --provider s3 --bucket my-bucket --region eu-west-1 \
+  --access-key AKIA... --secret-key ... --every 2/day --keep 14 --passphrase 'open sesame'
+pecunia backup run            # one archive, now
+pecunia backup list           # what the bucket holds
+pecunia backup restore        # the newest one back in place; the live files move aside as .bak
+pecunia backup schedule off   # stop the timer
+```
+
+An archive is `pecunia-<moment>.tar.gz`: a consistent snapshot of the database (taken through SQLite, so a write in flight is never half in it) plus every file under the notes directory. With a passphrase it is an [age](https://age-encryption.org) file — `pecunia-<moment>.tar.gz.age` — that the `age` tool opens too, so you never need pecunia to get your data back. The archive holds only your data: never `backup.toml`, which holds the credentials.
+
+The schedule — `2/day`, `3/week`, `daily`, `weekly` — becomes a systemd user timer that runs `pecunia backup run` (`Persistent=true`, so a run missed while the machine was off happens at the next boot). Without systemd, `schedule` prints the crontab line instead. `keep N` prunes the oldest archives after every run so the bucket stays at N.
+
+Settings live in `backup.toml` beside the database, `0600`. The secrets can stay out of it: `PECUNIA_BACKUP_PASSPHRASE`, `PECUNIA_BACKUP_S3_ACCESS_KEY` and `PECUNIA_BACKUP_S3_SECRET_KEY` override whatever the file says.
 
 ## Technology used
 
