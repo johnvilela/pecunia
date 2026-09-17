@@ -67,7 +67,7 @@ Every command opens an interactive picker or form when you leave arguments out, 
 | `budget [new\|edit\|delete\|archive\|unarchive] [CODE]` | `bg` | Monthly caps per category. `--month YYYY-MM` shows another month, `--all` includes archived |
 | `logs [--entity NAME] [--id N] [--action NAME] [--source NAME] [--from DATE] [--to DATE] [--limit N]` | `l` | Audit trail, newest first — every create, edit and delete, whether it came from you, the system or an AI agent |
 | `mcp` / `mcp install [AGENT]` | — | Serve every module to an AI agent over MCP on stdio; `install` registers it with claude-code, codex, gemini or opencode |
-| `backup [setup\|run\|list\|restore\|schedule]` | — | Copy the database and the notes to a directory or an S3 bucket, encrypted if you give a passphrase, on a systemd timer if you give a schedule. See [Backup](#backup) |
+| `backup [setup\|run\|list\|restore\|schedule]` | — | Copy the database and the notes to a directory, an S3 bucket or Dropbox, encrypted if you give a passphrase, on a systemd timer if you give a schedule. See [Backup](#backup) |
 | `upgrade [-y]` | — | Check GitHub for a newer release, show the changelog, replace the binary in place and migrate the database. `-y` skips the prompt |
 | `migrate` | — | Apply any pending database migrations (also happens automatically on every run) |
 | `version` | `-v` | Show the version |
@@ -132,22 +132,25 @@ The priority you write in a note never changes by itself. Beside it pecunia show
 
 ## Backup
 
-`pecunia backup setup` asks where the archives go — a directory (an external drive, a folder another tool syncs) or an S3 bucket (AWS, or anything that speaks S3: MinIO, Cloudflare R2, Backblaze B2 with an endpoint) — how often, how many to keep, and whether to encrypt them. Every answer is also a flag, for scripts:
+`pecunia backup setup` asks where the archives go — a directory (an external drive, a folder another tool syncs), an S3 bucket (AWS, or anything that speaks S3: MinIO, Cloudflare R2, Backblaze B2 with an endpoint) or Dropbox — how often, how many to keep, and whether to encrypt them. Every answer is also a flag, for scripts:
 
 ```sh
 pecunia backup setup --provider s3 --bucket my-bucket --region eu-west-1 \
   --access-key AKIA... --secret-key ... --every 2/day --keep 14 --passphrase 'open sesame'
+pecunia backup setup --provider dropbox --app-key <key> --every daily --keep 30
 pecunia backup run            # one archive, now
 pecunia backup list           # what the bucket holds
 pecunia backup restore        # the newest one back in place; the live files move aside as .bak
 pecunia backup schedule off   # stop the timer
 ```
 
+Dropbox needs an app of your own, made once at [dropbox.com/developers/apps](https://www.dropbox.com/developers/apps) (scoped access, an app folder is enough, with the `files.content.write`, `files.content.read` and `files.metadata.read` permissions). Setup takes its app key, prints a URL to approve the app at, asks for the code Dropbox shows, and keeps the refresh token it gets back — the consent page is seen once; every run after mints its own short-lived access token. Archives land in `/Apps/pecunia` unless you say `--folder`.
+
 An archive is `pecunia-<moment>.tar.gz`: a consistent snapshot of the database (taken through SQLite, so a write in flight is never half in it) plus every file under the notes directory. With a passphrase it is an [age](https://age-encryption.org) file — `pecunia-<moment>.tar.gz.age` — that the `age` tool opens too, so you never need pecunia to get your data back. The archive holds only your data: never `backup.toml`, which holds the credentials.
 
 The schedule — `2/day`, `3/week`, `daily`, `weekly` — becomes a systemd user timer that runs `pecunia backup run` (`Persistent=true`, so a run missed while the machine was off happens at the next boot). Without systemd, `schedule` prints the crontab line instead. `keep N` prunes the oldest archives after every run so the bucket stays at N.
 
-Settings live in `backup.toml` beside the database, `0600`. The secrets can stay out of it: `PECUNIA_BACKUP_PASSPHRASE`, `PECUNIA_BACKUP_S3_ACCESS_KEY` and `PECUNIA_BACKUP_S3_SECRET_KEY` override whatever the file says.
+Settings live in `backup.toml` beside the database, `0600`. The secrets can stay out of it: `PECUNIA_BACKUP_PASSPHRASE`, `PECUNIA_BACKUP_S3_ACCESS_KEY`, `PECUNIA_BACKUP_S3_SECRET_KEY` and `PECUNIA_BACKUP_DROPBOX_REFRESH_TOKEN` override whatever the file says.
 
 ## Technology used
 

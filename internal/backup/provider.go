@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -33,8 +34,10 @@ func OpenProvider(cfg Config) (Provider, error) {
 		return &Local{Dir: cfg.Local.Dir}, nil
 	case "s3":
 		return &S3{cfg.S3}, nil
+	case "dropbox":
+		return NewDropbox(cfg.Dropbox), nil
 	}
-	return nil, fmt.Errorf("provider %q — one of local, s3", cfg.Provider)
+	return nil, fmt.Errorf("provider %q — one of %s", cfg.Provider, strings.Join(Providers, ", "))
 }
 
 // Local is a directory: an external drive, a mount, a place another tool

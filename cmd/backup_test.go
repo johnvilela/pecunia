@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -338,6 +341,112 @@ func TestBackupStatusAndHelp(t *testing.T) {
 		_, err := runBackupIn(t, filepath.Join(t.TempDir(), "p.db"), "frobnicate")
 		if err == nil || !strings.Contains(err.Error(), "frobnicate") {
 			t.Fatalf("err %v", err)
+		}
+	})
+}
+
+// fakeDropboxOAuth is only the token endpoint: code-1 becomes rt-good.
+func fakeDropboxOAuth(t *testing.T) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.URL.Path != "/oauth2/token" || r.PostForm.Get("code") != "code-1" || r.PostForm.Get("code_verifier") == "" {
+			http.Error(w, `{"error":"invalid_grant","error_description":"code not found"}`, http.StatusBadRequest)
+			return
+		}
+		fmt.Fprint(w, `{"access_token":"at","refresh_token":"rt-good","token_type":"bearer"}`)
+	}))
+	t.Cleanup(srv.Close)
+	old := backup.DropboxOAuth
+	backup.DropboxOAuth = srv.URL
+	t.Cleanup(func() { backup.DropboxOAuth = old })
+}
+
+func stubAskCode(t *testing.T, code string) *[]string {
+	t.Helper()
+	var urls []string
+	old := askCode
+	askCode = func(url string) (string, error) {
+		urls = append(urls, url)
+		return code, nil
+	}
+	t.Cleanup(func() { askCode = old })
+	return &urls
+}
+
+func TestBackupSetupDropbox(t *testing.T) {
+	t.Run("a refresh token on the flags skips the consent flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		urls := stubAskCode(t, "unused")
+		_, err := runBackupIn(t, path, "setup", "--provider", "dropbox", "--app-key", "k", "--refresh-token", "rt", "--folder", "/Apps/x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, _ := backup.Load()
+		if cfg.Dropbox != (backup.DropboxConfig{Folder: "/Apps/x", AppKey: "k", RefreshToken: "rt"}) {
+			t.Fatalf("saved %+v", cfg.Dropbox)
+		}
+		if len(*urls) != 0 {
+			t.Fatal("the consent flow ran")
+		}
+	})
+
+	t.Run("without one, the owner is sent to dropbox and the code is traded", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		fakeDropboxOAuth(t)
+		urls := stubAskCode(t, "code-1")
+		got, err := runBackupIn(t, path, "setup", "--provider", "dropbox", "--app-key", "k")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(*urls) != 1 || !strings.Contains((*urls)[0], "https://www.dropbox.com/oauth2/authorize?") {
+			t.Fatalf("asked with %v", *urls)
+		}
+		cfg, _ := backup.Load()
+		if cfg.Dropbox.RefreshToken != "rt-good" || cfg.Dropbox.Folder != "/Apps/pecunia" {
+			t.Fatalf("saved %+v", cfg.Dropbox)
+		}
+		if !strings.Contains(got, "Dropbox") || strings.Contains(got, "rt-good") {
+			t.Fatalf("output %q", got)
+		}
+	})
+
+	t.Run("a wrong code saves nothing", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		fakeDropboxOAuth(t)
+		stubAskCode(t, "code-9")
+		_, err := runBackupIn(t, path, "setup", "--provider", "dropbox", "--app-key", "k")
+		if err == nil || !strings.Contains(err.Error(), "code not found") {
+			t.Fatalf("err %v", err)
+		}
+		if _, err := backup.Load(); err == nil {
+			t.Fatal("backup.toml was written")
+		}
+	})
+
+	t.Run("no app key is refused before the flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		urls := stubAskCode(t, "code-1")
+		_, err := runBackupIn(t, path, "setup", "--provider", "dropbox")
+		if err == nil || !strings.Contains(err.Error(), "app_key") {
+			t.Fatalf("err %v", err)
+		}
+		if len(*urls) != 0 {
+			t.Fatal("the consent flow ran")
+		}
+	})
+
+	t.Run("status names the folder", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		runBackupIn(t, path, "setup", "--provider", "dropbox", "--app-key", "k", "--refresh-token", "rt")
+		got, err := runBackupIn(t, path)
+		if err != nil || !strings.Contains(got, "dropbox — Dropbox /Apps/pecunia") {
+			t.Fatalf("%q, %v", got, err)
 		}
 	})
 }

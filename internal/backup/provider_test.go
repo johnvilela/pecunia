@@ -142,8 +142,15 @@ func TestOpenProvider(t *testing.T) {
 	if _, ok := p.(*S3); !ok {
 		t.Fatalf("got %T", p)
 	}
-	if _, err := OpenProvider(Config{Provider: "dropbox"}); err == nil {
-		t.Fatal("dropbox accepted")
+	p, err = OpenProvider(Config{Provider: "dropbox", Dropbox: DropboxConfig{AppKey: "k", RefreshToken: "rt"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.(*Dropbox); !ok {
+		t.Fatalf("got %T", p)
+	}
+	if _, err := OpenProvider(Config{Provider: "gdrive"}); err == nil {
+		t.Fatal("gdrive accepted")
 	}
 }
 

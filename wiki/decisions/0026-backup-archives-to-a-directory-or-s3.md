@@ -20,6 +20,10 @@ tags: [backup, s3, age, systemd, toml, encryption]
 
 `s3.go` is the four requests the provider needs (PUT, GET, DELETE, ListObjectsV2 with continuation) and a SigV4 signer, ~300 lines, no SDK — the AWS SDK v2 is dozens of modules for what fits in one file, and the hand-rolled form works unchanged against MinIO, R2 and B2 when `endpoint` is set (path-style URLs; virtual-hosted on AWS itself). `TestSigV4` pins the signer to the two worked examples in the S3 docs, keys and all. **Gotcha met while writing it**: the AWS docs page is a JS shell that redirects to Welcome.html when curled; the published signature vectors were confirmed from five independent open-source signers on GitHub (`gh api search/code`) rather than from the page.
 
+## Dropbox (PR 2, `feat/backup-dropbox`)
+
+`dropbox.go`: HTTP API v2 by hand again — `files/upload` (150 MB single-request cap, refused above it; upload sessions not done), `files/download`, `files/list_folder` + `/continue`, `files/delete_v2` — and OAuth 2 **with PKCE and no redirect URI**: `BeginAuth` builds the `www.dropbox.com/oauth2/authorize` URL (`token_access_type=offline`, S256 challenge), Dropbox shows the code on its own page, `FinishAuth` trades it for a **refresh token** that goes into `[dropbox] refresh_token`. Each process mints one four-hour access token from it on first use and never stores it. The app secret is optional (PKCE is enough for a CLI) and sent only when set. `list_folder` on a folder nothing has been written to answers `path/not_found` — treated as an empty list, not an error. Dropbox matches paths case-insensitively but reports names as written; the fake in `dropbox_test.go` does the same. Seams: `backup.DropboxOAuth` (token host) and `askCode` in `cmd/backup.go` (the paste prompt), so the command tests run the consent flow against `httptest`. Not exercised against a real Dropbox app in the session that wrote it.
+
 ## Restore
 
 `Restore` does every step that can fail before it touches anything live: download, decrypt, unpack into a temp dir *beside* the database (same filesystem, so the final move is a rename), `PRAGMA integrity_check` on the copy. Then `pecunia.db`, `-wal` and `-shm` move together to `pecunia.db.<stamp>.bak[-wal|-shm]` — the WAL must travel with its file or SQLite would replay the old one into the restored database — and the notes directory to `notes.<stamp>.bak`. Nothing is deleted. A failed restore leaves the live data untouched; the tests check that with a wrong passphrase and with a garbage archive.
@@ -28,4 +32,8 @@ tags: [backup, s3, age, systemd, toml, encryption]
 
 `internal/backup` is TDD throughout ([[rules/tdd]]): a `providerSuite` run against both providers, a fake S3 in `httptest` that checks the content hash and paginates, real SQLite files for every archive case. `backup.Systemctl` and `backup.HaveSystemd` are the seams the command tests swap so no test installs a real timer.
 
-Links: [[decisions/0025-notes-as-markdown-files-with-a-computed-priority]] (what the notes directory is) · [[concepts/remote-access-to-canonical-sqlite]] (backup is not sync; the canonical copy stays where it is)
+## Status: merged as PR #12 (2026-09-17), v0.8.0
+
+Branch `feat/backup`, PR #12 "feat(backup): back the database and notes up to a directory or S3", CI green, approved and merged by the user. Dropbox followed on `feat/backup-dropbox` (v0.9.0); Google Drive after that.
+
+Links: [[decisions/0025-notes-as-markdown-files-with-a-computed-priority]] (what the notes directory is) · [[concepts/remote-access-to-canonical-sqlite]] (backup is not sync; the canonical copy stays where it is) · [[sessions/ef2f43c3-8c61-4064-b047-63b0197a9abc]]
