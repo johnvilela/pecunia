@@ -31,7 +31,7 @@ Commands:
   schedule [EVERY]  run on a timer: 2/day, 3/week, daily, weekly — or off
 
 Setup flags (all optional; with none, a form asks):
-  --provider P      local, s3 or dropbox
+  --provider P      local, s3, dropbox or gdrive
   --dir PATH        local: the directory
   --bucket B        s3: the bucket
   --prefix P        s3: key prefix inside the bucket (default pecunia)
@@ -41,8 +41,11 @@ Setup flags (all optional; with none, a form asks):
   --secret-key K    s3: the secret key
   --app-key K       dropbox: the app key from dropbox.com/developers/apps
   --app-secret S    dropbox: the app secret (optional)
-  --folder /PATH    dropbox: the folder (default /Apps/pecunia)
-  --refresh-token T dropbox: skip the consent flow with a token you already have
+  --client-id ID    gdrive: the OAuth client id from the Google Cloud console
+  --client-secret S gdrive: its secret
+  --folder F        dropbox: the folder (default /Apps/pecunia);
+                    gdrive: a folder name at the top of My Drive (default pecunia)
+  --refresh-token T dropbox, gdrive: skip the consent flow with a token you have
   --every EVERY     schedule, as above
   --keep N          archives to keep on the provider; 0 keeps them all
   --passphrase P    encrypt the archives (age); empty leaves them plain
@@ -51,6 +54,12 @@ Dropbox: make an app (scoped access, app folder or full Dropbox, with the
 files.content.write, files.content.read and files.metadata.read permissions)
 and give setup its app key. Setup prints a URL to approve the app at, asks
 for the code Dropbox shows, and keeps the refresh token it gets back.
+
+Google Drive: in the Google Cloud console make a project with the Drive API
+on and an OAuth client of type "Desktop app"; give setup its id and secret.
+Setup prints a URL to approve at; the browser comes back to pecunia on this
+machine, or you paste the address it lands on. Only files pecunia made are
+ever visible to it (scope drive.file).
 
 An archive is pecunia-<moment>.tar.gz: a consistent snapshot of pecunia.db
 and every file under the notes directory. With a passphrase it is an age
@@ -101,6 +110,8 @@ func target(cfg backup.Config) string {
 		return t
 	case "dropbox":
 		return "Dropbox " + cfg.Dropbox.Folder
+	case "gdrive":
+		return "Google Drive folder " + cfg.GDrive.Folder
 	}
 	return cfg.Provider
 }
@@ -169,13 +180,34 @@ func backupSetup(args []string) error {
 	fs.StringVar(&cfg.S3.SecretKey, "secret-key", cfg.S3.SecretKey, "")
 	fs.StringVar(&cfg.Dropbox.AppKey, "app-key", cfg.Dropbox.AppKey, "")
 	fs.StringVar(&cfg.Dropbox.AppSecret, "app-secret", cfg.Dropbox.AppSecret, "")
-	fs.StringVar(&cfg.Dropbox.Folder, "folder", cfg.Dropbox.Folder, "")
-	fs.StringVar(&cfg.Dropbox.RefreshToken, "refresh-token", cfg.Dropbox.RefreshToken, "")
+	// --folder and --refresh-token mean the provider's own; they land after
+	// Parse, once the provider is known.
+	var folder, refresh string
+	fs.StringVar(&folder, "folder", "", "")
+	fs.StringVar(&refresh, "refresh-token", "", "")
+	fs.StringVar(&cfg.GDrive.ClientID, "client-id", cfg.GDrive.ClientID, "")
+	fs.StringVar(&cfg.GDrive.ClientSecret, "client-secret", cfg.GDrive.ClientSecret, "")
 	fs.StringVar(&cfg.Every, "every", cfg.Every, "")
 	fs.IntVar(&cfg.Keep, "keep", cfg.Keep, "")
 	fs.StringVar(&cfg.Passphrase, "passphrase", cfg.Passphrase, "")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	switch cfg.Provider {
+	case "dropbox":
+		if folder != "" {
+			cfg.Dropbox.Folder = folder
+		}
+		if refresh != "" {
+			cfg.Dropbox.RefreshToken = refresh
+		}
+	case "gdrive":
+		if folder != "" {
+			cfg.GDrive.Folder = folder
+		}
+		if refresh != "" {
+			cfg.GDrive.RefreshToken = refresh
+		}
 	}
 	if len(args) == 0 {
 		if cfg, err = setupForm(cfg); err != nil {
@@ -195,6 +227,16 @@ func backupSetup(args []string) error {
 			}
 		}
 	}
+	if cfg.Provider == "gdrive" {
+		if cfg.GDrive.Folder == "" {
+			cfg.GDrive.Folder = "pecunia"
+		}
+		if cfg.GDrive.RefreshToken == "" {
+			if err := gdriveConsent(&cfg); err != nil {
+				return err
+			}
+		}
+	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -210,18 +252,14 @@ func backupSetup(args []string) error {
 	return nil
 }
 
-// askCode shows the owner the URL and takes the code Dropbox gives them;
-// swapped in tests, where there is no terminal and no Dropbox.
-var askCode = func(url string) (string, error) {
-	fmt.Fprintf(out, "Open this in a browser, approve pecunia, and paste the code it shows:\n\n  %s\n\n", url)
+// askCode shows the owner the URL and takes back what the service gives
+// them — a code, or the address the browser landed on; the hint says which.
+// Swapped in tests, where there is no terminal and no service.
+var askCode = func(url, hint string) (string, error) {
+	fmt.Fprintf(out, "Open this in a browser and approve pecunia:\n\n  %s\n\n", url)
 	var code string
 	err := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Code").Value(&code).Validate(func(s string) error {
-			if strings.TrimSpace(s) == "" {
-				return errors.New("the code Dropbox showed")
-			}
-			return nil
-		}),
+		huh.NewInput().Title(hint).Value(&code),
 	)).WithTheme(huh.ThemeCharm()).Run()
 	return code, formErr(err)
 }
@@ -238,15 +276,62 @@ func dropboxConsent(cfg *backup.Config) error {
 	if err != nil {
 		return err
 	}
-	code, err := askCode(auth.URL)
+	code, err := askCode(auth.URL, "The code Dropbox shows")
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(code) == "" {
+		return errors.New("no code — dropbox.refresh_token stays empty")
 	}
 	cfg.Dropbox.RefreshToken, err = d.FinishAuth(auth, code)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "Dropbox approved — the refresh token is in backup.toml")
+	return nil
+}
+
+// gdriveConsent sends the owner through Google's consent page once. The
+// browser is sent back to a loopback pecunia listens on; when the browser
+// is elsewhere (a headless box, an SSH session) the owner pastes the address
+// it landed on instead, and the listener is simply never reached.
+func gdriveConsent(cfg *backup.Config) error {
+	switch {
+	case cfg.GDrive.ClientID == "":
+		return errors.New("gdrive.client_id is empty — make a Desktop app OAuth client in the Google Cloud console and pass --client-id")
+	case cfg.GDrive.ClientSecret == "":
+		return errors.New("gdrive.client_secret is empty — pass --client-secret with the client id")
+	}
+	l, err := backup.NewAuthListener()
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	g := backup.NewGDrive(cfg.GDrive)
+	auth, err := g.BeginAuth(l.RedirectURI)
+	if err != nil {
+		return err
+	}
+	pasted, err := askCode(auth.URL, "Leave empty if the browser is on this machine; else paste the address it lands on")
+	if err != nil {
+		return err
+	}
+	code := backup.CodeFromRedirect(pasted)
+	if code == "" {
+		fmt.Fprintln(out, "waiting for the browser…")
+		select {
+		case code = <-l.Code:
+		case err := <-l.Err:
+			return err
+		case <-time.After(5 * time.Minute):
+			return errors.New("no browser came back in five minutes — run setup again")
+		}
+	}
+	cfg.GDrive.RefreshToken, err = g.FinishAuth(auth, code)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Google Drive approved — the refresh token is in backup.toml")
 	return nil
 }
 
@@ -284,6 +369,7 @@ func setupForm(cfg backup.Config) (backup.Config, error) {
 			huh.NewOption("a directory (external drive, a synced folder)", "local"),
 			huh.NewOption("an S3 bucket (AWS, MinIO, R2, B2)", "s3"),
 			huh.NewOption("Dropbox", "dropbox"),
+			huh.NewOption("Google Drive", "gdrive"),
 		).Value(&cfg.Provider),
 		huh.NewInput().Title("How often").Description("2/day, 3/week, daily, weekly — or empty for no timer").Value(&cfg.Every).Validate(every),
 		huh.NewInput().Title("Keep").Description("archives to keep; 0 keeps them all").Value(&keep).Validate(digits),
@@ -306,6 +392,15 @@ func setupForm(cfg backup.Config) (backup.Config, error) {
 			huh.NewInput().Title("App key").Description("from dropbox.com/developers/apps").Value(&cfg.Dropbox.AppKey),
 			huh.NewInput().Title("App secret").Description("optional").EchoMode(huh.EchoModePassword).Value(&cfg.Dropbox.AppSecret),
 			huh.NewInput().Title("Folder").Description("inside your Dropbox, or the app folder").Value(&cfg.Dropbox.Folder),
+		}
+	case "gdrive":
+		if cfg.GDrive.Folder == "" {
+			cfg.GDrive.Folder = "pecunia"
+		}
+		fields = []huh.Field{
+			huh.NewInput().Title("Client id").Description("a Desktop app OAuth client, Google Cloud console").Value(&cfg.GDrive.ClientID),
+			huh.NewInput().Title("Client secret").EchoMode(huh.EchoModePassword).Value(&cfg.GDrive.ClientSecret),
+			huh.NewInput().Title("Folder").Description("a folder name at the top of My Drive").Value(&cfg.GDrive.Folder),
 		}
 	case "s3":
 		if cfg.S3.Prefix == "" {

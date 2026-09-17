@@ -24,6 +24,7 @@ type Config struct {
 	S3         S3Config
 	Local      LocalConfig
 	Dropbox    DropboxConfig
+	GDrive     GDriveConfig
 }
 
 type S3Config struct {
@@ -51,7 +52,17 @@ type DropboxConfig struct {
 }
 
 // Providers are the ones this build knows, in the order they are offered.
-var Providers = []string{"local", "s3", "dropbox"}
+// GDriveConfig is an OAuth client of type "Desktop app" the owner made in
+// the Google Cloud console with the Drive API on, and the refresh token the
+// consent flow got. The scope is drive.file: pecunia sees only what it made.
+type GDriveConfig struct {
+	Folder       string // a folder name at the top of My Drive, "pecunia" by default
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
+var Providers = []string{"local", "s3", "dropbox", "gdrive"}
 
 var ErrNoConfig = errors.New("no backup configured — run pecunia backup setup")
 
@@ -102,6 +113,9 @@ func Load() (Config, error) {
 	if v := os.Getenv("PECUNIA_BACKUP_DROPBOX_REFRESH_TOKEN"); v != "" {
 		cfg.Dropbox.RefreshToken = v
 	}
+	if v := os.Getenv("PECUNIA_BACKUP_GDRIVE_REFRESH_TOKEN"); v != "" {
+		cfg.GDrive.RefreshToken = v
+	}
 	return cfg, nil
 }
 
@@ -150,6 +164,17 @@ func (c Config) Validate() error {
 		case c.Dropbox.Folder != "" && !strings.HasPrefix(c.Dropbox.Folder, "/"):
 			return errors.New("dropbox.folder must start with /")
 		}
+	case "gdrive":
+		switch {
+		case c.GDrive.ClientID == "":
+			return errors.New("gdrive.client_id is empty")
+		case c.GDrive.ClientSecret == "":
+			return errors.New("gdrive.client_secret is empty")
+		case c.GDrive.RefreshToken == "":
+			return errors.New("gdrive.refresh_token is empty — run pecunia backup setup --provider gdrive (or set PECUNIA_BACKUP_GDRIVE_REFRESH_TOKEN)")
+		case strings.Contains(c.GDrive.Folder, "/"):
+			return errors.New("gdrive.folder is a folder name at the top of My Drive, not a path")
+		}
 	default:
 		return fmt.Errorf("provider %q — one of %s", c.Provider, strings.Join(Providers, ", "))
 	}
@@ -188,6 +213,11 @@ func Render(c Config) []byte {
 	str("app_key", c.Dropbox.AppKey)
 	str("app_secret", c.Dropbox.AppSecret)
 	str("refresh_token", c.Dropbox.RefreshToken)
+	b.WriteString("\n[gdrive]\n")
+	str("folder", c.GDrive.Folder)
+	str("client_id", c.GDrive.ClientID)
+	str("client_secret", c.GDrive.ClientSecret)
+	str("refresh_token", c.GDrive.RefreshToken)
 	return []byte(b.String())
 }
 
@@ -214,7 +244,7 @@ func Parse(raw []byte) (Config, error) {
 				return fail(n, "unclosed section")
 			}
 			section = strings.TrimSpace(line[1:end])
-			if section != "s3" && section != "local" && section != "dropbox" {
+			if section != "s3" && section != "local" && section != "dropbox" && section != "gdrive" {
 				return fail(n, "unknown section %q", section)
 			}
 			continue
@@ -298,6 +328,14 @@ func (c *Config) set(key string, val any) error {
 		return str(&c.Dropbox.AppSecret)
 	case "dropbox.refresh_token":
 		return str(&c.Dropbox.RefreshToken)
+	case "gdrive.folder":
+		return str(&c.GDrive.Folder)
+	case "gdrive.client_id":
+		return str(&c.GDrive.ClientID)
+	case "gdrive.client_secret":
+		return str(&c.GDrive.ClientSecret)
+	case "gdrive.refresh_token":
+		return str(&c.GDrive.RefreshToken)
 	}
 	return fmt.Errorf("unknown key %q", key)
 }

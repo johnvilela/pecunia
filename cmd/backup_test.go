@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -366,12 +367,133 @@ func stubAskCode(t *testing.T, code string) *[]string {
 	t.Helper()
 	var urls []string
 	old := askCode
-	askCode = func(url string) (string, error) {
+	askCode = func(url, hint string) (string, error) {
 		urls = append(urls, url)
 		return code, nil
 	}
 	t.Cleanup(func() { askCode = old })
 	return &urls
+}
+
+// fakeGDriveOAuth is only Google's token endpoint: code-1 becomes rt-good.
+func fakeGDriveOAuth(t *testing.T) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.URL.Path != "/token" || r.PostForm.Get("code") != "code-1" || r.PostForm.Get("code_verifier") == "" || r.PostForm.Get("client_secret") != "s" {
+			http.Error(w, `{"error":"invalid_grant","error_description":"Bad Request"}`, http.StatusBadRequest)
+			return
+		}
+		fmt.Fprint(w, `{"access_token":"at","refresh_token":"rt-good","token_type":"Bearer"}`)
+	}))
+	t.Cleanup(srv.Close)
+	old := backup.GDriveOAuth
+	backup.GDriveOAuth = srv.URL
+	t.Cleanup(func() { backup.GDriveOAuth = old })
+}
+
+func TestBackupSetupGDrive(t *testing.T) {
+	t.Run("a refresh token on the flags skips the consent flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		urls := stubAskCode(t, "unused")
+		_, err := runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c", "--client-secret", "s", "--refresh-token", "rt", "--folder", "money")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, _ := backup.Load()
+		if cfg.GDrive != (backup.GDriveConfig{Folder: "money", ClientID: "c", ClientSecret: "s", RefreshToken: "rt"}) {
+			t.Fatalf("saved %+v", cfg.GDrive)
+		}
+		if cfg.Dropbox.Folder != "" {
+			t.Fatalf("--folder leaked into dropbox: %+v", cfg.Dropbox)
+		}
+		if len(*urls) != 0 {
+			t.Fatal("the consent flow ran")
+		}
+	})
+
+	t.Run("a pasted redirect url finishes the flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		fakeGDriveOAuth(t)
+		urls := stubAskCode(t, "http://127.0.0.1:9/?code=code-1&scope=x")
+		got, err := runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c", "--client-secret", "s")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(*urls) != 1 || !strings.Contains((*urls)[0], "https://accounts.google.com/o/oauth2/v2/auth?") {
+			t.Fatalf("asked with %v", *urls)
+		}
+		cfg, _ := backup.Load()
+		if cfg.GDrive.RefreshToken != "rt-good" || cfg.GDrive.Folder != "pecunia" {
+			t.Fatalf("saved %+v", cfg.GDrive)
+		}
+		if !strings.Contains(got, "Google Drive") || strings.Contains(got, "rt-good") {
+			t.Fatalf("output %q", got)
+		}
+	})
+
+	t.Run("the browser landing on the loopback finishes the flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		fakeGDriveOAuth(t)
+		old := askCode
+		askCode = func(authURL, hint string) (string, error) {
+			// The owner leaves the prompt empty; the browser arrives instead.
+			u, err := url.Parse(authURL)
+			if err != nil {
+				return "", err
+			}
+			go http.Get(u.Query().Get("redirect_uri") + "?code=code-1")
+			return "", nil
+		}
+		t.Cleanup(func() { askCode = old })
+		if _, err := runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c", "--client-secret", "s"); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _ := backup.Load()
+		if cfg.GDrive.RefreshToken != "rt-good" {
+			t.Fatalf("saved %+v", cfg.GDrive)
+		}
+	})
+
+	t.Run("a wrong code saves nothing", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		fakeGDriveOAuth(t)
+		stubAskCode(t, "code-9")
+		_, err := runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c", "--client-secret", "s")
+		if err == nil || !strings.Contains(err.Error(), "invalid_grant") {
+			t.Fatalf("err %v", err)
+		}
+		if _, err := backup.Load(); err == nil {
+			t.Fatal("backup.toml was written")
+		}
+	})
+
+	t.Run("no client is refused before the flow", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		urls := stubAskCode(t, "code-1")
+		_, err := runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c")
+		if err == nil || !strings.Contains(err.Error(), "client_secret") {
+			t.Fatalf("err %v", err)
+		}
+		if len(*urls) != 0 {
+			t.Fatal("the consent flow ran")
+		}
+	})
+
+	t.Run("status names the folder", func(t *testing.T) {
+		path := seededDB(t)
+		stubSystemctl(t)
+		runBackupIn(t, path, "setup", "--provider", "gdrive", "--client-id", "c", "--client-secret", "s", "--refresh-token", "rt")
+		got, err := runBackupIn(t, path)
+		if err != nil || !strings.Contains(got, "gdrive — Google Drive folder pecunia") {
+			t.Fatalf("%q, %v", got, err)
+		}
+	})
 }
 
 func TestBackupSetupDropbox(t *testing.T) {

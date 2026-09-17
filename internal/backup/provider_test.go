@@ -149,8 +149,15 @@ func TestOpenProvider(t *testing.T) {
 	if _, ok := p.(*Dropbox); !ok {
 		t.Fatalf("got %T", p)
 	}
-	if _, err := OpenProvider(Config{Provider: "gdrive"}); err == nil {
-		t.Fatal("gdrive accepted")
+	p, err = OpenProvider(Config{Provider: "gdrive", GDrive: GDriveConfig{ClientID: "c", ClientSecret: "s", RefreshToken: "rt"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.(*GDrive); !ok {
+		t.Fatalf("got %T", p)
+	}
+	if _, err := OpenProvider(Config{Provider: "onedrive"}); err == nil {
+		t.Fatal("onedrive accepted")
 	}
 }
 

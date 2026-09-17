@@ -163,12 +163,13 @@ func TestUpgrade(t *testing.T) {
 		marker := filepath.Join(dir, "migrated")
 		script := fmt.Sprintf("#!/bin/sh\n[ \"$1\" = migrate ] && echo done > %s\n", marker)
 
+		newest, older := aheadOf(version)
 		releases := []release{
-			{TagName: "v0.9.9", Body: "newest notes"},
-			{TagName: "v0.9.8", Body: "older notes"},
+			{TagName: "v" + newest, Body: "newest notes"},
+			{TagName: "v" + older, Body: "older notes"},
 		}
 		srv := upgradeServer(t, releases, tarball(t, []byte(script)))
-		assetName := fmt.Sprintf("pecunia_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+		assetName := fmt.Sprintf("pecunia_%s_%s_%s.tar.gz", newest, runtime.GOOS, runtime.GOARCH)
 		releases[0].Assets = []asset{{Name: assetName, BrowserDownloadURL: srv.URL + "/asset"}}
 
 		oldURL, oldExe := releasesURL, selfExe
@@ -206,9 +207,10 @@ func TestUpgrade(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		releases := []release{{TagName: "v0.9.9", Body: "notes"}}
+		newest, _ := aheadOf(version)
+		releases := []release{{TagName: "v" + newest, Body: "notes"}}
 		srv := upgradeServer(t, releases, tarball(t, []byte("#!/bin/sh\nexit 1\n")))
-		assetName := fmt.Sprintf("pecunia_0.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+		assetName := fmt.Sprintf("pecunia_%s_%s_%s.tar.gz", newest, runtime.GOOS, runtime.GOARCH)
 		releases[0].Assets = []asset{{Name: assetName, BrowserDownloadURL: srv.URL + "/asset"}}
 
 		oldURL, oldExe := releasesURL, selfExe
@@ -252,4 +254,11 @@ func TestMigrate(t *testing.T) {
 	if !strings.Contains(buf.String(), "up to date") {
 		t.Errorf("output = %q", buf.String())
 	}
+}
+
+// aheadOf is two versions past v, the further one first, so the fake
+// releases stay ahead of the binary however far the real version moves.
+func aheadOf(v string) (newest, older string) {
+	p := versionParts(v)
+	return fmt.Sprintf("%d.%d.%d", p[0], p[1], p[2]+2), fmt.Sprintf("%d.%d.%d", p[0], p[1], p[2]+1)
 }

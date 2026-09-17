@@ -13,7 +13,7 @@ import (
 
 // version is the single source of truth for releases: bumping it on master
 // makes CI tag and publish v<version>.
-var version = "0.9.0"
+var version = "0.10.0"
 
 const banner = `
  ________  _______    ________  ___  ___  ________   ___  ________
@@ -49,7 +49,8 @@ Commands:
                     (mcp install [AGENT] hooks it up to claude-code, codex,
                     gemini or opencode)
   backup            copy the database and the notes to a directory, an S3
-                    bucket or Dropbox (setup, run, list, restore, schedule)
+                    bucket, Dropbox or Google Drive (setup, run, list,
+                    restore, schedule)
   upgrade           update pecunia to the latest release (-y to skip the prompt)
   migrate           apply any pending database migrations
   version           show the version
